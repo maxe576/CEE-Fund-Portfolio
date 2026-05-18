@@ -117,7 +117,7 @@ tr:last-child td{border-bottom:none}
 .upload-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:white;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;display:none;align-items:center;gap:5px;transition:all 0.2s}
 .upload-btn.visible{display:flex}
 .upload-btn:hover{background:rgba(255,255,255,0.25)}
-.logo-click-hint{cursor:pointer;user-select:none}
+.logo-click-hint{cursor:pointer;user-select:none;transition:transform 0.1s}.logo-click-hint:hover{transform:scale(1.15)}.logo-click-hint:active{transform:scale(0.9)}
 
 /* SP500 comparison */
 .sp-row{display:grid;grid-template-columns:160px 80px 1fr 80px 1fr 80px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px}
@@ -1003,6 +1003,14 @@ function logoClick() {
     openAdmin();
   }
 }
+
+// Also open admin with Ctrl+Shift+A
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && e.shiftKey && e.key === 'A') {
+    e.preventDefault();
+    openAdmin();
+  }
+});
 
 function openAdmin() {
   // Check if password already set
