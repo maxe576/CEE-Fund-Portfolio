@@ -452,8 +452,9 @@ function init() {
   buildState();
   renderAll();
   if (localStorage.getItem('cee_upload_pw')) document.getElementById('uploadBtn').classList.add('visible');
-  setTimeout(fetchLivePrices, 600);
-  setTimeout(fetchSPX, 1200);
+  // Don't auto-fetch on load to avoid rate limits — user clicks Refresh Prices
+  // Just fetch SPX quote once for the benchmark tab
+  setTimeout(fetchSPX, 1000);
 }
 
 function buildState() {
@@ -1169,37 +1170,62 @@ S&P 500 sector weights available. Answer concisely and professionally.`;
 // ── LIVE PRICES ───────────────────────────────────────────────────────────────
 async function fetchLivePrices() {
   document.getElementById('refreshLabel').textContent='Fetching...';
-  const tickers=[...new Set(S.holdings.map(h=>h.ticker))];
-  let updated=0;
-  for (const tk of tickers) {
-    try {
-      const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=${tk}&token=${FINNHUB}`);
-      const d=await r.json();
-      if (d.c&&d.c>0) {
-        ['endowment','ceeFund'].forEach(fund=>{
-          const src=fund==='endowment'?RAW.endowment:RAW.ceeFund;
-          [...src.equities,...src.etfs].forEach(h=>{
-            if (h.ticker===tk) {
-              h.dayPct=d.dp?d.dp/100:0;
-              h.dayDollar=h.shares?d.d*h.shares:0;
-              h.price=d.c;
-              h.marketValue=h.shares?h.shares*d.c:h.marketValue;
-              // Recalculate g/l
-              h.glDollar=h.marketValue-(h.costBasis||0);
-              h.glPct=h.costBasis?(h.marketValue-h.costBasis)/h.costBasis:0;
-              updated++;
-            }
+  
+  // Get unique tickers across both funds
+  const allTickers = [...new Set([
+    ...RAW.endowment.equities.map(h=>h.ticker),
+    ...RAW.endowment.etfs.map(h=>h.ticker),
+    ...RAW.ceeFund.equities.map(h=>h.ticker),
+    ...RAW.ceeFund.etfs.map(h=>h.ticker),
+  ])];
+  
+  let updated = 0;
+  const delay = ms => new Promise(res => setTimeout(res, ms));
+  
+  // Process in batches of 5 with 1.2 second delay between batches
+  // Finnhub free = 30 calls/min = 1 call per 2 seconds to be safe
+  const batchSize = 5;
+  for (let i = 0; i < allTickers.length; i += batchSize) {
+    const batch = allTickers.slice(i, i + batchSize);
+    
+    await Promise.all(batch.map(async tk => {
+      try {
+        const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${tk}&token=${FINNHUB}`);
+        if (r.status === 429) return; // Rate limited, skip
+        const d = await r.json();
+        if (d.c && d.c > 0) {
+          ['endowment','ceeFund'].forEach(fund => {
+            const src = fund==='endowment' ? RAW.endowment : RAW.ceeFund;
+            [...src.equities,...src.etfs].forEach(h => {
+              if (h.ticker === tk) {
+                h.dayPct = d.dp ? d.dp/100 : 0;
+                h.dayDollar = h.shares ? (d.d||0) * h.shares : 0;
+                h.price = d.c;
+                h.marketValue = h.shares ? h.shares * d.c : h.marketValue;
+                h.glDollar = h.marketValue - (h.costBasis||0);
+                h.glPct = h.costBasis ? (h.marketValue - h.costBasis) / h.costBasis : 0;
+                updated++;
+              }
+            });
           });
-        });
-        livePrices[tk]=d.c;
-      }
-    } catch(e){}
+          livePrices[tk] = d.c;
+        }
+      } catch(e) {}
+    }));
+    
+    // Wait 1.2 seconds between batches to stay under rate limit
+    if (i + batchSize < allTickers.length) {
+      document.getElementById('refreshLabel').textContent = `Fetching ${Math.min(i+batchSize, allTickers.length)}/${allTickers.length}...`;
+      await delay(1200);
+    }
   }
-  if (updated>0) {
-    buildState(); renderAll();
-    document.getElementById('lastUpdate').textContent=`Live · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
+  
+  if (updated > 0) {
+    buildState();
+    renderAll();
+    document.getElementById('lastUpdate').textContent = `Live · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
   }
-  document.getElementById('refreshLabel').textContent='Refresh Prices';
+  document.getElementById('refreshLabel').textContent = 'Refresh Prices';
 }
 
 async function fetchSPX() {
@@ -1415,10 +1441,23 @@ async function fetchHistorical(symbol, period) {
   const cacheKey = symbol + '_' + period;
   if (historicalCache[cacheKey]) return historicalCache[cacheKey];
 
-  // 1D: use Finnhub live quote (already works)
+  // 1D: use Finnhub live quote — check livePrices cache first
   if (period === '1D') {
+    // If we already have live price data, use it
+    if (livePrices[symbol] !== undefined) {
+      const allH = [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs];
+      const h = allH.find(x=>x.ticker===symbol);
+      if (h && h.dayPct !== undefined) {
+        const pct = (h.dayPct||0)*100;
+        const result = { pct, points: [{t:'Open',v:0},{t:'Now',v:pct}], isLive: true };
+        historicalCache[cacheKey] = result;
+        return result;
+      }
+    }
     try {
+      await new Promise(res=>setTimeout(res,300)); // Small delay
       const r = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB}`);
+      if (r.status === 429) return null;
       const d = await r.json();
       if (d.c && d.pc) {
         const result = { pct: (d.c - d.pc) / d.pc * 100, points: [{t:'Open',v:0},{t:'Now',v:(d.c-d.pc)/d.pc*100}], isLive: true };
