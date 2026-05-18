@@ -485,9 +485,7 @@ function parseCSV(text){
   // Split into lines handling 
  and 
 
-  const lines=text.replace(/
-/g,'').split('
-');
+  const lines=text.replace(/\r/g,'').split('\n');
   // Find the header row - look for row containing 'ticker'
   let hdrIdx=-1;
   for(let i=0;i<Math.min(lines.length,10);i++){
@@ -1000,7 +998,7 @@ async function sendAI(){
 }
 
 async function askAI(question){
-  if(CLAUDE_KEY==='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'){
+  if(CLAUDE_KEY==='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'){
     addAIMsg('assistant','⚠️ To enable the AI assistant, open this HTML file in a text editor and replace <code>YOUR_KEY_HERE</code> with your Claude API key on the CLAUDE_KEY line near the top of the script.');
     return;
   }
@@ -1047,21 +1045,52 @@ async function refreshAll(){
 function setSplash(txt){document.getElementById('sp-txt').textContent=txt;}
 
 // ── INIT ──────────────────────────────────────────────────────────────────
-async function init(){
-  setSplash('Loading portfolio from Google Sheets…');
-  await loadGoogleSheets();
-  setSplash('Fetching live prices from Finnhub…');
-  await fetchLivePrices();
-  setSplash('Almost ready…');
+function init(){
+  // Load embedded data and show dashboard immediately - no waiting
+  loadFallback();
   rAll();
-  setTimeout(()=>document.getElementById('splash').classList.add('out'),400);
+  document.getElementById('splash').classList.add('out');
+  
+  // Try Google Sheets silently in background after 2 seconds
+  setTimeout(async()=>{
+    try{
+      const r=await fetchWithTimeout(GS.end,8000);
+      if(r){
+        const eq=parseCSV(r).map(rowToEquity).filter(Boolean);
+        if(eq.length>0){
+          S.endEq=eq;
+          S.endTotal=eq.reduce((s,e)=>s+e.marketValue,0);
+          S.endBeta=eq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.endTotal;
+        }
+      }
+    }catch(e){}
+    try{
+      const r=await fetchWithTimeout(GS.cee,8000);
+      if(r){
+        const eq=parseCSV(r).map(rowToEquity).filter(Boolean);
+        if(eq.length>0){
+          S.ceeEq=eq;
+          S.ceeTotal=eq.reduce((s,e)=>s+e.marketValue,0);
+          S.ceeBeta=eq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.ceeTotal;
+        }
+      }
+    }catch(e){}
+    try{
+      const r=await fetchWithTimeout(GS.trd,8000);
+      if(r){const tx=parseCSV(r).map(rowToTrade).filter(Boolean);if(tx.length>0)S.trades=tx;}
+    }catch(e){}
+    // Refresh display with whatever loaded
+    rAll();
+    // Try live prices too
+    try{await fetchLivePrices();rAll();}catch(e){}
+  },2000);
 }
 
 // TABS
 document.querySelectorAll('.tab-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');});});
 ['pr1','pr2'].forEach(pid=>{document.querySelectorAll(`#${pid} .rpill`).forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll(`#${pid} .rpill`).forEach(b=>b.classList.remove('active'));btn.classList.add('active');rPerf(pid==='pr1'?'perfC':'perfC2',btn.dataset.r);});});});
 
-window.addEventListener('load', init);
+window.addEventListener('load',()=>{ init(); });
 </script>
 </body>
 </html>
