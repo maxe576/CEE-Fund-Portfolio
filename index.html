@@ -418,7 +418,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--sand);color:var(--ink);mi
 
 <script>
 // ── CONFIG — paste your Claude API key in the line below ──────────────────
-const CLAUDE_KEY = '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';
+const CLAUDE_KEY = 'YOUR_KEY_HERE';
 const FINNHUB_KEY = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
 const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
@@ -556,9 +556,24 @@ function rowToTrade(row){
 
 // ── LOAD GOOGLE SHEETS ────────────────────────────────────────────────────
 async function fetchCSV(url){
-  const res=await fetch(url);
-  if(!res.ok)throw new Error('Failed to fetch: '+res.status);
-  return res.text();
+  // Try direct fetch first
+  try{
+    const res=await fetch(url);
+    if(res.ok)return res.text();
+  }catch(e){}
+  // Fallback: use allorigins CORS proxy
+  try{
+    const proxy='https://api.allorigins.win/raw?url='+encodeURIComponent(url);
+    const res=await fetch(proxy);
+    if(res.ok)return res.text();
+  }catch(e){}
+  // Second fallback: corsproxy.io
+  try{
+    const proxy2='https://corsproxy.io/?'+encodeURIComponent(url);
+    const res=await fetch(proxy2);
+    if(res.ok)return res.text();
+  }catch(e){}
+  throw new Error('Could not fetch CSV from any source');
 }
 
 async function loadGoogleSheets(){
@@ -918,7 +933,7 @@ async function sendAI(){
 }
 
 async function askAI(question){
-  if(CLAUDE_KEY==='YOUR_KEY_HERE'){
+  if(CLAUDE_KEY==='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'){
     addAIMsg('assistant','⚠️ To enable the AI assistant, open this HTML file in a text editor and replace <code>YOUR_KEY_HERE</code> with your Claude API key on the CLAUDE_KEY line near the top of the script.');
     return;
   }
