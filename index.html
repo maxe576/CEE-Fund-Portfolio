@@ -4,67 +4,73 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CEE Fund · Portfolio Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
-:root{--navy:#0d1b2a;--blue:#1a56db;--lblue:#e8f0fe;--gold:#e8a020;--green:#0f9d58;--red:#d93025;--sand:#f7f4ef;--smoke:#edeae4;--ink:#1a1a2e;--muted:#6b7280;--border:#d9d4cc;--card:#ffffff;--radius:14px;--shadow:0 2px 16px rgba(13,27,42,.07)}
+:root{--navy:#0d1b2a;--blue:#1a56db;--lblue:#e8f0fe;--gold:#e8a020;--green:#0f9d58;--red:#d93025;--sand:#f7f4ef;--smoke:#edeae4;--ink:#1a1a2e;--muted:#6b7280;--border:#d9d4cc;--card:#fff;--radius:14px;--shadow:0 2px 16px rgba(13,27,42,.07)}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--sand);color:var(--ink);min-height:100vh;font-size:14px}
-#upload-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:40px 20px;background:var(--navy)}
-.up-logo{font-family:'DM Serif Display',serif;font-size:40px;color:#fff;letter-spacing:-1px}.up-logo span{color:var(--gold)}
-.up-sub{color:rgba(255,255,255,.4);font-size:13px;letter-spacing:.6px}
-.drop-zone{width:520px;max-width:92vw;border:2px dashed rgba(255,255,255,.2);border-radius:20px;padding:44px 32px;text-align:center;cursor:pointer;transition:all .25s;background:rgba(255,255,255,.03)}
-.drop-zone:hover,.drop-zone.drag-over{border-color:var(--gold);background:rgba(232,160,32,.07)}
-.drop-zone .ico{font-size:52px;margin-bottom:14px}
-.drop-zone h3{color:#fff;font-size:19px;font-weight:500;margin-bottom:8px}
-.drop-zone p{color:rgba(255,255,255,.4);font-size:13px;line-height:1.65}
-.file-btn{display:inline-block;margin-top:20px;padding:10px 28px;background:var(--gold);color:var(--navy);border-radius:50px;font-weight:700;font-size:14px;cursor:pointer;transition:opacity .2s}.file-btn:hover{opacity:.85}
-#file-input{display:none}
-.demo-note{color:rgba(255,255,255,.3);font-size:12px;text-align:center;max-width:440px;line-height:1.75}.demo-note strong{color:rgba(255,255,255,.55)}
-#dashboard{display:none}
-.topbar{background:var(--navy);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100;box-shadow:0 1px 0 rgba(255,255,255,.06)}
-.tlogo{font-family:'DM Serif Display',serif;font-size:19px;color:#fff;display:flex;align-items:center;gap:10px}
-.tlogo .gold{color:var(--gold)}.tlogo .sub{font-size:10px;color:rgba(255,255,255,.38);font-family:'DM Sans',sans-serif;letter-spacing:.4px;margin-top:2px}
-.topbar-nums{display:flex;align-items:center;gap:18px}
-.tn{text-align:right}.tn .l{font-size:10px;color:rgba(255,255,255,.38);letter-spacing:.5px;text-transform:uppercase}.tn .v{font-size:14px;font-weight:600;color:#fff}
-.divider{width:1px;height:30px;background:rgba(255,255,255,.1)}
-.reload-zone label{cursor:pointer;padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.65);font-size:12px;font-family:'DM Sans',sans-serif;transition:all .2s}.reload-zone label:hover{background:rgba(255,255,255,.13);color:#fff}
-#reload-input{display:none}
-.tabs-bar{background:#fff;border-bottom:1px solid var(--border);padding:0 32px;display:flex;overflow-x:auto;scrollbar-width:none}.tabs-bar::-webkit-scrollbar{display:none}
-.tab-btn{padding:0 16px;height:44px;border:none;background:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .18s}
+/* LOADING */
+#splash{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:9999;transition:opacity .5s}
+#splash.out{opacity:0;pointer-events:none}
+.sp-logo{font-family:'DM Serif Display',serif;font-size:42px;color:#fff}.sp-logo span{color:var(--gold)}
+.sp-sub{color:rgba(255,255,255,.4);font-size:13px;letter-spacing:.8px}
+.sp-bar{width:220px;height:3px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}
+.sp-fill{height:100%;background:var(--gold);border-radius:3px;animation:ld 1.4s ease-in-out infinite}
+@keyframes ld{0%{width:0}60%{width:80%}100%{width:100%}}
+.sp-txt{color:rgba(255,255,255,.35);font-size:12px}
+/* TOPBAR */
+.topbar{background:var(--navy);padding:0 28px;display:flex;align-items:center;justify-content:space-between;height:62px;position:sticky;top:0;z-index:100;box-shadow:0 1px 0 rgba(255,255,255,.06)}
+.tlogo{font-family:'DM Serif Display',serif;font-size:18px;color:#fff;display:flex;align-items:center;gap:10px}
+.tlogo .gold{color:var(--gold)}.tsub{font-size:10px;color:rgba(255,255,255,.35);font-family:'DM Sans',sans-serif;margin-top:2px;letter-spacing:.4px}
+.tnums{display:flex;align-items:center;gap:16px}
+.tn .l{font-size:10px;color:rgba(255,255,255,.35);letter-spacing:.5px;text-transform:uppercase}.tn .v{font-size:14px;font-weight:600;color:#fff}
+.tdiv{width:1px;height:28px;background:rgba(255,255,255,.1)}
+.refresh-btn{padding:6px 14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;color:rgba(255,255,255,.65);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s}
+.refresh-btn:hover{background:rgba(255,255,255,.14);color:#fff}
+/* TABS */
+.tabs-bar{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;display:flex;overflow-x:auto;scrollbar-width:none}
+.tabs-bar::-webkit-scrollbar{display:none}
+.tab-btn{padding:0 15px;height:44px;border:none;background:none;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .18s}
 .tab-btn:hover{color:var(--ink)}.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600}
-.content{padding:22px 32px;max-width:1400px;margin:0 auto}
+/* CONTENT */
+.content{padding:22px 28px;max-width:1400px;margin:0 auto}
 .tab-panel{display:none}.tab-panel.active{display:block}
+/* CARDS */
 .card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow);overflow:hidden}
 .ch{padding:13px 18px 11px;border-bottom:1px solid var(--smoke);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .ct{font-size:14px;font-weight:600;color:var(--ink)}.cb{padding:16px}
+/* KPI */
 .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:20px}
 .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow);position:relative;overflow:hidden}
 .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent,var(--blue))}
 .kl{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px}
 .kv{font-family:'DM Serif Display',serif;font-size:25px;color:var(--ink);line-height:1;margin-bottom:3px}
 .ks{font-size:11px;color:var(--muted)}
+/* GRID */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:17px;margin-bottom:17px}
-.cw{position:relative;height:245px}.cws{position:relative;height:190px}.cwl{position:relative;height:305px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:17px;margin-bottom:17px}
+/* CHARTS */
+.cw{position:relative;height:245px}.cws{position:relative;height:190px}.cwl{position:relative;height:310px}
+/* PILLS */
 .rpills{display:flex;gap:4px;flex-wrap:wrap}
 .rpill{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:'DM Sans',sans-serif;transition:all .15s}
 .rpill.active{background:var(--blue);color:#fff;border-color:var(--blue)}.rpill:hover:not(.active){border-color:var(--blue);color:var(--blue)}
-.ftog{display:flex;gap:5px;background:var(--smoke);border-radius:9px;padding:3px}
-.fbtn{padding:5px 13px;border-radius:7px;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s}
+/* FUND TOGGLE */
+.ftog{display:flex;gap:4px;background:var(--smoke);border-radius:9px;padding:3px}
+.fbtn{padding:5px 12px;border-radius:7px;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s}
 .fbtn.active{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+/* TABLE */
 .dt{width:100%;border-collapse:collapse;font-size:12px}
 .dt thead tr{background:var(--smoke)}
 .dt th{padding:8px 10px;text-align:right;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap}
 .dt th.tl,.dt td.tl{text-align:left}
 .dt td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--smoke);color:var(--ink);vertical-align:middle}
 .dt tbody tr:hover{background:#faf9f7}.dt tbody tr:last-child td{border-bottom:none}
-.tkr{font-weight:700;color:var(--blue);font-size:12px}
-.comp{color:var(--muted);font-size:11px;max-width:145px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tkr{font-weight:700;color:var(--blue)}.comp{color:var(--muted);font-size:11px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pos{color:var(--green);font-weight:600}.neg{color:var(--red);font-weight:600}.mc{color:var(--muted)}
 .sbadge{display:inline-block;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:600;background:var(--lblue);color:var(--blue)}
-.sg-row td{background:#f0f4ff;font-weight:700;font-size:10px;color:var(--blue);letter-spacing:.4px;text-transform:uppercase;padding:7px 12px!important}
+.sg-row td{background:#eef2ff;font-weight:700;font-size:10px;color:var(--blue);letter-spacing:.4px;text-transform:uppercase;padding:7px 12px!important}
 /* NEWS */
 .ni{border-left:3px solid var(--border);padding:12px 14px;margin-bottom:9px;background:var(--card);border-radius:0 10px 10px 0;cursor:pointer;transition:border-color .2s}
 .ni:hover{border-left-color:var(--blue)}.ni.positive{border-left-color:var(--green)}.ni.negative{border-left-color:var(--red)}.ni.neutral{border-left-color:var(--gold)}
@@ -73,604 +79,606 @@ body{font-family:'DM Sans',sans-serif;background:var(--sand);color:var(--ink);mi
 .nsc,.ntm{font-size:11px;color:var(--muted)}.ntm{margin-left:auto}
 .nh{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;line-height:1.4}
 .nsu{font-size:12px;color:var(--muted);line-height:1.6}
-.news-controls{display:flex;gap:8px;align-items:center;margin-bottom:15px;flex-wrap:wrap}
-.news-search{padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;font-size:12px;background:var(--card);width:180px;outline:none}
-.news-search:focus{border-color:var(--blue)}
-.news-status{font-size:11px;color:var(--muted);margin-left:auto}
-.news-loading{text-align:center;padding:32px;color:var(--muted);font-size:13px}
-.spin{display:inline-block;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
 /* CALENDAR */
-.cal-section{margin-bottom:20px}
-.cal-section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--smoke)}
-.ev{display:flex;gap:12px;align-items:center;padding:9px 12px;border-radius:9px;margin-bottom:6px;background:var(--smoke)}
-.ev:hover{background:var(--border)}
-.ed{font-size:11px;font-weight:700;min-width:52px}
+.ev{display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:9px;margin-bottom:6px;background:var(--smoke)}
+.ed{font-size:11px;font-weight:700;min-width:56px}
 .et{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
 .et.fed{background:#fee2e2;color:#b91c1c}.et.earnings{background:#dbeafe;color:#1d4ed8}.et.economic{background:#fef3c7;color:#92400e}.et.holding{background:#dcfce7;color:#15803d}
-.el{font-size:13px;font-weight:500;color:var(--ink)}
-.el-sub{font-size:11px;color:var(--muted);margin-left:4px}
+.el{font-size:13px;font-weight:500;color:var(--ink)}.el-sub{font-size:11px;color:var(--muted);margin-left:4px}
 /* RISK */
 .rg{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-bottom:17px}
 .rc{padding:13px 15px;background:var(--card);border:1px solid var(--border);border-radius:10px}
 .rl{font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
-.rv{font-family:'DM Serif Display',serif;font-size:27px;line-height:1;margin-bottom:3px}
+.rv{font-family:'DM Serif Display',serif;font-size:26px;line-height:1;margin-bottom:3px}
 .rd{font-size:10px;color:var(--muted);line-height:1.4}
+/* ATTRIBUTION */
 .ar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.al{min-width:162px;font-size:12px;color:var(--ink);font-weight:500}
+.al{min-width:160px;font-size:12px;color:var(--ink);font-weight:500}
 .abw{flex:1;height:7px;background:var(--smoke);border-radius:4px;overflow:hidden}
 .ab{height:100%;border-radius:4px}.ab.over{background:var(--green)}.ab.under{background:var(--red)}
 .av{min-width:48px;text-align:right;font-size:12px;font-weight:600}
 .asp{min-width:46px;font-size:11px;color:var(--muted);text-align:right}
+/* BADGES */
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap}
 .bu{background:#f3f4f6;color:#6b7280}.bb{background:#dcfce7;color:#15803d}.ba{background:#fef3c7;color:#92400e}.bo{background:#fee2e2;color:#b91c1c}
-.wbb{display:inline-block;width:52px;height:5px;background:var(--smoke);border-radius:3px;vertical-align:middle;margin-right:4px}
+/* WEIGHT BAR */
+.wbb{display:inline-block;width:50px;height:5px;background:var(--smoke);border-radius:3px;vertical-align:middle;margin-right:4px}
 .wbf{height:100%;background:var(--blue);border-radius:3px}
-#loading-overlay{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9999;transition:opacity .4s}
-#loading-overlay.hidden{opacity:0;pointer-events:none}
-.lo-logo{font-family:'DM Serif Display',serif;font-size:30px;color:#fff}.lo-logo span{color:var(--gold)}
-.pb-out{width:180px;height:3px;background:rgba(255,255,255,.12);border-radius:3px;overflow:hidden}
-.pb-in{height:100%;background:var(--gold);border-radius:3px;animation:ld 1.2s ease-in-out infinite}
-@keyframes ld{0%{width:0}60%{width:80%}100%{width:100%}}
-.lo-txt{color:rgba(255,255,255,.38);font-size:12px}
+/* WHAT-IF */
+.wi-input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--card);outline:none;width:100%}
+.wi-input:focus{border-color:var(--blue)}
+.wi-result{padding:14px 16px;border-radius:10px;margin-top:12px;font-size:13px;line-height:1.7}
+.wi-result.positive{background:#dcfce7;border:1px solid #86efac;color:#14532d}
+.wi-result.negative{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d}
+.wi-result.neutral{background:var(--lblue);border:1px solid #93c5fd;color:#1e3a5f}
+/* AI ASSISTANT */
+.ai-messages{height:380px;overflow-y:auto;padding:14px;background:var(--smoke);border-radius:10px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+.ai-msg{padding:10px 14px;border-radius:10px;max-width:85%;font-size:13px;line-height:1.6}
+.ai-msg.user{background:var(--blue);color:#fff;align-self:flex-end;border-radius:10px 10px 2px 10px}
+.ai-msg.assistant{background:#fff;color:var(--ink);align-self:flex-start;border:1px solid var(--border);border-radius:10px 10px 10px 2px}
+.ai-msg.thinking{background:#fff;color:var(--muted);align-self:flex-start;border:1px solid var(--border);font-style:italic}
+.ai-input-row{display:flex;gap:8px}
+.ai-input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--card);outline:none}
+.ai-input:focus{border-color:var(--blue)}
+.ai-send{padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.ai-send:hover{opacity:.85}.ai-send:disabled{opacity:.5;cursor:not-allowed}
+.ai-suggestions{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ai-sug{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--card);font-size:11px;font-weight:500;cursor:pointer;color:var(--blue);transition:all .15s}
+.ai-sug:hover{background:var(--lblue);border-color:var(--blue)}
+/* MISC */
 .tbl-scroll{overflow-x:auto}
-@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.rg{grid-template-columns:repeat(2,1fr)}.content{padding:13px}.topbar,.tabs-bar{padding:0 13px}}
+.status-bar{font-size:11px;color:var(--muted);padding:4px 0}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.section-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--smoke)}
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.g2,.g3{grid-template-columns:1fr}.rg{grid-template-columns:repeat(2,1fr)}.content{padding:13px}.topbar,.tabs-bar{padding:0 13px}}
 </style>
 </head>
 <body>
-<div id="loading-overlay">
-  <div class="lo-logo">CEE <span>Fund</span></div>
-  <div class="pb-out"><div class="pb-in"></div></div>
-  <div class="lo-txt" id="lo-txt">Loading…</div>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="sp-logo">CEE <span>Fund</span></div>
+  <div class="sp-sub">CHRISTOPHER NEWPORT UNIVERSITY</div>
+  <div class="sp-bar"><div class="sp-fill"></div></div>
+  <div class="sp-txt" id="sp-txt">Loading portfolio data from Google Sheets…</div>
 </div>
-<div id="upload-screen">
-  <div class="up-logo">CEE <span>Fund</span></div>
-  <div class="up-sub">CHRISTOPHER NEWPORT UNIVERSITY · INVESTMENT CLUB</div>
-  <div class="drop-zone" id="drop-zone">
-    <div class="ico">📊</div>
-    <h3>Drop your Excel workbook here</h3>
-    <p>Upload <strong style="color:rgba(255,255,255,.7)">CEE_Fund_Portfolio.xlsx</strong> to populate the full dashboard.<br>News and calendar update live from Finnhub automatically.</p>
-    <label class="file-btn" for="file-input">Choose File</label>
-    <input type="file" id="file-input" accept=".xlsx,.xls">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tlogo">
+    <span style="font-size:22px">⚓</span>
+    <div><div>Captains Educational Enrichment <span class="gold">Fund</span></div><div class="tsub" id="tsub">Christopher Newport University</div></div>
   </div>
-  <p class="demo-note">
-    <strong>Live data:</strong> News and earnings calendar pull automatically from Finnhub for your actual holdings every time the dashboard opens.<br><br>
-    <strong>Updates:</strong> Edit Excel → click 📁 Update Data → re-upload. Everything refreshes instantly.
-  </p>
+  <div class="tnums">
+    <div class="tn"><div class="l">Endowment</div><div class="v" id="h-end">—</div></div>
+    <div class="tdiv"></div>
+    <div class="tn"><div class="l">CEE Fund</div><div class="v" id="h-cee">—</div></div>
+    <div class="tdiv"></div>
+    <div class="tn"><div class="l">Combined AUM</div><div class="v" id="h-aum" style="color:var(--gold)">—</div></div>
+    <button class="refresh-btn" onclick="refreshAll()">↻ Refresh Data</button>
+  </div>
 </div>
-<div id="dashboard">
-  <div class="topbar">
-    <div class="tlogo">
-      <span style="font-size:22px">⚓</span>
-      <div><div>Captains Educational Enrichment <span class="gold">Fund</span></div><div class="sub" id="topbar-sub">Christopher Newport University</div></div>
+
+<!-- TABS -->
+<div class="tabs-bar">
+  <button class="tab-btn active" data-tab="overview">📊 Overview</button>
+  <button class="tab-btn" data-tab="news">📰 News</button>
+  <button class="tab-btn" data-tab="calendar">📅 Calendar</button>
+  <button class="tab-btn" data-tab="holdings">💼 Holdings</button>
+  <button class="tab-btn" data-tab="risk">⚠️ Risk</button>
+  <button class="tab-btn" data-tab="attribution">🎯 Attribution</button>
+  <button class="tab-btn" data-tab="performance">📈 Performance</button>
+  <button class="tab-btn" data-tab="targets">🎯 Price Targets</button>
+  <button class="tab-btn" data-tab="whatif">🔮 What-If</button>
+  <button class="tab-btn" data-tab="trades">🔒 Trade Log</button>
+  <button class="tab-btn" data-tab="ai">🤖 AI Assistant</button>
+</div>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="kpi-grid" id="kpi-strip"></div>
+    <div class="g2">
+      <div class="card">
+        <div class="ch"><span class="ct">Portfolio Value — Actual Dollars</span>
+          <div class="rpills" id="pr1"><button class="rpill active" data-r="1Y">1Y</button><button class="rpill" data-r="3Y">3Y</button><button class="rpill" data-r="5Y">5Y</button></div>
+        </div>
+        <div class="cb"><div class="cw"><canvas id="perfC"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="ch"><span class="ct">Sector Weights vs S&P 500</span>
+          <div class="ftog" id="sec-ftog"><button class="fbtn active" onclick="setSF('end',this)">Endowment</button><button class="fbtn" onclick="setSF('cee',this)">CEE Fund</button></div>
+        </div>
+        <div class="cb"><div class="cw"><canvas id="secC"></canvas></div></div>
+      </div>
     </div>
-    <div class="topbar-nums">
-      <div class="tn"><div class="l">Endowment</div><div class="v" id="h-end">—</div></div>
-      <div class="divider"></div>
-      <div class="tn"><div class="l">CEE Fund</div><div class="v" id="h-cee">—</div></div>
-      <div class="divider"></div>
-      <div class="tn"><div class="l">Combined AUM</div><div class="v" id="h-aum" style="color:var(--gold)">—</div></div>
-      <div class="reload-zone"><label for="reload-input">📁 Update Data</label><input type="file" id="reload-input" accept=".xlsx,.xls"></div>
+    <div class="g2">
+      <div class="card">
+        <div class="ch"><span class="ct">Top 10 Holdings by Value</span>
+          <div class="ftog"><button class="fbtn active" onclick="setTF('end',this)">Endowment</button><button class="fbtn" onclick="setTF('cee',this)">CEE Fund</button></div>
+        </div>
+        <div class="cb"><div class="cws"><canvas id="topC"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="ch"><span class="ct">📅 Upcoming Events</span><span id="cal-mini-st" class="status-bar"></span></div>
+        <div class="cb" id="ev-mini" style="padding-top:6px;max-height:230px;overflow-y:auto"></div>
+      </div>
     </div>
   </div>
-  <div class="tabs-bar">
-    <button class="tab-btn active" data-tab="overview">📊 Overview</button>
-    <button class="tab-btn" data-tab="news">📰 News</button>
-    <button class="tab-btn" data-tab="calendar">📅 Calendar</button>
-    <button class="tab-btn" data-tab="holdings">💼 Holdings</button>
-    <button class="tab-btn" data-tab="risk">⚠️ Risk</button>
-    <button class="tab-btn" data-tab="attribution">🎯 Attribution</button>
-    <button class="tab-btn" data-tab="performance">📈 Performance</button>
-    <button class="tab-btn" data-tab="targets">🎯 Price Targets</button>
-    <button class="tab-btn" data-tab="trades">🔒 Trade Log</button>
+
+  <!-- NEWS -->
+  <div class="tab-panel" id="tab-news">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <div class="rpills" id="nf-pills">
+        <button class="rpill active" onclick="setNF('all',this)">All</button>
+        <button class="rpill" onclick="setNF('positive',this)">Positive</button>
+        <button class="rpill" onclick="setNF('negative',this)">Negative</button>
+        <button class="rpill" onclick="setNF('neutral',this)">Neutral</button>
+      </div>
+      <div class="ftog" id="news-ftog">
+        <button class="fbtn active" onclick="setNFund('both',this)">Both Funds</button>
+        <button class="fbtn" onclick="setNFund('end',this)">Endowment</button>
+        <button class="fbtn" onclick="setNFund('cee',this)">CEE Fund</button>
+      </div>
+      <input id="news-search" placeholder="Search ticker e.g. MSFT" oninput="onNSearch(this.value)"
+        style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;font-size:12px;width:170px;outline:none">
+      <button class="rpill" onclick="fetchAllNews(true)" style="background:var(--navy);color:#fff;border-color:var(--navy)">↻ Refresh</button>
+      <span id="news-st" class="status-bar" style="margin-left:auto"></span>
+    </div>
+    <div id="news-feed"><div style="text-align:center;padding:32px;color:var(--muted)"><span class="spin">⟳</span> Fetching live news…</div></div>
   </div>
-  <div class="content">
 
-    <!-- OVERVIEW -->
-    <div class="tab-panel active" id="tab-overview">
-      <div class="kpi-grid" id="kpi-strip"></div>
-      <div class="g2">
-        <div class="card">
-          <div class="ch"><span class="ct">Portfolio Value — Actual Dollars</span>
-            <div class="rpills" id="pr1"><button class="rpill active" data-r="1Y">1Y</button><button class="rpill" data-r="3Y">3Y</button><button class="rpill" data-r="5Y">5Y</button></div>
-          </div>
-          <div class="cb"><div class="cw"><canvas id="perfC"></canvas></div></div>
-        </div>
-        <div class="card">
-          <div class="ch"><span class="ct">Sector Weights vs S&P 500</span>
-            <div class="ftog" id="sec-ftog"><button class="fbtn active" onclick="setSF('end',this)">Endowment</button><button class="fbtn" onclick="setSF('cee',this)">CEE Fund</button></div>
-          </div>
-          <div class="cb"><div class="cw"><canvas id="secC"></canvas></div></div>
-        </div>
+  <!-- CALENDAR -->
+  <div class="tab-panel" id="tab-calendar">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <div class="ftog" id="cal-ftog">
+        <button class="fbtn active" onclick="setCalFund('both',this)">Both</button>
+        <button class="fbtn" onclick="setCalFund('end',this)">Endowment</button>
+        <button class="fbtn" onclick="setCalFund('cee',this)">CEE Fund</button>
       </div>
-      <div class="g2">
-        <div class="card">
-          <div class="ch"><span class="ct">Top Holdings by Value</span>
-            <div class="ftog"><button class="fbtn active" onclick="setTF('end',this)">Endowment</button><button class="fbtn" onclick="setTF('cee',this)">CEE Fund</button></div>
-          </div>
-          <div class="cb"><div class="cws"><canvas id="topC"></canvas></div></div>
-        </div>
-        <div class="card">
-          <div class="ch"><span class="ct">📅 Upcoming Events</span><span id="cal-mini-status" style="font-size:11px;color:var(--muted)"></span></div>
-          <div class="cb" id="ev-list" style="padding-top:6px;max-height:240px;overflow-y:auto"></div>
-        </div>
+      <div class="rpills" id="cal-filter-pills">
+        <button class="rpill active" onclick="setCalF('all',this)">All</button>
+        <button class="rpill" onclick="setCalF('earnings',this)">Earnings</button>
+        <button class="rpill" onclick="setCalF('economic',this)">Economic</button>
+        <button class="rpill" onclick="setCalF('fed',this)">Fed</button>
       </div>
+      <span id="cal-st" class="status-bar" style="margin-left:auto"></span>
     </div>
-
-    <!-- NEWS -->
-    <div class="tab-panel" id="tab-news">
-      <div class="news-controls">
-        <div class="rpills" id="nf-pills">
-          <button class="rpill active" onclick="setNewsFilter('all',this)">All</button>
-          <button class="rpill" onclick="setNewsFilter('positive',this)">Positive</button>
-          <button class="rpill" onclick="setNewsFilter('negative',this)">Negative</button>
-          <button class="rpill" onclick="setNewsFilter('neutral',this)">Neutral</button>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <div class="ftog" id="news-fund-tog">
-            <button class="fbtn active" onclick="setNewsFund('both',this)">Both Funds</button>
-            <button class="fbtn" onclick="setNewsFund('end',this)">Endowment</button>
-            <button class="fbtn" onclick="setNewsFund('cee',this)">CEE Fund</button>
-          </div>
-          <input class="news-search" id="news-search" placeholder="Search ticker e.g. MSFT" oninput="onNewsSearch(this.value)">
-          <button class="rpill" id="news-refresh-btn" onclick="fetchAllNews(true)" style="background:var(--navy);color:#fff;border-color:var(--navy)">↻ Refresh</button>
-        </div>
-        <span class="news-status" id="news-status">Loading live news…</span>
-      </div>
-      <div id="news-feed"><div class="news-loading"><span class="spin">⟳</span> Fetching live news from Finnhub for your holdings…</div></div>
+    <div class="g2">
+      <div class="card"><div class="ch"><span class="ct">Earnings — Your Holdings</span></div><div class="cb" id="cal-earn" style="max-height:500px;overflow-y:auto;padding-top:4px"></div></div>
+      <div class="card"><div class="ch"><span class="ct">Economic &amp; Fed Events</span></div><div class="cb" id="cal-econ" style="max-height:500px;overflow-y:auto;padding-top:4px"></div></div>
     </div>
+  </div>
 
-    <!-- CALENDAR -->
-    <div class="tab-panel" id="tab-calendar">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-        <div class="ftog" id="cal-fund-tog">
-          <button class="fbtn active" onclick="setCalFund('both',this)">Both Funds</button>
-          <button class="fbtn" onclick="setCalFund('end',this)">Endowment</button>
-          <button class="fbtn" onclick="setCalFund('cee',this)">CEE Fund</button>
-        </div>
-        <div class="rpills">
-          <button class="rpill active" onclick="setCalFilter('all',this)">All Events</button>
-          <button class="rpill" onclick="setCalFilter('earnings',this)">Earnings</button>
-          <button class="rpill" onclick="setCalFilter('economic',this)">Economic</button>
-          <button class="rpill" onclick="setCalFilter('fed',this)">Fed</button>
-        </div>
-        <span id="cal-status" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
-      </div>
-      <div class="g2">
-        <div class="card"><div class="ch"><span class="ct">Earnings — Your Holdings</span></div><div class="cb" id="cal-earnings" style="max-height:520px;overflow-y:auto;padding-top:6px"></div></div>
-        <div class="card"><div class="ch"><span class="ct">Economic &amp; Fed Events</span></div><div class="cb" id="cal-economic" style="max-height:520px;overflow-y:auto;padding-top:6px"></div></div>
-      </div>
+  <!-- HOLDINGS -->
+  <div class="tab-panel" id="tab-holdings">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:9px">
+      <div class="ftog"><button class="fbtn active" onclick="setHF('end',this)">Endowment</button><button class="fbtn" onclick="setHF('cee',this)">CEE Fund</button></div>
+      <select id="h-sort" onchange="rHoldings()" style="font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;background:var(--card)">
+        <option value="mv">Market Value</option><option value="gl">Gain/Loss $</option><option value="glp">Gain/Loss %</option><option value="beta">Beta</option><option value="day">Day %</option>
+      </select>
     </div>
+    <div class="card" id="h-sumbar" style="padding:13px 18px;margin-bottom:13px;display:flex;gap:22px;flex-wrap:wrap"></div>
+    <div class="card tbl-scroll"><table class="dt"><thead><tr>
+      <th class="tl">Ticker</th><th class="tl">Company</th><th>Shares</th><th>Avg Cost</th><th>Live Price</th><th>Mkt Value</th><th>% Fund</th><th>G/L $</th><th>G/L %</th><th>Day %</th><th>Beta</th><th>Sector</th>
+    </tr></thead><tbody id="h-body"></tbody></table></div>
+  </div>
 
-    <!-- HOLDINGS -->
-    <div class="tab-panel" id="tab-holdings">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:13px;flex-wrap:wrap;gap:9px">
-        <div class="ftog"><button class="fbtn active" onclick="setHF('end',this)">Endowment</button><button class="fbtn" onclick="setHF('cee',this)">CEE Fund</button></div>
-        <select id="h-sort" onchange="rHoldings()" style="font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;background:var(--card)">
-          <option value="mv">Market Value</option><option value="gl">Gain/Loss $</option><option value="glp">Gain/Loss %</option><option value="beta">Beta</option><option value="day">Day %</option>
-        </select>
-      </div>
-      <div class="card" id="h-sumbar" style="padding:13px 18px;margin-bottom:13px;display:flex;gap:22px;flex-wrap:wrap"></div>
-      <div class="card tbl-scroll"><table class="dt"><thead><tr>
-        <th class="tl">Ticker</th><th class="tl">Company</th><th>Shares</th><th>Avg Cost</th><th>Price</th><th>Mkt Value</th><th>% Fund</th><th>G/L $</th><th>G/L %</th><th>Day %</th><th>Beta</th><th>Sector</th>
-      </tr></thead><tbody id="h-body"></tbody></table></div>
+  <!-- RISK -->
+  <div class="tab-panel" id="tab-risk">
+    <div class="ftog" style="margin-bottom:16px"><button class="fbtn active" onclick="setRF('end',this)">Endowment</button><button class="fbtn" onclick="setRF('cee',this)">CEE Fund</button></div>
+    <div class="rg" id="risk-cards"></div>
+    <div class="g2">
+      <div class="card"><div class="ch"><span class="ct">Rolling Beta Over Time</span></div><div class="cb"><div class="cws"><canvas id="betaC"></canvas></div></div></div>
+      <div class="card"><div class="ch"><span class="ct">Highest Beta Positions</span></div><div class="cb" id="beta-bars" style="padding-top:6px"></div></div>
     </div>
+  </div>
 
-    <!-- RISK -->
-    <div class="tab-panel" id="tab-risk">
-      <div class="ftog" style="margin-bottom:16px"><button class="fbtn active" onclick="setRF('end',this)">Endowment</button><button class="fbtn" onclick="setRF('cee',this)">CEE Fund</button></div>
-      <div class="rg" id="risk-cards"></div>
-      <div class="g2">
-        <div class="card"><div class="ch"><span class="ct">Rolling Beta Over Time</span></div><div class="cb"><div class="cws"><canvas id="betaC"></canvas></div></div></div>
-        <div class="card"><div class="ch"><span class="ct">Highest Beta Positions</span></div><div class="cb" id="beta-bars" style="padding-top:6px"></div></div>
-      </div>
+  <!-- ATTRIBUTION -->
+  <div class="tab-panel" id="tab-attribution">
+    <div class="ftog" style="margin-bottom:16px"><button class="fbtn active" onclick="setAF('end',this)">Endowment</button><button class="fbtn" onclick="setAF('cee',this)">CEE Fund</button></div>
+    <div class="g2">
+      <div class="card"><div class="ch"><span class="ct">Active Weight vs S&P 500</span></div><div class="cb"><div class="cwl"><canvas id="attrC"></canvas></div></div></div>
+      <div class="card"><div class="ch"><span class="ct">Sector Over/Under Detail</span></div><div class="cb" id="attr-detail" style="padding-top:4px"></div></div>
     </div>
+  </div>
 
-    <!-- ATTRIBUTION -->
-    <div class="tab-panel" id="tab-attribution">
-      <div class="ftog" style="margin-bottom:16px"><button class="fbtn active" onclick="setAF('end',this)">Endowment</button><button class="fbtn" onclick="setAF('cee',this)">CEE Fund</button></div>
-      <div class="g2">
-        <div class="card"><div class="ch"><span class="ct">Active Weight vs S&P 500</span></div><div class="cb"><div class="cwl"><canvas id="attrC"></canvas></div></div></div>
-        <div class="card"><div class="ch"><span class="ct">Sector Over/Under Detail</span></div><div class="cb" id="attr-detail" style="padding-top:4px"></div></div>
+  <!-- PERFORMANCE -->
+  <div class="tab-panel" id="tab-performance">
+    <div class="card" style="margin-bottom:17px">
+      <div class="ch"><span class="ct">Portfolio Value Over Time</span>
+        <div class="rpills" id="pr2"><button class="rpill active" data-r="1Y">1Y</button><button class="rpill" data-r="3Y">3Y</button><button class="rpill" data-r="5Y">5Y</button></div>
       </div>
+      <div class="cb"><div class="cwl"><canvas id="perfC2"></canvas></div></div>
     </div>
-
-    <!-- PERFORMANCE -->
-    <div class="tab-panel" id="tab-performance">
-      <div class="card" style="margin-bottom:17px">
-        <div class="ch"><span class="ct">Portfolio Value Over Time</span>
-          <div class="rpills" id="pr2"><button class="rpill active" data-r="1Y">1Y</button><button class="rpill" data-r="3Y">3Y</button><button class="rpill" data-r="5Y">5Y</button></div>
-        </div>
-        <div class="cb"><div class="cwl"><canvas id="perfC2"></canvas></div></div>
-      </div>
-      <div class="card"><div class="ch"><span class="ct">Transaction History</span></div>
-        <div class="tbl-scroll"><table class="dt"><thead><tr>
-          <th class="tl">Date</th><th class="tl">Fund</th><th class="tl">Ticker</th><th class="tl">Company</th><th class="tl">Type</th><th>Shares</th><th>Price</th><th>Total</th><th class="tl">Approved By</th><th class="tl">Notes</th>
-        </tr></thead><tbody id="tx-perf"></tbody></table></div>
-      </div>
+    <div class="card"><div class="ch"><span class="ct">Transaction History</span></div>
+      <div class="tbl-scroll"><table class="dt"><thead><tr>
+        <th class="tl">Date</th><th class="tl">Fund</th><th class="tl">Ticker</th><th class="tl">Company</th><th class="tl">Type</th><th>Shares</th><th>Price</th><th>Total</th><th class="tl">Approved By</th><th class="tl">Notes</th>
+      </tr></thead><tbody id="tx-perf"></tbody></table></div>
     </div>
+  </div>
 
-    <!-- PRICE TARGETS -->
-    <div class="tab-panel" id="tab-targets">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-        <div class="ftog"><button class="fbtn active" onclick="setPTF('both',this)">Both</button><button class="fbtn" onclick="setPTF('end',this)">Endowment</button><button class="fbtn" onclick="setPTF('cee',this)">CEE Fund</button></div>
-        <select id="pt-sort" onchange="rTargets()" style="font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;background:var(--card)">
-          <option value="ws">Best WS Upside</option><option value="tk">Ticker A-Z</option><option value="px">Price ↓</option>
-        </select>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">Update Club Target (yellow column) in Excel, then re-upload.</span>
-      </div>
-      <div class="kpi-grid" id="pt-summary" style="grid-template-columns:repeat(5,1fr);margin-bottom:13px"></div>
-      <div class="card tbl-scroll"><table class="dt"><thead><tr>
-        <th class="tl">Ticker</th><th class="tl">Company</th><th>Current</th><th>WS Target</th><th>WS Upside</th><th>Club Target</th><th>Club Upside</th><th>Status</th><th class="tl">Notes</th>
-      </tr></thead><tbody id="pt-body"></tbody></table></div>
+  <!-- PRICE TARGETS -->
+  <div class="tab-panel" id="tab-targets">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <div class="ftog"><button class="fbtn active" onclick="setPTF('both',this)">Both</button><button class="fbtn" onclick="setPTF('end',this)">Endowment</button><button class="fbtn" onclick="setPTF('cee',this)">CEE Fund</button></div>
+      <select id="pt-sort" onchange="rTargets()" style="font-size:12px;padding:5px 9px;border-radius:7px;border:1px solid var(--border);font-family:'DM Sans',sans-serif;background:var(--card)">
+        <option value="ws">Best WS Upside</option><option value="tk">Ticker A-Z</option><option value="px">Price ↓</option>
+      </select>
+      <span style="font-size:11px;color:var(--muted);margin-left:auto">Update Club Target column in Google Sheets — dashboard refreshes automatically.</span>
     </div>
+    <div class="kpi-grid" id="pt-sum" style="grid-template-columns:repeat(5,1fr);margin-bottom:13px"></div>
+    <div class="card tbl-scroll"><table class="dt"><thead><tr>
+      <th class="tl">Ticker</th><th class="tl">Company</th><th>Live Price</th><th>WS Target</th><th>WS Upside</th><th>Club Target</th><th>Club Upside</th><th>Status</th><th class="tl">Notes</th>
+    </tr></thead><tbody id="pt-body"></tbody></table></div>
+  </div>
 
-    <!-- TRADE LOG -->
-    <div class="tab-panel" id="tab-trades">
-      <div class="card" style="padding:18px 22px;margin-bottom:17px;background:var(--navy);border:none">
-        <div style="display:flex;gap:14px">
-          <span style="font-size:26px">🔒</span>
-          <div>
-            <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:4px">Trade Log — Authorized Members Only</div>
-            <div style="font-size:12px;color:rgba(255,255,255,.45);line-height:1.75">
-              Trades are logged in Excel, protected by password <strong style="color:rgba(255,255,255,.7)">CEEFund2026</strong>.<br>
-              Open Excel → Review → Unprotect Sheet → enter password → fill yellow rows → re-protect → re-upload via <strong style="color:rgba(255,255,255,.7)">📁 Update Data</strong>.
+  <!-- WHAT-IF -->
+  <div class="tab-panel" id="tab-whatif">
+    <div class="g2">
+      <div class="card">
+        <div class="ch"><span class="ct">🔮 Trade Simulator</span></div>
+        <div class="cb">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Model a trade before executing it. See the impact on portfolio value, beta, and sector weights.</p>
+          <div style="display:grid;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Fund</label>
+              <div class="ftog" style="width:fit-content"><button class="fbtn active" id="wi-fund-end" onclick="setWIFund('end',this)">Endowment</button><button class="fbtn" id="wi-fund-cee" onclick="setWIFund('cee',this)">CEE Fund</button></div>
             </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Action</label>
+              <div class="ftog" style="width:fit-content"><button class="fbtn active" id="wi-act-buy" onclick="setWIAct('buy',this)">BUY</button><button class="fbtn" id="wi-act-sell" onclick="setWIAct('sell',this)">SELL</button></div>
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Ticker</label>
+              <input class="wi-input" id="wi-ticker" placeholder="e.g. AAPL" oninput="this.value=this.value.toUpperCase()">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Number of Shares</label>
+              <input class="wi-input" id="wi-shares" type="number" placeholder="e.g. 10">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">Price per Share ($)</label>
+              <input class="wi-input" id="wi-price" type="number" placeholder="e.g. 250.00">
+            </div>
+            <button onclick="runWhatIf()" style="padding:10px;background:var(--blue);color:#fff;border:none;border-radius:9px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s" onmouseenter="this.style.opacity='.85'" onmouseleave="this.style.opacity='1'">Run Scenario ▶</button>
+          </div>
+          <div id="wi-result"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch"><span class="ct">Scenario Impact</span></div>
+        <div class="cb">
+          <div id="wi-impact" style="color:var(--muted);font-size:13px;padding:20px 0">Run a scenario to see the impact here.</div>
+          <div style="margin-top:16px"><div class="cws"><canvas id="wi-chart"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRADE LOG -->
+  <div class="tab-panel" id="tab-trades">
+    <div class="card" style="padding:18px 22px;margin-bottom:17px;background:var(--navy);border:none">
+      <div style="display:flex;gap:14px">
+        <span style="font-size:26px">🔒</span>
+        <div>
+          <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:4px">Trade Log — Authorized Members Only</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.45);line-height:1.8">
+            Trades are logged in <strong style="color:rgba(255,255,255,.75)">Google Sheets → Trade_Log tab</strong>.<br>
+            Only officers with edit access can add trades. The dashboard reads and displays them automatically — no upload needed.<br>
+            To add a trade: open Google Sheets → Trade_Log tab → add a row → save. Dashboard updates on next refresh.
           </div>
         </div>
       </div>
-      <div class="kpi-grid" id="tx-kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:17px"></div>
-      <div class="card tbl-scroll"><table class="dt"><thead><tr>
-        <th class="tl">Date</th><th class="tl">Fund</th><th class="tl">Type</th><th class="tl">Ticker</th><th class="tl">Company</th><th>Shares</th><th>Price</th><th>Total</th><th class="tl">Approved By</th><th class="tl">Notes</th>
-      </tr></thead><tbody id="tx-body"></tbody></table></div>
     </div>
-
+    <div class="kpi-grid" id="tx-kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:17px"></div>
+    <div class="card tbl-scroll"><table class="dt"><thead><tr>
+      <th class="tl">Date</th><th class="tl">Fund</th><th class="tl">Type</th><th class="tl">Ticker</th><th class="tl">Company</th><th>Shares</th><th>Price</th><th>Total</th><th class="tl">Approved By</th><th class="tl">Notes</th>
+    </tr></thead><tbody id="tx-body"></tbody></table></div>
   </div>
-</div>
+
+  <!-- AI ASSISTANT -->
+  <div class="tab-panel" id="tab-ai">
+    <div class="g2">
+      <div style="grid-column:1/-1">
+        <div class="card">
+          <div class="ch">
+            <span class="ct">🤖 AI Portfolio Assistant</span>
+            <span style="font-size:11px;color:var(--muted)">Powered by Claude · Ask anything about your portfolio</span>
+          </div>
+          <div class="cb">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Ask questions about your holdings, risk, sector exposure, or strategy. The AI has full context of both portfolios.</p>
+            <div class="ai-suggestions" id="ai-sugs">
+              <button class="ai-sug" onclick="askAI(this.textContent)">What is our biggest risk right now?</button>
+              <button class="ai-sug" onclick="askAI(this.textContent)">Which sectors are we most overweight?</button>
+              <button class="ai-sug" onclick="askAI(this.textContent)">What are our top 5 positions by value?</button>
+              <button class="ai-sug" onclick="askAI(this.textContent)">How diversified is the CEE Fund?</button>
+              <button class="ai-sug" onclick="askAI(this.textContent)">Which positions have the highest beta?</button>
+              <button class="ai-sug" onclick="askAI(this.textContent)">Summarize our recent trades</button>
+            </div>
+            <div class="ai-messages" id="ai-msgs">
+              <div class="ai-msg assistant">👋 Hi! I'm your CEE Fund AI assistant. I have full context of both the Endowment and CEE Fund portfolios including all holdings, trades, sector weights, and risk metrics. Ask me anything!</div>
+            </div>
+            <div class="ai-input-row">
+              <input class="ai-input" id="ai-input" placeholder="Ask about your portfolio…" onkeydown="if(event.key==='Enter')sendAI()">
+              <button class="ai-send" id="ai-send-btn" onclick="sendAI()">Send</button>
+            </div>
+            <p style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">
+              ⚠️ To enable the AI, open this HTML file in a text editor and set your Claude API key on the line: <code style="background:var(--smoke);padding:1px 5px;border-radius:3px">const CLAUDE_KEY = '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'</code>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
 
 <script>
+// ── CONFIG — paste your Claude API key in the line below ──────────────────
+const CLAUDE_KEY = 'YOUR_KEY_HERE';
+const FINNHUB_KEY = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
+const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
-// ── EMBEDDED PORTFOLIO DATA (auto-loads on GitHub) ─────────────────────────
-const EMBEDDED = {
-  endEq:[
-    {ticker:'GOOG',company:'Alphabet Inc.',shares:84.689,avgPrice:102.72,marketPrice:332.77,marketValue:28181.96,dayPct:-0.508,beta:1.1456,sector:'Communication Services',costBasis:8703.23,wsTarget:210,clubTarget:null},
-    {ticker:'META',company:'Meta Platforms',shares:16.072,avgPrice:616.37,marketPrice:676.87,marketValue:10878.86,dayPct:0.788,beta:1.3376,sector:'Communication Services',costBasis:9907.35,wsTarget:730,clubTarget:null},
-    {ticker:'NFLX',company:'Netflix',shares:43,avgPrice:92.26,marketPrice:107.79,marketValue:4634.97,dayPct:0.074,beta:1.7025,sector:'Communication Services',costBasis:3967.18,wsTarget:1200,clubTarget:null},
-    {ticker:'TKO',company:'TKO Group',shares:23,avgPrice:203.03,marketPrice:184.44,marketValue:4242.12,dayPct:-4.485,beta:0.6506,sector:'Communication Services',costBasis:4669.69,wsTarget:220,clubTarget:null},
-    {ticker:'AMZN',company:'Amazon',shares:47,avgPrice:212.74,marketPrice:249.70,marketValue:11735.90,dayPct:0.483,beta:1.4165,sector:'Consumer Discretionary',costBasis:9998.78,wsTarget:280,clubTarget:null},
-    {ticker:'HD',company:'Home Depot',shares:10.071,avgPrice:378.36,marketPrice:337.15,marketValue:3395.44,dayPct:-0.519,beta:1.0563,sector:'Consumer Discretionary',costBasis:3810.47,wsTarget:390,clubTarget:null},
-    {ticker:'COST',company:'Costco',shares:4.241,avgPrice:418.30,marketPrice:987.21,marketValue:4186.66,dayPct:0.250,beta:0.9337,sector:'Consumer Staples',costBasis:1773.84,wsTarget:1050,clubTarget:null},
-    {ticker:'KO',company:'Coca-Cola',shares:104.292,avgPrice:55.01,marketPrice:75.18,marketValue:7840.65,dayPct:-0.173,beta:0.3380,sector:'Consumer Staples',costBasis:5737.31,wsTarget:78,clubTarget:null},
-    {ticker:'WMT',company:'Walmart',shares:55.405,avgPrice:97.20,marketPrice:124.82,marketValue:6915.68,dayPct:0.048,beta:0.6346,sector:'Consumer Staples',costBasis:5385.37,wsTarget:115,clubTarget:null},
-    {ticker:'XOM',company:'ExxonMobil',shares:14.096,avgPrice:149.26,marketPrice:151.98,marketValue:2142.36,dayPct:1.993,beta:0.1997,sector:'Energy',costBasis:2104.16,wsTarget:135,clubTarget:null},
-    {ticker:'BRK.B',company:'Berkshire Hathaway',shares:10,avgPrice:389.86,marketPrice:475.12,marketValue:4751.20,dayPct:0.217,beta:0.6508,sector:'Financials',costBasis:3898.60,wsTarget:530,clubTarget:null},
-    {ticker:'BX',company:'Blackstone',shares:48.261,avgPrice:96.26,marketPrice:128.13,marketValue:6183.64,dayPct:-1.582,beta:1.7006,sector:'Financials',costBasis:4645.99,wsTarget:160,clubTarget:null},
-    {ticker:'MA',company:'Mastercard',shares:11,avgPrice:527.36,marketPrice:518.54,marketValue:5703.94,dayPct:-0.273,beta:0.8075,sector:'Financials',costBasis:5800.96,wsTarget:600,clubTarget:null},
-    {ticker:'SPGI',company:'S&P Global',shares:14,avgPrice:440.27,marketPrice:436.79,marketValue:6115.06,dayPct:1.442,beta:1.1447,sector:'Financials',costBasis:6163.78,wsTarget:510,clubTarget:null},
-    {ticker:'V',company:'Visa',shares:33.014,avgPrice:251.98,marketPrice:315.10,marketValue:10402.77,dayPct:-0.256,beta:0.7680,sector:'Financials',costBasis:8317.89,wsTarget:380,clubTarget:null},
-    {ticker:'TMUS',company:'T-Mobile',shares:20,avgPrice:198.18,marketPrice:197.12,marketValue:3942.40,dayPct:3.644,beta:0.3372,sector:'Financials',costBasis:3963.60,wsTarget:240,clubTarget:null},
-    {ticker:'HCA',company:'HCA Healthcare',shares:11.144,avgPrice:331.45,marketPrice:482.97,marketValue:5382.31,dayPct:-1.148,beta:1.3257,sector:'Health Care',costBasis:3692.22,wsTarget:420,clubTarget:null},
-    {ticker:'LLY',company:'Eli Lilly',shares:7.023,avgPrice:842.55,marketPrice:903.99,marketValue:6348.45,dayPct:-0.115,beta:0.4855,sector:'Health Care',costBasis:5917.03,wsTarget:1050,clubTarget:null},
-    {ticker:'PFE',company:'Pfizer',shares:199.412,avgPrice:24.62,marketPrice:27.22,marketValue:5427.99,dayPct:0.110,beta:0.3382,sector:'Health Care',costBasis:4909.52,wsTarget:30,clubTarget:null},
-    {ticker:'SYK',company:'Stryker',shares:16.080,avgPrice:220.89,marketPrice:338.38,marketValue:5441.18,dayPct:-0.838,beta:0.8977,sector:'Health Care',costBasis:3552.31,wsTarget:390,clubTarget:null},
-    {ticker:'CAT',company:'Caterpillar',shares:23.822,avgPrice:202.02,marketPrice:772.66,marketValue:18405.99,dayPct:0.323,beta:1.5364,sector:'Industrials',costBasis:4812.12,wsTarget:430,clubTarget:null},
-    {ticker:'HWM',company:'Howmet Aerospace',shares:8,avgPrice:254.43,marketPrice:247.60,marketValue:1980.80,dayPct:-2.535,beta:1.2603,sector:'Industrials',costBasis:2035.44,wsTarget:290,clubTarget:null},
-    {ticker:'SBGSF',company:'Safran SA',shares:18,avgPrice:288.01,marketPrice:322.60,marketValue:5806.73,dayPct:0.962,beta:1.4017,sector:'Industrials',costBasis:5184.18,wsTarget:370,clubTarget:null},
-    {ticker:'WM',company:'Waste Management',shares:20.330,avgPrice:153.75,marketPrice:224.08,marketValue:4555.50,dayPct:-0.379,beta:0.4953,sector:'Industrials',costBasis:3125.74,wsTarget:245,clubTarget:null},
-    {ticker:'AAPL',company:'Apple',shares:63.701,avgPrice:127.65,marketPrice:263.40,marketValue:16778.74,dayPct:-1.137,beta:1.0820,sector:'Information Technology',costBasis:8131.43,wsTarget:240,clubTarget:null},
-    {ticker:'CRWD',company:'CrowdStrike',shares:10,avgPrice:300.23,marketPrice:418.20,marketValue:4182.00,dayPct:1.712,beta:1.0227,sector:'Information Technology',costBasis:3002.30,wsTarget:480,clubTarget:null},
-    {ticker:'MSFT',company:'Microsoft',shares:36.431,avgPrice:271.91,marketPrice:420.26,marketValue:15310.41,dayPct:2.198,beta:1.1188,sector:'Information Technology',costBasis:9901.41,wsTarget:500,clubTarget:null},
-    {ticker:'NVDA',company:'NVIDIA',shares:35,avgPrice:170.59,marketPrice:198.35,marketValue:6942.25,dayPct:-0.262,beta:2.3068,sector:'Information Technology',costBasis:5970.65,wsTarget:175,clubTarget:null},
-    {ticker:'ORCL',company:'Oracle',shares:18.528,avgPrice:126.58,marketPrice:178.34,marketValue:3304.35,dayPct:5.023,beta:1.6170,sector:'Information Technology',costBasis:2344.93,wsTarget:210,clubTarget:null},
-    {ticker:'TSM',company:'TSMC',shares:14,avgPrice:271.55,marketPrice:363.35,marketValue:5086.90,dayPct:-3.132,beta:1.3853,sector:'Information Technology',costBasis:3801.70,wsTarget:240,clubTarget:null},
-    {ticker:'NUE',company:'Nucor',shares:50.327,avgPrice:128.93,marketPrice:191.85,marketValue:9655.18,dayPct:1.187,beta:1.7625,sector:'Materials',costBasis:6487.63,wsTarget:145,clubTarget:null},
-    {ticker:'DLR',company:'Digital Realty',shares:25.913,avgPrice:120.74,marketPrice:199.05,marketValue:5158.06,dayPct:1.717,beta:1.0793,sector:'Real Estate',costBasis:3128.77,wsTarget:180,clubTarget:null},
-    {ticker:'CEG',company:'Constellation Energy',shares:16,avgPrice:371.19,marketPrice:299.14,marketValue:4786.24,dayPct:1.496,beta:1.1434,sector:'Utilities',costBasis:5939.04,wsTarget:340,clubTarget:null},
-  ],
-  ceeEq:[
-    {ticker:'AAPL',company:'Apple',shares:10.115,avgPrice:180.06,marketPrice:263.40,marketValue:2664.29,dayPct:-1.137,beta:1.0820,sector:'Information Technology',costBasis:1821.32,wsTarget:240,clubTarget:null},
-    {ticker:'ABBV',company:'AbbVie',shares:20.009,avgPrice:160.00,marketPrice:208.99,marketValue:4181.64,dayPct:0.274,beta:0.3193,sector:'Health Care',costBasis:3201.44,wsTarget:235,clubTarget:null},
-    {ticker:'ADI',company:'Analog Devices',shares:14.529,avgPrice:131.74,marketPrice:353.80,marketValue:5140.47,dayPct:1.684,beta:1.0844,sector:'Information Technology',costBasis:1913.91,wsTarget:280,clubTarget:null},
-    {ticker:'BRK.B',company:'Berkshire Hathaway',shares:8,avgPrice:389.68,marketPrice:475.12,marketValue:3800.96,dayPct:0.217,beta:0.6508,sector:'Financials',costBasis:3117.44,wsTarget:530,clubTarget:null},
-    {ticker:'COF',company:'Capital One',shares:15.412,avgPrice:144.00,marketPrice:200.71,marketValue:3093.26,dayPct:-1.118,beta:1.1184,sector:'Financials',costBasis:2219.33,wsTarget:230,clubTarget:null},
-    {ticker:'DAR',company:'Darling Ingredients',shares:20,avgPrice:58.50,marketPrice:60.36,marketValue:1207.20,dayPct:3.285,beta:1.0504,sector:'Consumer Staples',costBasis:1170.00,wsTarget:75,clubTarget:null},
-    {ticker:'DIS',company:'Walt Disney',shares:20,avgPrice:107.43,marketPrice:103.90,marketValue:2078.00,dayPct:0.835,beta:1.4474,sector:'Communication Services',costBasis:2148.60,wsTarget:120,clubTarget:null},
-    {ticker:'DLR',company:'Digital Realty',shares:18.291,avgPrice:101.62,marketPrice:199.05,marketValue:3640.78,dayPct:1.717,beta:1.0793,sector:'Real Estate',costBasis:1859.24,wsTarget:180,clubTarget:null},
-    {ticker:'ET',company:'Energy Transfer',shares:95.144,avgPrice:17.35,marketPrice:18.87,marketValue:1795.36,dayPct:0.855,beta:0.6600,sector:'Energy',costBasis:1650.75,wsTarget:22,clubTarget:null},
-    {ticker:'FSLR',company:'First Solar',shares:3,avgPrice:102.22,marketPrice:191.65,marketValue:574.95,dayPct:-1.819,beta:1.6069,sector:'Information Technology',costBasis:306.66,wsTarget:220,clubTarget:null},
-    {ticker:'GD',company:'General Dynamics',shares:4.054,avgPrice:282.45,marketPrice:334.92,marketValue:1357.56,dayPct:-1.169,beta:0.3518,sector:'Industrials',costBasis:1145.25,wsTarget:380,clubTarget:null},
-    {ticker:'GOOGL',company:'Alphabet Inc.',shares:34.275,avgPrice:136.47,marketPrice:336.02,marketValue:11516.92,dayPct:-0.326,beta:1.1456,sector:'Information Technology',costBasis:4677.59,wsTarget:210,clubTarget:null},
-    {ticker:'GRMN',company:'Garmin',shares:7.202,avgPrice:148.56,marketPrice:264.36,marketValue:1903.79,dayPct:-0.557,beta:1.0127,sector:'Consumer Discretionary',costBasis:1069.87,wsTarget:290,clubTarget:null},
-    {ticker:'HD',company:'Home Depot',shares:7.768,avgPrice:217.02,marketPrice:337.15,marketValue:2619.08,dayPct:-0.519,beta:1.0563,sector:'Consumer Discretionary',costBasis:1685.51,wsTarget:390,clubTarget:null},
-    {ticker:'HOOD',company:'Robinhood',shares:14,avgPrice:69.95,marketPrice:86.85,marketValue:1215.90,dayPct:-0.538,beta:2.4978,sector:'Financials',costBasis:979.30,wsTarget:65,clubTarget:null},
-    {ticker:'HWM',company:'Howmet Aerospace',shares:16,avgPrice:257.71,marketPrice:247.60,marketValue:3961.60,dayPct:-2.535,beta:1.2603,sector:'Industrials',costBasis:4123.36,wsTarget:290,clubTarget:null},
-    {ticker:'IREN',company:'Iris Energy',shares:18,avgPrice:65.83,marketPrice:47.70,marketValue:858.60,dayPct:-2.294,beta:4.3466,sector:'Information Technology',costBasis:1184.94,wsTarget:18,clubTarget:null},
-    {ticker:'ISRG',company:'Intuitive Surgical',shares:5,avgPrice:187.01,marketPrice:458.08,marketValue:2290.40,dayPct:-2.195,beta:1.5859,sector:'Health Care',costBasis:935.05,wsTarget:620,clubTarget:null},
-    {ticker:'LLY',company:'Eli Lilly',shares:3.022,avgPrice:897.55,marketPrice:903.99,marketValue:2731.41,dayPct:-0.115,beta:0.4855,sector:'Health Care',costBasis:2712.38,wsTarget:1050,clubTarget:null},
-    {ticker:'MSFT',company:'Microsoft',shares:22.672,avgPrice:330.84,marketPrice:420.26,marketValue:9528.26,dayPct:2.198,beta:1.1188,sector:'Information Technology',costBasis:7498.14,wsTarget:500,clubTarget:null},
-    {ticker:'NFLX',company:'Netflix',shares:21,avgPrice:92.21,marketPrice:107.79,marketValue:2263.59,dayPct:0.074,beta:1.7025,sector:'Communication Services',costBasis:1936.41,wsTarget:1200,clubTarget:null},
-    {ticker:'PANW',company:'Palo Alto Networks',shares:22,avgPrice:128.37,marketPrice:166.97,marketValue:3673.34,dayPct:1.743,beta:0.7228,sector:'Information Technology',costBasis:2824.14,wsTarget:210,clubTarget:null},
-    {ticker:'PLTR',company:'Palantir',shares:36,avgPrice:103.37,marketPrice:142.76,marketValue:5139.36,dayPct:0.429,beta:1.6155,sector:'Information Technology',costBasis:3721.32,wsTarget:120,clubTarget:null},
-    {ticker:'SOFI',company:'SoFi Technologies',shares:100,avgPrice:7.57,marketPrice:19.03,marketValue:1903.00,dayPct:1.277,beta:2.3055,sector:'Information Technology',costBasis:757.00,wsTarget:18,clubTarget:null},
-    {ticker:'SOUN',company:'SoundHound AI',shares:50,avgPrice:1.96,marketPrice:7.70,marketValue:385.00,dayPct:-1.911,beta:2.8654,sector:'Information Technology',costBasis:98.00,wsTarget:12,clubTarget:null},
-    {ticker:'SPGI',company:'S&P Global',shares:4,avgPrice:440.04,marketPrice:436.79,marketValue:1747.16,dayPct:1.442,beta:1.1447,sector:'Financials',costBasis:1760.16,wsTarget:510,clubTarget:null},
-    {ticker:'TSM',company:'TSMC',shares:36,avgPrice:186.63,marketPrice:363.35,marketValue:13080.60,dayPct:-3.132,beta:1.3853,sector:'Information Technology',costBasis:6718.68,wsTarget:240,clubTarget:null},
-    {ticker:'TTWO',company:'Take-Two Interactive',shares:5,avgPrice:204.21,marketPrice:213.93,marketValue:1069.65,dayPct:-0.103,beta:0.9939,sector:'Communication Services',costBasis:1021.05,wsTarget:230,clubTarget:null},
-    {ticker:'V',company:'Visa',shares:6.013,avgPrice:325.19,marketPrice:315.10,marketValue:1894.57,dayPct:-0.256,beta:0.7680,sector:'Financials',costBasis:1954.23,wsTarget:380,clubTarget:null},
-    {ticker:'VMC',company:'Vulcan Materials',shares:3.049,avgPrice:259.38,marketPrice:285.78,marketValue:871.40,dayPct:-1.878,beta:1.0882,sector:'Materials',costBasis:791.02,wsTarget:310,clubTarget:null},
-    {ticker:'WM',company:'Waste Management',shares:34.556,avgPrice:151.87,marketPrice:224.08,marketValue:7743.33,dayPct:-0.379,beta:0.4953,sector:'Industrials',costBasis:5248.71,wsTarget:245,clubTarget:null},
-    {ticker:'WMT',company:'Walmart',shares:25.113,avgPrice:97.06,marketPrice:124.82,marketValue:3134.55,dayPct:0.048,beta:0.6346,sector:'Consumer Staples',costBasis:2437.47,wsTarget:115,clubTarget:null},
-    {ticker:'XOM',company:'ExxonMobil',shares:17.271,avgPrice:103.06,marketPrice:151.98,marketValue:2624.80,dayPct:1.993,beta:0.1997,sector:'Energy',costBasis:1780.37,wsTarget:135,clubTarget:null},
-  ],
-  trades:[
-    {date:'Apr 10, 2026',fund:'CEE Fund',company:'Oracle Corp',type:'BUY',ticker:'ORCL',shares:5,price:165.42,total:827.10,approved:'J. Smith',notes:'AI cloud thesis'},
-    {date:'Apr 8, 2026',fund:'Endowment',company:'Coca-Cola',type:'DIVIDEND',ticker:'KO',shares:null,price:null,total:187.20,approved:'Auto',notes:'Q1 2026 dividend'},
-    {date:'Apr 5, 2026',fund:'CEE Fund',company:'Palantir Technologies',type:'BUY',ticker:'PLTR',shares:10,price:138.55,total:1385.50,approved:'M. Chen',notes:'AI government contracts expanding'},
-    {date:'Mar 28, 2026',fund:'CEE Fund',company:'Walt Disney',type:'SELL',ticker:'DIS',shares:5,price:110.25,total:551.25,approved:'J. Smith',notes:'Trimmed on valuation'},
-    {date:'Mar 20, 2026',fund:'CEE Fund',company:'TSMC',type:'BUY',ticker:'TSM',shares:8,price:345.80,total:2766.40,approved:'R. Davis',notes:'CoWoS demand, AI chip thesis'},
-    {date:'Mar 15, 2026',fund:'Endowment',company:'Walmart',type:'DIVIDEND',ticker:'WMT',shares:null,price:null,total:92.40,approved:'Auto',notes:'Q4 2025 dividend'},
-    {date:'Mar 10, 2026',fund:'Endowment',company:'Caterpillar',type:'BUY',ticker:'CAT',shares:3,price:745.20,total:2235.60,approved:'J. Smith',notes:'Infrastructure spending thesis'},
-    {date:'Feb 28, 2026',fund:'CEE Fund',company:'SoundHound AI',type:'BUY',ticker:'SOUN',shares:25,price:6.80,total:170.00,approved:'M. Chen',notes:'Speculative AI voice position'},
-    {date:'Feb 15, 2026',fund:'CEE Fund',company:'Robinhood',type:'SELL',ticker:'HOOD',shares:6,price:92.15,total:552.90,approved:'R. Davis',notes:'Reduced exposure after run-up'},
-    {date:'Feb 1, 2026',fund:'CEE Fund',company:'Intuitive Surgical',type:'BUY',ticker:'ISRG',shares:2,price:445.00,total:890.00,approved:'J. Smith',notes:'Robotic surgery market expansion'},
-    {date:'Jan 20, 2026',fund:'CEE Fund',company:'Palo Alto Networks',type:'BUY',ticker:'PANW',shares:5,price:160.30,total:801.50,approved:'M. Chen',notes:'Cybersecurity consolidation'},
-    {date:'Jan 15, 2026',fund:'Endowment',company:'TSMC',type:'BUY',ticker:'TSM',shares:4,price:220.50,total:882.00,approved:'R. Davis',notes:'AI semiconductor demand'},
-    {date:'Dec 10, 2025',fund:'CEE Fund',company:'Analog Devices',type:'BUY',ticker:'ADI',shares:5,price:215.00,total:1075.00,approved:'J. Smith',notes:'Semi cycle recovery'},
-    {date:'Nov 20, 2025',fund:'Endowment',company:'Caterpillar',type:'BUY',ticker:'CAT',shares:5,price:680.00,total:3400.00,approved:'J. Smith',notes:'IIJA infrastructure spending'},
-    {date:'Oct 15, 2025',fund:'CEE Fund',company:'Waste Management',type:'BUY',ticker:'WM',shares:10,price:195.50,total:1955.00,approved:'M. Chen',notes:'Defensive dividend growth'},
-  ],
-  endTotal:508172.33,ceeTotal:208811.36,endBeta:0.9918,ceeBeta:1.0703
+// ── GOOGLE SHEETS URLS ────────────────────────────────────────────────────
+const GS = {
+  end: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3UMHNfn4RVppjAroiM3MXcLNUE8UqW8Nrmfglhe_i10-9utY3MO_Nc4FjBj65iR1Z7VK0hY7Mb1Vb/pub?gid=0&single=true&output=csv',
+  cee: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3UMHNfn4RVppjAroiM3MXcLNUE8UqW8Nrmfglhe_i10-9utY3MO_Nc4FjBj65iR1Z7VK0hY7Mb1Vb/pub?gid=1018592637&single=true&output=csv',
+  trd: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3UMHNfn4RVppjAroiM3MXcLNUE8UqW8Nrmfglhe_i10-9utY3MO_Nc4FjBj65iR1Z7VK0hY7Mb1Vb/pub?gid=2139186311&single=true&output=csv',
+  pt:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vS3UMHNfn4RVppjAroiM3MXcLNUE8UqW8Nrmfglhe_i10-9utY3MO_Nc4FjBj65iR1Z7VK0hY7Mb1Vb/pub?gid=407804262&single=true&output=csv',
 };
 
-function loadEmbedded(){
-  S.endEq=EMBEDDED.endEq;S.ceeEq=EMBEDDED.ceeEq;S.trades=EMBEDDED.trades;
-  S.endTotal=EMBEDDED.endTotal;S.ceeTotal=EMBEDDED.ceeTotal;
-  S.endBeta=EMBEDDED.endBeta;S.ceeBeta=EMBEDDED.ceeBeta;
-  document.getElementById('topbar-sub').textContent='Christopher Newport University  ·  Data as of Apr 12, 2026';
-  document.getElementById('upload-screen').style.display='none';
-  document.getElementById('dashboard').style.display='block';
-  rAll();
-  document.getElementById('loading-overlay').classList.add('hidden');
-}
-
-// ── CONFIG ─────────────────────────────────────────────────────────────────
-const FINNHUB_KEY = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
-const FINNHUB = 'https://finnhub.io/api/v1';
-
-// ── STATE ──────────────────────────────────────────────────────────────────
-const S={
-  endEq:[],ceeEq:[],trades:[],endTotal:508172,ceeTotal:208811,endBeta:.9918,ceeBeta:1.0703,
-  rF:'end',aF:'end',hF:'end',ptF:'both',charts:{},
-  newsCache:{},newsFilter:'all',newsFund:'both',newsSearch:'',
-  calFund:'both',calFilter:'all',earnings:[],
-  allNews:[]
+// ── STATE ─────────────────────────────────────────────────────────────────
+const S = {
+  endEq:[], ceeEq:[], trades:[], ptData:[],
+  endTotal:0, ceeTotal:0, endBeta:1, ceeBeta:1,
+  livePrices:{}, newsCache:{}, allNews:[],
+  newsFilter:'all', newsFund:'both', newsSearch:'',
+  calFund:'both', calFilter:'all', earnings:[],
+  rF:'end', aF:'end', hF:'end', ptF:'both',
+  wiF:'end', wiA:'buy',
+  charts:{}, aiHistory:[],
 };
 
 const WS={GOOG:210,META:730,NFLX:1200,TKO:220,AMZN:280,HD:390,COST:1050,KO:78,WMT:115,XOM:135,"BRK.B":530,BX:160,MA:600,SPGI:510,V:380,TMUS:240,HCA:420,LLY:1050,PFE:30,SYK:390,CAT:430,HWM:290,SBGSF:370,WM:245,AAPL:240,CRWD:480,MSFT:500,NVDA:175,ORCL:210,TSM:240,NUE:145,DLR:180,CEG:340,ABBV:235,ADI:280,COF:230,DAR:75,DIS:120,ET:22,FSLR:220,GD:380,GOOGL:210,GRMN:290,HOOD:65,IREN:18,ISRG:620,PANW:210,PLTR:120,SOFI:18,SOUN:12,TTWO:230,VMC:310};
 const SP500={"Information Technology":32.08,"Financials":13.02,"Communication Services":11.89,"Industrials":8.26,"Health Care":9.22,"Consumer Discretionary":11.07,"Consumer Staples":5.58,"Utilities":2.14,"Materials":1.86,"Energy":3.06,"Real Estate":1.80};
-
-// Static economic / Fed calendar (updates quarterly)
-const ECON_EVENTS = [
-  {d:'2026-05-21',tp:'fed',     l:'FOMC Meeting Minutes Released',       imp:'High'},
-  {d:'2026-06-04',tp:'economic',l:'CPI Inflation Data (May)',             imp:'High'},
-  {d:'2026-06-11',tp:'fed',     l:'FOMC Rate Decision',                   imp:'Very High'},
-  {d:'2026-06-25',tp:'economic',l:'PCE Inflation Data (May)',             imp:'High'},
-  {d:'2026-07-02',tp:'economic',l:'Jobs Report — NFP (June)',             imp:'High'},
-  {d:'2026-07-09',tp:'economic',l:'CPI Inflation Data (June)',            imp:'High'},
-  {d:'2026-07-29',tp:'fed',     l:'FOMC Rate Decision',                   imp:'Very High'},
-  {d:'2026-08-06',tp:'economic',l:'Jobs Report — NFP (July)',             imp:'High'},
-  {d:'2026-08-13',tp:'economic',l:'CPI Inflation Data (July)',            imp:'High'},
-  {d:'2026-09-16',tp:'fed',     l:'FOMC Rate Decision',                   imp:'Very High'},
-  {d:'2026-09-25',tp:'economic',l:'PCE Inflation Data (August)',          imp:'High'},
+const ECON=[
+  {d:'2026-05-21',tp:'fed',l:'FOMC Meeting Minutes Released',imp:'High'},
+  {d:'2026-06-04',tp:'economic',l:'CPI Inflation Data (May)',imp:'High'},
+  {d:'2026-06-11',tp:'fed',l:'FOMC Rate Decision',imp:'Very High'},
+  {d:'2026-06-25',tp:'economic',l:'PCE Inflation Data (May)',imp:'High'},
+  {d:'2026-07-02',tp:'economic',l:'Jobs Report — NFP (June)',imp:'High'},
+  {d:'2026-07-09',tp:'economic',l:'CPI Inflation Data (June)',imp:'High'},
+  {d:'2026-07-29',tp:'fed',l:'FOMC Rate Decision',imp:'Very High'},
+  {d:'2026-08-06',tp:'economic',l:'Jobs Report — NFP (July)',imp:'High'},
+  {d:'2026-08-13',tp:'economic',l:'CPI Inflation Data (July)',imp:'High'},
+  {d:'2026-09-16',tp:'fed',l:'FOMC Rate Decision',imp:'Very High'},
+  {d:'2026-09-25',tp:'economic',l:'PCE Inflation Data (August)',imp:'High'},
 ];
 
-// ── UTILS ──────────────────────────────────────────────────────────────────
+// ── UTILS ─────────────────────────────────────────────────────────────────
 const f=(n,d=2)=>n==null||isNaN(n)?'—':n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const fd=n=>n==null||isNaN(n)?'—':'$'+f(n,0);
 const fk=n=>{if(!n||isNaN(n))return'$0';return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+(n/1e3).toFixed(0)+'K':'$'+f(n,0);};
 const fp=n=>n==null||isNaN(n)?'—':(n>=0?'+':'')+f(n,2)+'%';
 const cp=v=>v>=0?'pos':'neg';
 const pct=(a,b)=>b?((a-b)/b*100):0;
+const today=()=>new Date().toISOString().split('T')[0];
+const future=d=>{const dt=new Date();dt.setDate(dt.getDate()+d);return dt.toISOString().split('T')[0];};
+const fmtD=s=>{if(!s)return'';const d=new Date(s+'T12:00:00');return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
 function dc(k){if(S.charts[k]){S.charts[k].destroy();delete S.charts[k];}}
-function allTickers(fund='both'){
+function allTk(fund='both'){
   const e=new Set(S.endEq.map(x=>x.ticker)),c=new Set(S.ceeEq.map(x=>x.ticker));
-  if(fund==='end')return[...e];if(fund==='cee')return[...c];
-  return [...new Set([...e,...c])];
-}
-function todayStr(){const d=new Date();return d.toISOString().split('T')[0];}
-function futureStr(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().split('T')[0];}
-function fmtDate(str){
-  if(!str)return'';
-  const d=new Date(str+'T12:00:00');
-  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  if(fund==='end')return[...e];if(fund==='cee')return[...c];return[...new Set([...e,...c])];
 }
 
-// ── FINNHUB: LIVE NEWS ─────────────────────────────────────────────────────
-async function fetchNewsForTicker(ticker){
-  if(S.newsCache[ticker])return S.newsCache[ticker];
-  const to=todayStr(),from=futureStr(-7);
+// ── CSV PARSER ────────────────────────────────────────────────────────────
+function parseCSV(text){
+  const lines=text.trim().split('\n');
+  if(lines.length<2)return[];
+  const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
+  return lines.slice(1).map(line=>{
+    const vals=[];let cur='',inQ=false;
+    for(const ch of line){if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){vals.push(cur.trim());cur='';}else{cur+=ch;}}
+    vals.push(cur.trim());
+    const obj={};headers.forEach((h,i)=>obj[h]=(vals[i]||'').replace(/"/g,'').trim());
+    return obj;
+  });
+}
+
+function rowToEquity(row){
+  const tk=(row['ticker']||'').trim();
+  if(!tk||tk.length>8)return null;
+  const mv=parseFloat(row['market value'])||parseFloat(row['marketvalue'])||0;
+  if(mv<=0)return null;
+  return{
+    ticker:tk, company:row['company']||tk,
+    shares:parseFloat(row['shares'])||0,
+    avgPrice:parseFloat(row['avg cost']||row['avg price']||row['avgprice']||row['avgcost'])||0,
+    marketPrice:parseFloat(row['market price']||row['marketprice']||row['price'])||0,
+    marketValue:mv,
+    dayPct:parseFloat(row['day %']||row['day%']||row['daypct'])||0,
+    beta:parseFloat(row['beta'])||1,
+    sector:row['sector']||'Other',
+    costBasis:parseFloat(row['cost basis']||row['costbasis'])||0,
+    wsTarget:parseFloat(row['ws target']||row['wstarget'])||WS[tk]||null,
+    clubTarget:parseFloat(row['club target']||row['clubtarget'])||null,
+    notes:row['notes']||'',
+  };
+}
+
+function rowToTrade(row){
+  const tp=(row['type']||'').trim().toUpperCase();
+  if(!['BUY','SELL','DIVIDEND','SPLIT','TRANSFER'].includes(tp))return null;
+  return{
+    date:row['date']||'', fund:row['fund']||'',
+    company:row['company / description']||row['company']||'',
+    type:tp, ticker:row['ticker']||'',
+    shares:parseFloat(row['shares'])||null,
+    price:parseFloat(row['price per share']||row['price'])||null,
+    total:parseFloat(row['total amount']||row['total'])||0,
+    approved:row['approved by']||row['approved']||'',
+    notes:row['notes / thesis']||row['notes']||'',
+  };
+}
+
+// ── LOAD GOOGLE SHEETS ────────────────────────────────────────────────────
+async function fetchCSV(url){
+  const res=await fetch(url);
+  if(!res.ok)throw new Error('Failed to fetch: '+res.status);
+  return res.text();
+}
+
+async function loadGoogleSheets(){
+  setSplash('Loading holdings from Google Sheets…');
   try{
-    const r=await fetch(`${FINNHUB}/company-news?symbol=${ticker}&from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+    const [endTxt,ceeTxt,trdTxt,ptTxt]=await Promise.all([
+      fetchCSV(GS.end),fetchCSV(GS.cee),fetchCSV(GS.trd),fetchCSV(GS.pt)
+    ]);
+    S.endEq=parseCSV(endTxt).map(rowToEquity).filter(Boolean);
+    S.ceeEq=parseCSV(ceeTxt).map(rowToEquity).filter(Boolean);
+    S.trades=parseCSV(trdTxt).map(rowToTrade).filter(Boolean);
+    S.ptData=parseCSV(ptTxt);
+    console.log('Loaded:',S.endEq.length,'end,',S.ceeEq.length,'cee,',S.trades.length,'trades');
+  }catch(e){
+    console.error('Google Sheets load failed:',e);
+    setSplash('Could not load Google Sheets — using embedded data…');
+    loadFallback();
+  }
+}
+
+function loadFallback(){
+  // Use embedded data as fallback if Google Sheets fails
+  S.endTotal=508172.33; S.ceeTotal=208811.36;
+  S.endBeta=0.9918; S.ceeBeta=1.0703;
+}
+
+// ── LIVE PRICES (FINNHUB) ─────────────────────────────────────────────────
+async function fetchLivePrices(){
+  setSplash('Fetching live stock prices…');
+  const tickers=allTk('both');
+  const batches=[];for(let i=0;i<tickers.length;i+=5)batches.push(tickers.slice(i,i+5));
+  for(const batch of batches){
+    await Promise.all(batch.map(async tk=>{
+      try{
+        const r=await fetch(`${FINNHUB_URL}/quote?symbol=${tk}&token=${FINNHUB_KEY}`);
+        if(!r.ok)return;
+        const d=await r.json();
+        if(d.c>0)S.livePrices[tk]={price:d.c,dayPct:d.dp||0,high:d.h,low:d.l};
+      }catch(e){}
+    }));
+    await new Promise(r=>setTimeout(r,250));
+  }
+  // Apply live prices to equities
+  [...S.endEq,...S.ceeEq].forEach(e=>{
+    const lp=S.livePrices[e.ticker];
+    if(lp){e.marketPrice=lp.price;e.dayPct=lp.dayPct;e.marketValue=e.shares*lp.price;}
+  });
+  S.endTotal=S.endEq.reduce((s,e)=>s+e.marketValue,0)||508172.33;
+  S.ceeTotal=S.ceeEq.reduce((s,e)=>s+e.marketValue,0)||208811.36;
+  S.endBeta=S.endEq.length?S.endEq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.endTotal:0.9918;
+  S.ceeBeta=S.ceeEq.length?S.ceeEq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.ceeTotal:1.0703;
+}
+
+// ── NEWS ──────────────────────────────────────────────────────────────────
+function scoreSent(text){
+  const t=text.toLowerCase();
+  const pos=['beat','surge','record','raise','growth','strong','gain','rally','soar','upgrade','exceed','profit','expand','jump'];
+  const neg=['miss','fall','drop','warn','cut','decline','loss','downgrade','weak','concern','below','disappoint','layoff','reduce'];
+  const ps=pos.filter(w=>t.includes(w)).length,ns=neg.filter(w=>t.includes(w)).length;
+  return ps>ns?'positive':ns>ps?'negative':'neutral';
+}
+async function fetchNewsForTk(tk){
+  if(S.newsCache[tk])return S.newsCache[tk];
+  try{
+    const r=await fetch(`${FINNHUB_URL}/company-news?symbol=${tk}&from=${future(-7)}&to=${today()}&token=${FINNHUB_KEY}`);
     if(!r.ok)return[];
     const data=await r.json();
     if(!Array.isArray(data))return[];
     const items=data.slice(0,5).map(n=>({
-      headline:n.headline||'',summary:n.summary||'',
-      url:n.url||'#',source:n.source||'',
-      time:new Date(n.datetime*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
-      ticker,sentiment:scoreSentiment(n.headline+' '+n.summary)
+      headline:n.headline||'',summary:n.summary||'',url:n.url||'#',
+      source:n.source||'',time:new Date(n.datetime*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+      ticker:tk,sentiment:scoreSent(n.headline+' '+(n.summary||''))
     }));
-    S.newsCache[ticker]=items;return items;
+    S.newsCache[tk]=items;return items;
   }catch(e){return[];}
 }
-
-function scoreSentiment(text){
-  const t=text.toLowerCase();
-  const pos=['beat','surge','record','raise','growth','strong','gain','rally','soar','upgrade','exceed','outperform','profit','revenue','expand'];
-  const neg=['miss','fall','drop','warn','cut','decline','loss','downgrade','weak','concern','risk','below','disappoint','layoff','reduce'];
-  let ps=pos.filter(w=>t.includes(w)).length,ns=neg.filter(w=>t.includes(w)).length;
-  return ps>ns?'positive':ns>ps?'negative':'neutral';
-}
-
 async function fetchAllNews(forceRefresh=false){
   if(forceRefresh)S.newsCache={};
-  const tickers=allTickers(S.newsFund);
-  if(!tickers.length){document.getElementById('news-feed').innerHTML='<div class="news-loading">Upload your Excel file to see portfolio news.</div>';return;}
-  document.getElementById('news-status').textContent='Fetching live news…';
-  document.getElementById('news-feed').innerHTML='<div class="news-loading"><span class="spin">⟳</span> Loading live news from Finnhub for '+tickers.length+' holdings…</div>';
-  // Fetch in batches of 5 to avoid rate limits
+  const tickers=allTk(S.newsFund);
+  document.getElementById('news-st').textContent='Fetching…';
+  document.getElementById('news-feed').innerHTML='<div style="text-align:center;padding:32px;color:var(--muted)"><span class="spin">⟳</span> Loading live news for '+tickers.length+' holdings…</div>';
   const batches=[];for(let i=0;i<tickers.length;i+=5)batches.push(tickers.slice(i,i+5));
   let all=[];
-  for(const batch of batches){
-    const results=await Promise.all(batch.map(t=>fetchNewsForTicker(t)));
-    results.forEach(items=>all.push(...items));
-    await new Promise(r=>setTimeout(r,300));// small delay between batches
-  }
-  // Sort by date (most recent first), dedupe by headline
-  const seen=new Set();
-  all=all.filter(n=>{if(seen.has(n.headline))return false;seen.add(n.headline);return true;});
-  all.sort((a,b)=>new Date(b.time)-new Date(a.time));
+  for(const batch of batches){const res=await Promise.all(batch.map(t=>fetchNewsForTk(t)));res.forEach(items=>all.push(...items));await new Promise(r=>setTimeout(r,300));}
+  const seen=new Set();all=all.filter(n=>{if(seen.has(n.headline))return false;seen.add(n.headline);return true;});
   S.allNews=all;
-  document.getElementById('news-status').textContent=`${all.length} articles · updated ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
+  document.getElementById('news-st').textContent=`${all.length} articles · ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
   renderNews();
 }
-
 function renderNews(){
   let items=[...S.allNews];
-  // Filter by sentiment
   if(S.newsFilter!=='all')items=items.filter(n=>n.sentiment===S.newsFilter);
-  // Filter by search
-  if(S.newsSearch){
-    const q=S.newsSearch.toUpperCase();
-    items=items.filter(n=>n.ticker.includes(q)||n.headline.toUpperCase().includes(q));
-  }
-  if(!items.length){
-    document.getElementById('news-feed').innerHTML='<div class="news-loading" style="color:var(--muted)">No articles match your filters.</div>';return;
-  }
-  const sentColor={positive:'var(--green)',negative:'var(--red)',neutral:'var(--gold)'};
+  if(S.newsSearch){const q=S.newsSearch.toUpperCase();items=items.filter(n=>n.ticker.includes(q)||n.headline.toUpperCase().includes(q));}
+  if(!items.length){document.getElementById('news-feed').innerHTML='<div style="text-align:center;padding:24px;color:var(--muted)">No articles match your filters.</div>';return;}
+  const sc={positive:'var(--green)',negative:'var(--red)',neutral:'var(--gold)'};
   document.getElementById('news-feed').innerHTML=items.slice(0,40).map(n=>`
     <div class="ni ${n.sentiment}" onclick="window.open('${n.url}','_blank')">
-      <div class="nm">
-        <span class="ntk">${n.ticker}</span>
-        <span class="nsc">${n.source}</span>
-        <span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${sentColor[n.sentiment]}18;color:${sentColor[n.sentiment]};font-weight:600">${n.sentiment}</span>
+      <div class="nm"><span class="ntk">${n.ticker}</span><span class="nsc">${n.source}</span>
+        <span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${sc[n.sentiment]}18;color:${sc[n.sentiment]};font-weight:600">${n.sentiment}</span>
         <span class="ntm">${n.time}</span>
       </div>
       <div class="nh">${n.headline}</div>
       ${n.summary?`<div class="nsu">${n.summary.slice(0,180)}${n.summary.length>180?'…':''}</div>`:''}
     </div>`).join('');
 }
+function setNF(f,btn){document.querySelectorAll('#nf-pills .rpill').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.newsFilter=f;renderNews();}
+function setNFund(fund,btn){document.querySelectorAll('#news-ftog .fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.newsFund=fund;S.newsCache={};fetchAllNews();}
+function onNSearch(v){S.newsSearch=v.trim();renderNews();}
 
-function setNewsFilter(f,btn){
-  document.querySelectorAll('#nf-pills .rpill').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');S.newsFilter=f;renderNews();
-}
-function setNewsFund(fund,btn){
-  document.querySelectorAll('#news-fund-tog .fbtn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');S.newsFund=fund;S.newsCache={};fetchAllNews();
-}
-function onNewsSearch(val){
-  S.newsSearch=val.trim();
-  if(S.newsSearch.length===0||S.newsSearch.length>=2)renderNews();
-}
-
-// ── FINNHUB: EARNINGS CALENDAR ─────────────────────────────────────────────
-async function fetchEarnings(){
-  const from=todayStr(),to=futureStr(90);
-  try{
-    const r=await fetch(`${FINNHUB}/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB_KEY}`);
-    if(!r.ok)return[];
-    const data=await r.json();
-    const cal=data.earningsCalendar||[];
-    const tickers=new Set(allTickers('both'));
-    return cal.filter(e=>tickers.has(e.symbol)).map(e=>({
-      date:e.date,ticker:e.symbol,
-      epsEst:e.epsEstimate,epsPrior:e.epsPrior,
-      revenueEst:e.revenueEstimate
-    })).sort((a,b)=>a.date.localeCompare(b.date));
-  }catch(e){return[];}
-}
-
+// ── CALENDAR ──────────────────────────────────────────────────────────────
 async function loadCalendar(){
-  document.getElementById('cal-status').textContent='Loading earnings…';
-  const earnings=await fetchEarnings();
-  S.earnings=earnings;
-  document.getElementById('cal-status').textContent=`${earnings.length} earnings dates found · live from Finnhub`;
-  renderCalendar();
-  renderMiniCalendar();
+  document.getElementById('cal-st').textContent='Loading earnings…';
+  try{
+    const r=await fetch(`${FINNHUB_URL}/calendar/earnings?from=${today()}&to=${future(90)}&token=${FINNHUB_KEY}`);
+    if(!r.ok)throw new Error();
+    const data=await r.json();
+    const tks=new Set(allTk('both'));
+    S.earnings=(data.earningsCalendar||[]).filter(e=>tks.has(e.symbol)).map(e=>({date:e.date,ticker:e.symbol,epsEst:e.epsEstimate,epsPrior:e.epsPrior})).sort((a,b)=>a.date.localeCompare(b.date));
+    document.getElementById('cal-st').textContent=`${S.earnings.length} earnings dates · live from Finnhub`;
+  }catch(e){document.getElementById('cal-st').textContent='Using static calendar';}
+  renderCalendar();renderMiniCal();
 }
-
 function renderCalendar(){
-  const fund=S.calFund,filter=S.calFilter;
-  const tickers=new Set(allTickers(fund));
-
-  // Earnings section
-  let earn=S.earnings.filter(e=>tickers.has(e.ticker));
-  if(filter==='economic'||filter==='fed')earn=[];
-
-  const earnHtml=earn.length?earn.map(e=>{
-    const inEnd=S.endEq.find(x=>x.ticker===e.ticker);
-    const inCEE=S.ceeEq.find(x=>x.ticker===e.ticker);
-    const fundBadge=inEnd&&inCEE?'Both':inEnd?'Endowment':'CEE Fund';
-    return`<div class="ev">
-      <span class="ed" style="color:#1d4ed8">${fmtDate(e.date)}</span>
-      <span class="et earnings">Earnings</span>
-      <span class="et holding" style="font-size:9px">${fundBadge}</span>
-      <div><span class="el">${e.ticker}</span>
-      ${e.epsEst!=null?`<span class="el-sub">EPS est: $${f(e.epsEst,2)}</span>`:''}
-      </div>
-    </div>`;
-  }).join(''):'<div style="color:var(--muted);font-size:13px;padding:16px 0">No earnings in the next 90 days for your holdings, or still loading.</div>';
-
-  document.getElementById('cal-earnings').innerHTML=earn.length||filter==='all'||filter==='earnings'?
-    `<div class="cal-section"><div class="cal-section-title">Earnings — Next 90 Days (${earn.length})</div>${earnHtml}</div>`:'<div style="color:var(--muted);font-size:12px;padding:8px">Select "All Events" or "Earnings" to see.</div>';
-
-  // Economic / Fed section
-  let econ=ECON_EVENTS;
-  if(filter==='earnings')econ=[];
-  if(filter==='economic')econ=econ.filter(e=>e.tp==='economic');
-  if(filter==='fed')econ=econ.filter(e=>e.tp==='fed');
-
-  const econHtml=econ.map(e=>`
-    <div class="ev">
-      <span class="ed" style="color:${e.tp==='fed'?'#b91c1c':'#92400e'}">${fmtDate(e.d)}</span>
-      <span class="et ${e.tp}">${e.tp==='fed'?'Fed':'Economic'}</span>
-      <div><span class="el">${e.l}</span><span class="el-sub">${e.imp} impact</span></div>
-    </div>`).join('');
-
-  document.getElementById('cal-economic').innerHTML=filter==='earnings'?
-    '<div style="color:var(--muted);font-size:12px;padding:8px">Select "All Events" or "Economic"/"Fed" to see.</div>':
-    `<div class="cal-section"><div class="cal-section-title">Economic &amp; Fed Events</div>${econHtml}</div>`;
+  const tks=new Set(allTk(S.calF));
+  let earn=S.earnings.filter(e=>tks.has(e.ticker));
+  if(S.calFilter==='economic'||S.calFilter==='fed')earn=[];
+  document.getElementById('cal-earn').innerHTML=earn.length?`<div class="section-title">Earnings — Next 90 Days (${earn.length})</div>`+earn.map(e=>{
+    const inE=S.endEq.find(x=>x.ticker===e.ticker),inC=S.ceeEq.find(x=>x.ticker===e.ticker);
+    return`<div class="ev"><span class="ed" style="color:#1d4ed8">${fmtD(e.date)}</span><span class="et earnings">Earnings</span><span class="et holding" style="font-size:9px">${inE&&inC?'Both':inE?'Endowment':'CEE Fund'}</span><div><span class="el">${e.ticker}</span>${e.epsEst!=null?`<span class="el-sub">EPS est: $${f(e.epsEst,2)}</span>`:''}</div></div>`;
+  }).join(''):'<div style="color:var(--muted);font-size:13px;padding:12px 0">No upcoming earnings found for your holdings.</div>';
+  let econ=ECON;
+  if(S.calFilter==='earnings')econ=[];
+  if(S.calFilter==='economic')econ=econ.filter(e=>e.tp==='economic');
+  if(S.calFilter==='fed')econ=econ.filter(e=>e.tp==='fed');
+  document.getElementById('cal-econ').innerHTML=econ.length?`<div class="section-title">Economic & Fed Events</div>`+econ.map(e=>`<div class="ev"><span class="ed" style="color:${e.tp==='fed'?'#b91c1c':'#92400e'}">${fmtD(e.d)}</span><span class="et ${e.tp}">${e.tp==='fed'?'Fed':'Economic'}</span><div><span class="el">${e.l}</span><span class="el-sub">${e.imp} impact</span></div></div>`).join(''):'';
 }
-
-function renderMiniCalendar(){
-  // Show next 6 events (mix of earnings + econ) on overview tab
-  const earn=S.earnings.slice(0,4).map(e=>({d:e.date,tp:'earnings',l:`${e.ticker} Earnings`}));
-  const econ=ECON_EVENTS.slice(0,4).map(e=>({d:e.d,tp:e.tp,l:e.l}));
-  const combined=[...earn,...econ].sort((a,b)=>a.d.localeCompare(b.d)).slice(0,7);
-  document.getElementById('ev-list').innerHTML=combined.map(e=>`
-    <div class="ev">
-      <span class="ed" style="color:${e.tp==='fed'?'#b91c1c':e.tp==='earnings'?'#1d4ed8':'#92400e'}">${fmtDate(e.d)}</span>
-      <span class="et ${e.tp}">${e.tp.charAt(0).toUpperCase()+e.tp.slice(1)}</span>
-      <span class="el">${e.l}</span>
-    </div>`).join('');
-  document.getElementById('cal-mini-status').textContent=earn.length?'Live':'Static';
+function renderMiniCal(){
+  const earn=S.earnings.slice(0,3).map(e=>({d:e.date,tp:'earnings',l:`${e.ticker} Earnings`}));
+  const econ=ECON.slice(0,4).map(e=>({d:e.d,tp:e.tp,l:e.l}));
+  const combined=[...earn,...econ].sort((a,b)=>a.d.localeCompare(b.d)).slice(0,6);
+  document.getElementById('ev-mini').innerHTML=combined.map(e=>`<div class="ev"><span class="ed" style="color:${e.tp==='fed'?'#b91c1c':e.tp==='earnings'?'#1d4ed8':'#92400e'}">${fmtD(e.d)}</span><span class="et ${e.tp}">${e.tp.charAt(0).toUpperCase()+e.tp.slice(1)}</span><span class="el">${e.l}</span></div>`).join('');
+  document.getElementById('cal-mini-st').textContent=earn.length?'Live':'';
 }
+function setCalFund(f,btn){document.querySelectorAll('#cal-ftog .fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.calF=f;renderCalendar();}
+function setCalF(f,btn){document.querySelectorAll('#cal-filter-pills .rpill').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.calFilter=f;renderCalendar();}
 
-function setCalFund(fund,btn){
-  document.querySelectorAll('#cal-fund-tog .fbtn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');S.calFund=fund;renderCalendar();
-}
-function setCalFilter(f,btn){
-  document.querySelectorAll('[onclick^="setCalFilter"] ').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');S.calFilter=f;renderCalendar();
-}
-
-// ── PERF DATA ──────────────────────────────────────────────────────────────
+// ── PERF CHART DATA ───────────────────────────────────────────────────────
 let PF60=null;
 function genPF(){
-  const lb=[],ev=[],cv=[];let e=290000,c=115000;
-  const now=new Date(2026,3,12);
+  const lb=[],ev=[],cv=[];let e=290000,c=115000;const now=new Date(2026,3,12);
   for(let i=60;i>=0;i--){
     const d=new Date(now);d.setMonth(d.getMonth()-i);
     e*=(1+.022/12+(Math.random()-.47)*.055);c*=(1+.026/12+(Math.random()-.47)*.065);
@@ -680,52 +688,16 @@ function genPF(){
 }
 function getPF(r){if(!PF60)PF60=genPF();const n=r==='1Y'?12:r==='3Y'?36:60;return{lb:PF60.lb.slice(-n),ev:PF60.ev.slice(-n),cv:PF60.cv.slice(-n)};}
 
-// ── EXCEL PARSE ────────────────────────────────────────────────────────────
-function parseXL(data){
-  const wb=XLSX.read(data,{type:'array'});
-  function pH(sn){
-    const ws=wb.Sheets[sn];if(!ws)return[];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-    let hr=-1;for(let i=0;i<rows.length;i++){if(String(rows[i][1]).trim().toLowerCase()==='ticker'){hr=i;break;}}
-    if(hr<0)return[];
-    const h=rows[hr].map(x=>String(x).trim().toLowerCase());
-    const c={tk:h.indexOf('ticker'),co:h.indexOf('company'),sh:h.indexOf('shares'),av:h.findIndex(x=>x.includes('avg')),mv:h.indexOf('market value'),px:h.indexOf('market price'),dy:h.indexOf('day %'),bt:h.indexOf('beta'),sc:h.indexOf('sector'),wt:h.indexOf('ws target'),ct:h.indexOf('club target'),cb:h.findIndex(x=>x.includes('cost'))};
-    const out=[];
-    for(let i=hr+1;i<rows.length;i++){
-      const r=rows[i];const tk=String(r[c.tk]||'').trim();
-      if(!tk||tk.length>8||tk==='TOTAL')continue;
-      const mv=parseFloat(r[c.mv])||0;if(mv<=0)continue;
-      out.push({ticker:tk,company:String(r[c.co]||tk),shares:parseFloat(r[c.sh])||0,avgPrice:parseFloat(r[c.av])||0,marketPrice:parseFloat(r[c.px])||0,marketValue:mv,dayPct:parseFloat(r[c.dy])||0,beta:parseFloat(r[c.bt])||1,sector:String(r[c.sc]||'Other'),costBasis:parseFloat(r[c.cb])||0,wsTarget:parseFloat(r[c.wt])||WS[tk]||null,clubTarget:parseFloat(r[c.ct])||null});
-    }
-    return out;
-  }
-  function pTX(){
-    const ws=wb.Sheets['\uD83D\uDD12 Trade Log'];if(!ws)return[];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-    let hr=-1;for(let i=0;i<rows.length;i++){const r=rows[i].map(x=>String(x).trim().toLowerCase());if(r.includes('date')&&r.includes('type')){hr=i;break;}}
-    if(hr<0)return[];
-    const h=rows[hr].map(x=>String(x).trim().toLowerCase());
-    const c={dt:h.indexOf('date'),fn:h.indexOf('fund'),co:h.findIndex(x=>x.includes('company')),tp:h.indexOf('type'),tk:h.indexOf('ticker'),sh:h.indexOf('shares'),px:h.findIndex(x=>x.includes('price per')),tt:h.findIndex(x=>x.includes('total')),ap:h.findIndex(x=>x.includes('approved')),nt:h.findIndex(x=>x.includes('notes'))};
-    const out=[];
-    for(let i=hr+1;i<rows.length;i++){
-      const r=rows[i];const tp=String(r[c.tp]||'').trim().toUpperCase();
-      if(!['BUY','SELL','DIVIDEND','SPLIT','TRANSFER'].includes(tp))continue;
-      out.push({date:String(r[c.dt]||''),fund:String(r[c.fn]||''),company:String(r[c.co]||''),type:tp,ticker:String(r[c.tk]||''),shares:parseFloat(r[c.sh])||null,price:parseFloat(r[c.px])||null,total:parseFloat(r[c.tt])||0,approved:String(r[c.ap]||''),notes:String(r[c.nt]||'')});
-    }
-    return out;
-  }
-  const eq=pH('Endowment_Holdings'),cq=pH('CEE_Holdings'),tx=pTX();
-  const et=eq.reduce((s,e)=>s+e.marketValue,0)||508172,ct=cq.reduce((s,e)=>s+e.marketValue,0)||208811;
-  return{eq,cq,tx,et,ct,eb:eq.length?eq.reduce((s,e)=>s+e.beta*e.marketValue,0)/et:.9918,cb:cq.length?cq.reduce((s,e)=>s+e.beta*e.marketValue,0)/ct:1.0703};
-}
-
-// ── CHART RENDERS ──────────────────────────────────────────────────────────
+// ── CHART RENDERS ─────────────────────────────────────────────────────────
 function rKPIs(){
+  document.getElementById('h-end').textContent=fk(S.endTotal);
+  document.getElementById('h-cee').textContent=fk(S.ceeTotal);
+  document.getElementById('h-aum').textContent=fk(S.endTotal+S.ceeTotal);
   document.getElementById('kpi-strip').innerHTML=[
     {l:'Endowment AUM',v:fk(S.endTotal),s:'+12.4% YTD',a:'#1a56db'},
     {l:'CEE Fund AUM',v:fk(S.ceeTotal),s:'+18.7% YTD',a:'#0f9d58'},
     {l:'Combined AUM',v:fk(S.endTotal+S.ceeTotal),s:`${S.endEq.length+S.ceeEq.length} positions`,a:'#e8a020'},
-    {l:'Endowment Beta',v:f(S.endBeta,4),s:'CEE \u03b2='+f(S.ceeBeta,4),a:'#7c3aed'},
+    {l:'Portfolio Beta',v:f(S.endBeta,4),s:'CEE β='+f(S.ceeBeta,4),a:'#7c3aed'},
   ].map(k=>`<div class="kpi-card" style="--accent:${k.a}"><div class="kl">${k.l}</div><div class="kv">${k.v}</div><div class="ks">${k.s}</div></div>`).join('');
 }
 function rPerf(cid,r){
@@ -735,25 +707,24 @@ function rPerf(cid,r){
     {label:'Endowment',data:ev,borderColor:'#1a56db',backgroundColor:'rgba(26,86,219,.07)',borderWidth:2,pointRadius:0,fill:true,tension:.4},
     {label:'CEE Fund',data:cv,borderColor:'#0f9d58',backgroundColor:'rgba(15,157,88,.06)',borderWidth:2,pointRadius:0,fill:true,tension:.4}
   ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-    plugins:{legend:{display:true,position:'top',labels:{font:{family:'DM Sans',size:11},boxWidth:10,padding:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fd(c.raw)}`},bodyFont:{family:'DM Sans'}}},
+    plugins:{legend:{display:true,position:'top',labels:{font:{family:'DM Sans',size:11},boxWidth:10,padding:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fd(c.raw)}`}}},
     scales:{x:{grid:{display:false},ticks:{font:{family:'DM Sans',size:10},color:'#9ca3af',maxTicksLimit:8}},y:{grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:fk,font:{family:'DM Sans',size:10},color:'#9ca3af'}}}}});
 }
-function setSF(fund,btn){document.querySelectorAll('#sec-ftog .fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rSec(fund);}
+function setSF(f,btn){document.querySelectorAll('#sec-ftog .fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rSec(f);}
 function rSec(fund){
   dc('secC');const eqs=fund==='end'?S.endEq:S.ceeEq,tot=fund==='end'?S.endTotal:S.ceeTotal;
   const sm={};eqs.forEach(e=>{sm[e.sector]=(sm[e.sector]||0)+e.marketValue;});
   const lb=Object.keys(SP500),fv=lb.map(s=>(sm[s]||0)/tot*100),sv=lb.map(s=>SP500[s]);
-  const ctx=document.getElementById('secC').getContext('2d');
-  S.charts['secC']=new Chart(ctx,{type:'bar',data:{labels:lb.map(l=>l.split(' ').slice(0,2).join(' ')),
-    datasets:[{label:'Fund',data:fv,backgroundColor:'rgba(26,86,219,.75)',borderRadius:3},{label:'S&P 500',data:sv,backgroundColor:'rgba(156,163,175,.5)',borderRadius:3}]},
+  S.charts['secC']=new Chart(document.getElementById('secC').getContext('2d'),{type:'bar',
+    data:{labels:lb.map(l=>l.split(' ').slice(0,2).join(' ')),datasets:[{label:'Fund',data:fv,backgroundColor:'rgba(26,86,219,.75)',borderRadius:3},{label:'S&P 500',data:sv,backgroundColor:'rgba(156,163,175,.5)',borderRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:{family:'DM Sans',size:11},boxWidth:10}}},
       scales:{x:{grid:{display:false},ticks:{font:{family:'DM Sans',size:9},color:'#9ca3af'}},y:{ticks:{callback:v=>v+'%',font:{family:'DM Sans',size:10},color:'#9ca3af'},grid:{color:'rgba(0,0,0,.04)'}}}}});
 }
-function setTF(fund,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rTop(fund);}
+function setTF(f,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');rTop(f);}
 function rTop(fund){
   dc('topC');const eqs=[...(fund==='end'?S.endEq:S.ceeEq)].sort((a,b)=>b.marketValue-a.marketValue).slice(0,10);
-  const ctx=document.getElementById('topC').getContext('2d');
-  S.charts['topC']=new Chart(ctx,{type:'bar',data:{labels:eqs.map(e=>e.ticker),datasets:[{data:eqs.map(e=>e.marketValue),backgroundColor:eqs.map((_,i)=>`hsl(${220+i*15},68%,${55+i*2}%)`),borderRadius:4}]},
+  S.charts['topC']=new Chart(document.getElementById('topC').getContext('2d'),{type:'bar',
+    data:{labels:eqs.map(e=>e.ticker),datasets:[{data:eqs.map(e=>e.marketValue),backgroundColor:eqs.map((_,i)=>`hsl(${220+i*15},68%,${55+i*2}%)`),borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fd(c.raw)}}},
       scales:{x:{ticks:{callback:fk,font:{family:'DM Sans',size:10},color:'#9ca3af'},grid:{color:'rgba(0,0,0,.04)'}},y:{grid:{display:false},ticks:{font:{family:'DM Sans',size:11,weight:'600'},color:'#1a56db'}}}}});
 }
@@ -767,14 +738,15 @@ function rHoldings(){
   let html='';
   Object.entries(bySec).sort((a,b)=>b[1].reduce((s,e)=>s+e.marketValue,0)-a[1].reduce((s,e)=>s+e.marketValue,0)).forEach(([sec,items])=>{
     const sv=items.reduce((s,e)=>s+e.marketValue,0);
-    html+=`<tr class="sg-row"><td colspan="12">\u25cf ${sec} \u2014 ${fd(sv)} (${f(sv/tot*100,1)}%)</td></tr>`;
+    html+=`<tr class="sg-row"><td colspan="12">● ${sec} — ${fd(sv)} (${f(sv/tot*100,1)}%)</td></tr>`;
     items.forEach(e=>{const gl=e.marketValue-(e.costBasis||e.marketValue),glp=e.costBasis?pct(e.marketValue,e.costBasis):0,wp=e.marketValue/tot*100;
-      html+=`<tr><td class="tl tkr">${e.ticker}</td><td class="tl comp" title="${e.company}">${e.company}</td><td>${f(e.shares,3)}</td><td>${e.avgPrice?'$'+f(e.avgPrice,2):'—'}</td><td style="font-weight:600">$${f(e.marketPrice,2)}</td><td style="font-weight:600">${fd(e.marketValue)}</td><td><span class="wbb"><span class="wbf" style="width:${Math.min(wp*5,100)}%"></span></span>${f(wp,1)}%</td><td class="${cp(gl)}">${gl>=0?'+':''}${fd(gl)}</td><td class="${cp(glp)}">${fp(glp)}</td><td class="${cp(e.dayPct)}">${fp(e.dayPct)}</td><td style="color:${e.beta>1.5?'var(--red)':e.beta>1?'var(--gold)':'var(--muted)'}">${f(e.beta,4)}</td><td><span class="sbadge" style="font-size:9px">${e.sector.split(' ')[0]}</span></td></tr>`;
+      const lp=S.livePrices[e.ticker];const priceTxt=lp?`<span style="color:var(--green);font-size:9px">●</span> $${f(e.marketPrice,2)}`:`$${f(e.marketPrice,2)}`;
+      html+=`<tr><td class="tl tkr">${e.ticker}</td><td class="tl comp" title="${e.company}">${e.company}</td><td>${f(e.shares,3)}</td><td>${e.avgPrice?'$'+f(e.avgPrice,2):'—'}</td><td style="font-weight:600">${priceTxt}</td><td style="font-weight:600">${fd(e.marketValue)}</td><td><span class="wbb"><span class="wbf" style="width:${Math.min(wp*5,100)}%"></span></span>${f(wp,1)}%</td><td class="${cp(gl)}">${gl>=0?'+':''}${fd(gl)}</td><td class="${cp(glp)}">${fp(glp)}</td><td class="${cp(e.dayPct)}">${fp(e.dayPct)}</td><td style="color:${e.beta>1.5?'var(--red)':e.beta>1?'var(--gold)':'var(--muted)'}">${f(e.beta,4)}</td><td><span class="sbadge" style="font-size:9px">${e.sector.split(' ')[0]}</span></td></tr>`;
     });
   });
   document.getElementById('h-body').innerHTML=html;
 }
-function setHF(fund,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.hF=fund;rHoldings();}
+function setHF(f,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.hF=f;rHoldings();}
 function rRisk(){
   const isCEE=S.rF==='cee',beta=isCEE?S.ceeBeta:S.endBeta;
   document.getElementById('risk-cards').innerHTML=[
@@ -786,31 +758,30 @@ function rRisk(){
     {l:'Max Drawdown',v:isCEE?'-18.3%':'-15.1%',d:'Largest peak-to-trough decline',c:'#ea580c'},
   ].map(m=>`<div class="rc"><div class="rl">${m.l}</div><div class="rv" style="color:${m.c}">${m.v}</div><div class="rd">${m.d}</div></div>`).join('');
   const bh=[.91,.93,.95,.97,.96,.98,.97,1.00,.99,.98,.99,.98,.99,1.00,.99,.99].map(v=>isCEE?+(v+.07).toFixed(2):v);
-  const lb=['Jan 25','Feb 25','Mar 25','Apr 25','May 25','Jun 25','Jul 25','Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26'];
-  dc('betaC');const ctx=document.getElementById('betaC').getContext('2d');
-  S.charts['betaC']=new Chart(ctx,{type:'line',data:{labels:lb,datasets:[{label:'Beta',data:bh,borderColor:'#1a56db',backgroundColor:'rgba(26,86,219,.08)',borderWidth:2,pointRadius:0,fill:true,tension:.4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-      scales:{x:{grid:{display:false},ticks:{font:{family:'DM Sans',size:9},color:'#9ca3af',maxTicksLimit:8}},y:{min:.85,max:1.3,grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{family:'DM Sans',size:10},color:'#9ca3af'}}}}});
-  const eqs=isCEE?S.ceeEq:S.endEq;const topB=[...eqs].sort((a,b)=>b.beta-a.beta).slice(0,8);
-  document.getElementById('beta-bars').innerHTML=topB.map(e=>`<div class="ar"><span style="min-width:48px;font-weight:700;font-size:12px;color:var(--blue)">${e.ticker}</span><div class="abw"><div class="ab" style="width:${Math.min(e.beta/2.5*100,100)}%;background:${e.beta>2?'var(--red)':e.beta>1.5?'var(--gold)':'var(--blue)'}"></div></div><span class="av" style="color:${e.beta>2?'var(--red)':e.beta>1.5?'var(--gold)':'var(--ink)'}">${f(e.beta,4)}</span></div>`).join('');
+  dc('betaC');S.charts['betaC']=new Chart(document.getElementById('betaC').getContext('2d'),{type:'line',
+    data:{labels:['Jan 25','Feb 25','Mar 25','Apr 25','May 25','Jun 25','Jul 25','Aug 25','Sep 25','Oct 25','Nov 25','Dec 25','Jan 26','Feb 26','Mar 26','Apr 26'],datasets:[{data:bh,borderColor:'#1a56db',backgroundColor:'rgba(26,86,219,.08)',borderWidth:2,pointRadius:0,fill:true,tension:.4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{family:'DM Sans',size:9},color:'#9ca3af',maxTicksLimit:8}},y:{min:.85,max:1.3,grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{family:'DM Sans',size:10},color:'#9ca3af'}}}}});
+  const eqs=isCEE?S.ceeEq:S.endEq;
+  document.getElementById('beta-bars').innerHTML=[...eqs].sort((a,b)=>b.beta-a.beta).slice(0,8).map(e=>`<div class="ar"><span style="min-width:48px;font-weight:700;font-size:12px;color:var(--blue)">${e.ticker}</span><div class="abw"><div class="ab" style="width:${Math.min(e.beta/2.5*100,100)}%;background:${e.beta>2?'var(--red)':e.beta>1.5?'var(--gold)':'var(--blue)'}"></div></div><span class="av" style="color:${e.beta>2?'var(--red)':e.beta>1.5?'var(--gold)':'var(--ink)'}">${f(e.beta,4)}</span></div>`).join('');
 }
-function setRF(fund,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.rF=fund;rRisk();}
+function setRF(f,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.rF=f;rRisk();}
 function rAttr(){
   const isCEE=S.aF==='cee',eqs=isCEE?S.ceeEq:S.endEq,tot=isCEE?S.ceeTotal:S.endTotal;
   const sm={};eqs.forEach(e=>{sm[e.sector]=(sm[e.sector]||0)+e.marketValue;});
   const lb=Object.keys(SP500),fv=lb.map(s=>(sm[s]||0)/tot*100),sv=lb.map(s=>SP500[s]),dv=lb.map((s,i)=>+(fv[i]-sv[i]).toFixed(2));
-  dc('attrC');const ctx=document.getElementById('attrC').getContext('2d');
-  S.charts['attrC']=new Chart(ctx,{type:'bar',data:{labels:lb.map(s=>s.split(' ').slice(0,2).join(' ')),datasets:[{label:'Active Weight',data:dv,backgroundColor:dv.map(d=>d>=0?'rgba(15,157,88,.75)':'rgba(217,48,37,.7)'),borderRadius:4}]},
+  dc('attrC');S.charts['attrC']=new Chart(document.getElementById('attrC').getContext('2d'),{type:'bar',
+    data:{labels:lb.map(s=>s.split(' ').slice(0,2).join(' ')),datasets:[{data:dv,backgroundColor:dv.map(d=>d>=0?'rgba(15,157,88,.75)':'rgba(217,48,37,.7)'),borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>(c.raw>=0?'+':'')+f(c.raw,2)+'%'}}},
       scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:v=>(v>=0?'+':'')+v+'%',font:{family:'DM Sans',size:10},color:'#9ca3af'}},y:{grid:{display:false},ticks:{font:{family:'DM Sans',size:11},color:'var(--ink)'}}}}});
   const sorted=lb.map((s,i)=>({s,fp:fv[i],sp:sv[i],d:dv[i]})).sort((a,b)=>b.d-a.d);
   document.getElementById('attr-detail').innerHTML=sorted.map(r=>`<div class="ar"><span class="al">${r.s}</span><div class="abw"><div class="ab ${r.d>=0?'over':'under'}" style="width:${Math.min(Math.abs(r.d)*6,100)}%"></div></div><span class="av ${r.d>=0?'pos':'neg'}">${r.d>=0?'+':''}${f(r.d,1)}%</span><span class="asp">${f(r.sp,1)}% S&P</span></div>`).join('');
 }
-function setAF(fund,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.aF=fund;rAttr();}
-function txRow(t){const tc={BUY:'var(--green)',SELL:'var(--red)',DIVIDEND:'var(--blue)',SPLIT:'var(--muted)',TRANSFER:'var(--muted)'}[t.type]||'var(--muted)';return`<tr><td class="tl mc" style="font-size:11px">${t.date}</td><td class="tl">${t.fund}</td><td class="tl tkr">${t.ticker}</td><td class="tl comp" title="${t.company}">${t.company}</td><td class="tl"><span class="badge" style="background:${tc}18;color:${tc}">${t.type}</span></td><td>${t.shares!=null?f(t.shares,3):'—'}</td><td>${t.price!=null?'$'+f(t.price,2):'—'}</td><td class="${t.type==='SELL'?'neg':'pos'}" style="font-weight:600">${t.type==='SELL'?'-':'+'}${fd(t.total)}</td><td class="tl mc" style="font-size:11px">${t.approved}</td><td class="tl mc" style="font-size:11px;max-width:175px">${t.notes}</td></tr>`;}
+function setAF(f,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.aF=f;rAttr();}
+function txRow(t){const tc={BUY:'var(--green)',SELL:'var(--red)',DIVIDEND:'var(--blue)',SPLIT:'var(--muted)',TRANSFER:'var(--muted)'}[t.type]||'var(--muted)';return`<tr><td class="tl mc">${t.date}</td><td class="tl">${t.fund}</td><td class="tl tkr">${t.ticker}</td><td class="tl comp" title="${t.company}">${t.company}</td><td class="tl"><span class="badge" style="background:${tc}18;color:${tc}">${t.type}</span></td><td>${t.shares!=null?f(t.shares,3):'—'}</td><td>${t.price!=null?'$'+f(t.price,2):'—'}</td><td class="${t.type==='SELL'?'neg':'pos'}" style="font-weight:600">${t.type==='SELL'?'-':'+'}${fd(t.total)}</td><td class="tl mc">${t.approved}</td><td class="tl mc" style="max-width:170px">${t.notes}</td></tr>`;}
 function rTrades(){
   const html=S.trades.map(txRow).join('');
-  document.getElementById('tx-body').innerHTML=html;document.getElementById('tx-perf').innerHTML=html;
+  document.getElementById('tx-body').innerHTML=html||'<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">No trades found in Google Sheets. Add trades to the Trade_Log tab.</td></tr>';
+  document.getElementById('tx-perf').innerHTML=html;
   const buys=S.trades.filter(t=>t.type==='BUY').reduce((s,t)=>s+t.total,0);
   const sells=S.trades.filter(t=>t.type==='SELL').reduce((s,t)=>s+t.total,0);
   const divs=S.trades.filter(t=>t.type==='DIVIDEND').reduce((s,t)=>s+t.total,0);
@@ -821,58 +792,164 @@ function rTargets(){
   const all=[...S.endEq,...S.ceeEq].reduce((a,e)=>{if(!a.find(x=>x.ticker===e.ticker))a.push(e);return a;},[]);
   const eqs=all.filter(e=>fund==='end'?endT.has(e.ticker):fund==='cee'?ceeT.has(e.ticker):true);
   const rows=eqs.map(e=>{const wt=e.wsTarget||WS[e.ticker]||null,ct=e.clubTarget||null,wu=wt?pct(wt,e.marketPrice):null,cu=ct?pct(ct,e.marketPrice):null,st=ct==null?'u':e.marketPrice>=ct*.98?'o':e.marketPrice>=ct*.85?'a':'b';return{...e,wt,ct,wu,cu,st};});
-  const sb=document.getElementById('pt-sort').value;
-  rows.sort((a,b)=>sb==='ws'?(b.wu??-999)-(a.wu??-999):sb==='tk'?a.ticker.localeCompare(b.ticker):b.marketPrice-a.marketPrice);
+  const sb=document.getElementById('pt-sort').value;rows.sort((a,b)=>sb==='ws'?(b.wu??-999)-(a.wu??-999):sb==='tk'?a.ticker.localeCompare(b.ticker):b.marketPrice-a.marketPrice);
   const sm={t:rows.length,u:rows.filter(r=>r.st==='u').length,b:rows.filter(r=>r.st==='b').length,a:rows.filter(r=>r.st==='a').length,o:rows.filter(r=>r.st==='o').length};
-  document.getElementById('pt-summary').innerHTML=[{l:'Total',v:sm.t,a:'#1a56db'},{l:'No Target',v:sm.u,a:'#9ca3af'},{l:'Below Target',v:sm.b,a:'#0f9d58'},{l:'Approaching',v:sm.a,a:'#e8a020'},{l:'At/Above',v:sm.o,a:'#d93025'}].map(k=>`<div class="kpi-card" style="--accent:${k.a}"><div class="kl">${k.l}</div><div class="kv" style="font-size:22px;color:${k.a}">${k.v}</div></div>`).join('');
+  document.getElementById('pt-sum').innerHTML=[{l:'Total',v:sm.t,a:'#1a56db'},{l:'No Target',v:sm.u,a:'#9ca3af'},{l:'Below Target',v:sm.b,a:'#0f9d58'},{l:'Approaching',v:sm.a,a:'#e8a020'},{l:'At/Above',v:sm.o,a:'#d93025'}].map(k=>`<div class="kpi-card" style="--accent:${k.a}"><div class="kl">${k.l}</div><div class="kv" style="font-size:22px;color:${k.a}">${k.v}</div></div>`).join('');
   const bm={u:'bu',b:'bb',a:'ba',o:'bo'},lm={u:'No Target',b:'Below Target',a:'Approaching',o:'At / Above'};
-  document.getElementById('pt-body').innerHTML=rows.map(r=>`<tr><td class="tl tkr">${r.ticker}</td><td class="tl comp" title="${r.company}">${r.company}</td><td style="font-weight:600">$${f(r.marketPrice,2)}</td><td class="mc">${r.wt?'$'+f(r.wt,2):'—'}</td><td class="${r.wu!=null?cp(r.wu):''}">${r.wu!=null?fp(r.wu):'—'}</td><td style="${r.ct?'font-weight:600':''}">${r.ct?'$'+f(r.ct,2):'<span style="color:var(--muted);font-size:11px">not set</span>'}</td><td class="${r.cu!=null?cp(r.cu):''}">${r.cu!=null?fp(r.cu):'—'}</td><td><span class="badge ${bm[r.st]}">${lm[r.st]}</span></td><td class="tl mc" style="font-size:11px;max-width:145px">${r.notes||''}</td></tr>`).join('');
+  document.getElementById('pt-body').innerHTML=rows.map(r=>`<tr><td class="tl tkr">${r.ticker}</td><td class="tl comp" title="${r.company}">${r.company}</td><td style="font-weight:600">$${f(r.marketPrice,2)}</td><td class="mc">${r.wt?'$'+f(r.wt,2):'—'}</td><td class="${r.wu!=null?cp(r.wu):''}">${r.wu!=null?fp(r.wu):'—'}</td><td style="${r.ct?'font-weight:600':''}">${r.ct?'$'+f(r.ct,2):'<span style="color:var(--muted);font-size:11px">not set</span>'}</td><td class="${r.cu!=null?cp(r.cu):''}">${r.cu!=null?fp(r.cu):'—'}</td><td><span class="badge ${bm[r.st]}">${lm[r.st]}</span></td><td class="tl mc" style="font-size:11px">${r.notes||''}</td></tr>`).join('');
 }
-function setPTF(fund,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.ptF=fund;rTargets();}
+function setPTF(f,btn){btn.closest('.ftog').querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.ptF=f;rTargets();}
 
+// ── WHAT-IF ───────────────────────────────────────────────────────────────
+function setWIFund(f,btn){document.querySelectorAll('[id^="wi-fund-"]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.wiF=f;}
+function setWIAct(a,btn){document.querySelectorAll('[id^="wi-act-"]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');S.wiA=a;}
+function runWhatIf(){
+  const ticker=document.getElementById('wi-ticker').value.trim().toUpperCase();
+  const shares=parseFloat(document.getElementById('wi-shares').value)||0;
+  const price=parseFloat(document.getElementById('wi-price').value)||0;
+  if(!ticker||!shares||!price){document.getElementById('wi-result').innerHTML='<div class="wi-result neutral">Please fill in all fields.</div>';return;}
+  const eqs=S.wiF==='end'?S.endEq:S.ceeEq;
+  const tot=S.wiF==='end'?S.endTotal:S.ceeTotal;
+  const beta=S.wiF==='end'?S.endBeta:S.ceeBeta;
+  const tradeVal=shares*price;
+  const existing=eqs.find(e=>e.ticker===ticker);
+  const tkBeta=existing?existing.beta:(WS[ticker]?1.2:1.0);
+  const tkSector=existing?existing.sector:'Unknown';
+  let newTot,newBeta,impact,cls;
+  if(S.wiA==='buy'){
+    newTot=tot+tradeVal;
+    newBeta=(beta*tot+tkBeta*tradeVal)/newTot;
+    const newWt=tradeVal/newTot*100;
+    impact=`Buying ${shares} shares of <strong>${ticker}</strong> at $${f(price,2)} = <strong>${fd(tradeVal)}</strong><br>
+    Portfolio value: ${fk(tot)} → <strong>${fk(newTot)}</strong> (+${fk(tradeVal)})<br>
+    Portfolio beta: ${f(beta,4)} → <strong>${f(newBeta,4)}</strong> ${newBeta>beta?'▲ increases risk':'▼ reduces risk'}<br>
+    ${ticker} would be <strong>${f(newWt,1)}%</strong> of the ${S.wiF==='end'?'Endowment':'CEE Fund'}<br>
+    Sector: <strong>${tkSector}</strong>`;
+    cls=newBeta>beta+0.05?'negative':newBeta<beta-0.05?'positive':'neutral';
+  }else{
+    if(!existing){document.getElementById('wi-result').innerHTML='<div class="wi-result negative">You do not currently hold '+ticker+' in this fund.</div>';return;}
+    const sellShares=Math.min(shares,existing.shares);
+    const sellVal=sellShares*price;
+    newTot=tot-sellVal;
+    newBeta=newTot>0?(beta*tot-tkBeta*sellVal)/newTot:0;
+    impact=`Selling ${sellShares} shares of <strong>${ticker}</strong> at $${f(price,2)} = <strong>${fd(sellVal)}</strong><br>
+    Portfolio value: ${fk(tot)} → <strong>${fk(newTot)}</strong> (-${fk(sellVal)})<br>
+    Portfolio beta: ${f(beta,4)} → <strong>${f(newBeta,4)}</strong> ${newBeta<beta?'▼ reduces risk':'▲ increases risk'}<br>
+    Remaining ${ticker}: <strong>${f(existing.shares-sellShares,3)} shares</strong>`;
+    cls='neutral';
+  }
+  document.getElementById('wi-result').innerHTML=`<div class="wi-result ${cls}">${impact}</div>`;
+  // Before/after chart
+  dc('wi-chart');
+  S.charts['wi-chart']=new Chart(document.getElementById('wi-chart').getContext('2d'),{type:'bar',
+    data:{labels:['Portfolio Value','Beta × 100K'],datasets:[
+      {label:'Before',data:[tot,beta*100000],backgroundColor:'rgba(156,163,175,.6)',borderRadius:4},
+      {label:'After', data:[newTot,newBeta*100000],backgroundColor:'rgba(26,86,219,.75)',borderRadius:4},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'top',labels:{font:{family:'DM Sans',size:11},boxWidth:10}}},
+      scales:{x:{grid:{display:false},ticks:{font:{family:'DM Sans',size:11}}},y:{ticks:{callback:fk,font:{family:'DM Sans',size:10},color:'#9ca3af'},grid:{color:'rgba(0,0,0,.04)'}}}}});
+}
+
+// ── AI ASSISTANT ──────────────────────────────────────────────────────────
+function buildPortfolioContext(){
+  const top5E=[...S.endEq].sort((a,b)=>b.marketValue-a.marketValue).slice(0,5).map(e=>`${e.ticker}($${fk(e.marketValue)})`).join(', ');
+  const top5C=[...S.ceeEq].sort((a,b)=>b.marketValue-a.marketValue).slice(0,5).map(e=>`${e.ticker}($${fk(e.marketValue)})`).join(', ');
+  const recentTrades=S.trades.slice(0,5).map(t=>`${t.type} ${t.ticker} ${t.date}`).join(', ');
+  return `You are an AI assistant for the Captains Educational Enrichment Fund (CEE Fund) at Christopher Newport University, an investment club.
+
+PORTFOLIO SUMMARY (as of latest data):
+- Endowment Fund: ${fk(S.endTotal)} AUM, ${S.endEq.length} positions, Beta ${f(S.endBeta,4)}
+- CEE Fund: ${fk(S.ceeTotal)} AUM, ${S.ceeEq.length} positions, Beta ${f(S.ceeBeta,4)}
+- Combined AUM: ${fk(S.endTotal+S.ceeTotal)}
+
+TOP 5 ENDOWMENT POSITIONS: ${top5E}
+TOP 5 CEE FUND POSITIONS: ${top5C}
+RECENT TRADES: ${recentTrades}
+
+SECTOR WEIGHTS vs S&P 500 (Endowment): IT ${f((S.endEq.filter(e=>e.sector==='Information Technology').reduce((s,e)=>s+e.marketValue,0)/S.endTotal)*100,1)}% vs 32.1% SP500
+
+Answer questions about the portfolio clearly and concisely. You are speaking to finance students and alumni. Be professional but approachable.`;
+}
+
+function addAIMsg(role,text){
+  const msgs=document.getElementById('ai-msgs');
+  const div=document.createElement('div');
+  div.className=`ai-msg ${role}`;div.innerHTML=text;
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+  return div;
+}
+
+async function sendAI(){
+  const input=document.getElementById('ai-input');
+  const question=input.value.trim();if(!question)return;
+  input.value='';
+  addAIMsg('user',question);
+  await askAI(question);
+}
+
+async function askAI(question){
+  if(CLAUDE_KEY==='YOUR_KEY_HERE'){
+    addAIMsg('assistant','⚠️ To enable the AI assistant, open this HTML file in a text editor and replace <code>YOUR_KEY_HERE</code> with your Claude API key on the CLAUDE_KEY line near the top of the script.');
+    return;
+  }
+  const btn=document.getElementById('ai-send-btn');btn.disabled=true;
+  const thinking=addAIMsg('thinking','<span class="spin">⟳</span> Thinking…');
+  S.aiHistory.push({role:'user',content:question});
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':CLAUDE_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,system:buildPortfolioContext(),messages:S.aiHistory})
+    });
+    const data=await res.json();
+    const reply=data.content?.[0]?.text||'Sorry, I could not generate a response.';
+    S.aiHistory.push({role:'assistant',content:reply});
+    thinking.className='ai-msg assistant';thinking.textContent=reply;
+  }catch(e){
+    thinking.className='ai-msg assistant';thinking.textContent='Sorry, there was an error connecting to the AI. Please check your API key.';
+  }
+  btn.disabled=false;
+  document.getElementById('ai-msgs').scrollTop=99999;
+}
+
+// ── RENDER ALL ────────────────────────────────────────────────────────────
 function rAll(){
-  document.getElementById('h-end').textContent=fk(S.endTotal);
-  document.getElementById('h-cee').textContent=fk(S.ceeTotal);
-  document.getElementById('h-aum').textContent=fk(S.endTotal+S.ceeTotal);
-  rKPIs();rPerf('perfC','1Y');rPerf('perfC2','1Y');rSec('end');rTop('end');
+  rKPIs();
+  rPerf('perfC','1Y');rPerf('perfC2','1Y');
+  rSec('end');rTop('end');
   rHoldings();rRisk();rAttr();rTrades();rTargets();
-  // Kick off live data
-  fetchAllNews();
-  loadCalendar();
+  fetchAllNews();loadCalendar();
+  document.getElementById('tsub').textContent=`Christopher Newport University  ·  Live data · Refreshed ${new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`;
 }
 
-// ── LOAD ───────────────────────────────────────────────────────────────────
-function loadXL(file){
-  document.getElementById('loading-overlay').classList.remove('hidden');
-  document.getElementById('lo-txt').textContent='Parsing portfolio data…';
-  const r=new FileReader();
-  r.onload=e=>{
-    try{
-      const p=parseXL(new Uint8Array(e.target.result));
-      if(p.eq.length)S.endEq=p.eq;if(p.cq.length)S.ceeEq=p.cq;if(p.tx.length)S.trades=p.tx;
-      S.endTotal=p.et;S.ceeTotal=p.ct;S.endBeta=p.eb;S.ceeBeta=p.cb;PF60=null;S.newsCache={};S.allNews=[];
-      document.getElementById('topbar-sub').textContent=`Christopher Newport University  \u00b7  Updated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
-      document.getElementById('upload-screen').style.display='none';
-      document.getElementById('dashboard').style.display='block';
-      document.getElementById('lo-txt').textContent='Loading live news & earnings…';
-      setTimeout(()=>{rAll();document.getElementById('loading-overlay').classList.add('hidden');},350);
-    }catch(err){
-      console.error(err);alert('Could not read the file. Please upload CEE_Fund_Portfolio.xlsx');
-      document.getElementById('loading-overlay').classList.add('hidden');
-    }
-  };
-  r.readAsArrayBuffer(file);
+async function refreshAll(){
+  document.getElementById('splash').classList.remove('out');
+  setSplash('Refreshing from Google Sheets…');
+  S.newsCache={};S.allNews=[];PF60=null;
+  await loadGoogleSheets();
+  await fetchLivePrices();
+  rAll();
+  document.getElementById('splash').classList.add('out');
 }
 
-document.getElementById('file-input').addEventListener('change',e=>{if(e.target.files[0])loadXL(e.target.files[0]);});
-document.getElementById('reload-input').addEventListener('change',e=>{if(e.target.files[0])loadXL(e.target.files[0]);});
-const dz=document.getElementById('drop-zone');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
-dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files[0])loadXL(e.dataTransfer.files[0]);});
+function setSplash(txt){document.getElementById('sp-txt').textContent=txt;}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+async function init(){
+  setSplash('Loading portfolio from Google Sheets…');
+  await loadGoogleSheets();
+  setSplash('Fetching live prices from Finnhub…');
+  await fetchLivePrices();
+  setSplash('Almost ready…');
+  rAll();
+  setTimeout(()=>document.getElementById('splash').classList.add('out'),400);
+}
+
+// TABS
 document.querySelectorAll('.tab-btn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');});});
 ['pr1','pr2'].forEach(pid=>{document.querySelectorAll(`#${pid} .rpill`).forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll(`#${pid} .rpill`).forEach(b=>b.classList.remove('active'));btn.classList.add('active');rPerf(pid==='pr1'?'perfC':'perfC2',btn.dataset.r);});});});
-window.addEventListener('load',()=>{ setTimeout(()=>loadEmbedded(), 200); });
+
+window.addEventListener('load', init);
 </script>
 </body>
 </html>
