@@ -406,7 +406,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--sand);color:var(--ink);mi
               <button class="ai-send" id="ai-send-btn" onclick="sendAI()">Send</button>
             </div>
             <p style="font-size:10px;color:var(--muted);margin-top:8px;text-align:center">
-              ⚠️ To enable the AI, open this HTML file in a text editor and set your Claude API key on the line: <code style="background:var(--smoke);padding:1px 5px;border-radius:3px">const CLAUDE_KEY = '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'</code>
+              ⚠️ To enable the AI, open this HTML file in a text editor and set your Claude API key on the line: <code style="background:var(--smoke);padding:1px 5px;border-radius:3px">const CLAUDE_KEY = 'YOUR_KEY_HERE'</code>
             </p>
           </div>
         </div>
@@ -418,7 +418,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--sand);color:var(--ink);mi
 
 <script>
 // ── CONFIG — paste your Claude API key in the line below ──────────────────
-const CLAUDE_KEY = 'YOUR_KEY_HERE';
+const CLAUDE_KEY = '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';
 const FINNHUB_KEY = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
 const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
@@ -475,36 +475,66 @@ function allTk(fund='both'){
 }
 
 // ── CSV PARSER ────────────────────────────────────────────────────────────
+function cleanNum(v){
+  if(v==null)return NaN;
+  // Remove $, commas, %, # signs and parse
+  return parseFloat(String(v).replace(/[$,%#]/g,'').replace(/,/g,'').trim());
+}
+
 function parseCSV(text){
-  const lines=text.trim().split('\n');
-  if(lines.length<2)return[];
-  const headers=lines[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
-  return lines.slice(1).map(line=>{
-    const vals=[];let cur='',inQ=false;
-    for(const ch of line){if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){vals.push(cur.trim());cur='';}else{cur+=ch;}}
-    vals.push(cur.trim());
-    const obj={};headers.forEach((h,i)=>obj[h]=(vals[i]||'').replace(/"/g,'').trim());
-    return obj;
-  });
+  // Split into lines handling 
+ and 
+
+  const lines=text.replace(/
+/g,'').split('
+');
+  // Find the header row - look for row containing 'ticker'
+  let hdrIdx=-1;
+  for(let i=0;i<Math.min(lines.length,10);i++){
+    if(lines[i].toLowerCase().includes('ticker')){hdrIdx=i;break;}
+  }
+  if(hdrIdx<0)return[];
+  
+  // Parse headers - handle the empty first column
+  const hdrLine=lines[hdrIdx];
+  const headers=[];let cur='',inQ=false;
+  for(const ch of hdrLine){if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){headers.push(cur.replace(/"/g,'').trim().toLowerCase());cur='';}else{cur+=ch;}}
+  headers.push(cur.replace(/"/g,'').trim().toLowerCase());
+
+  // Parse data rows
+  const rows=[];
+  for(let i=hdrIdx+1;i<lines.length;i++){
+    const line=lines[i];if(!line.trim())continue;
+    const vals=[];let c='',q=false;
+    for(const ch of line){if(ch==='"'){q=!q;}else if(ch===','&&!q){vals.push(c.replace(/"/g,'').trim());c='';}else{c+=ch;}}
+    vals.push(c.replace(/"/g,'').trim());
+    const obj={};headers.forEach((h,idx)=>obj[h]=vals[idx]||'');
+    rows.push(obj);
+  }
+  return rows;
 }
 
 function rowToEquity(row){
-  const tk=(row['ticker']||'').trim();
-  if(!tk||tk.length>8)return null;
-  const mv=parseFloat(row['market value'])||parseFloat(row['marketvalue'])||0;
-  if(mv<=0)return null;
+  // Ticker is in column 'ticker' - handle empty first column
+  const tk=(row['ticker']||'').trim().replace(/[^A-Z0-9.]/gi,'').toUpperCase();
+  if(!tk||tk.length>8||tk==='TICKER'||tk==='TOTAL')return null;
+  
+  const mv=cleanNum(row['market value']||row['marketvalue']||row['mkt value']||'');
+  if(!mv||mv<=0)return null;
+  
   return{
-    ticker:tk, company:row['company']||tk,
-    shares:parseFloat(row['shares'])||0,
-    avgPrice:parseFloat(row['avg cost']||row['avg price']||row['avgprice']||row['avgcost'])||0,
-    marketPrice:parseFloat(row['market price']||row['marketprice']||row['price'])||0,
+    ticker:tk,
+    company:row['company']||tk,
+    shares:cleanNum(row['shares'])||0,
+    avgPrice:cleanNum(row['avg cost']||row['avg price']||row['avgcost']||row['avgprice'])||0,
+    marketPrice:cleanNum(row['price']||row['market price']||row['marketprice'])||0,
     marketValue:mv,
-    dayPct:parseFloat(row['day %']||row['day%']||row['daypct'])||0,
-    beta:parseFloat(row['beta'])||1,
+    dayPct:cleanNum(row['day %']||row['day%']||row['daypct'])||0,
+    beta:cleanNum(row['beta'])||1,
     sector:row['sector']||'Other',
-    costBasis:parseFloat(row['cost basis']||row['costbasis'])||0,
-    wsTarget:parseFloat(row['ws target']||row['wstarget'])||WS[tk]||null,
-    clubTarget:parseFloat(row['club target']||row['clubtarget'])||null,
+    costBasis:cleanNum(row['cost basis']||row['costbasis'])||0,
+    wsTarget:cleanNum(row['ws target']||row['wstarget'])||WS[tk]||null,
+    clubTarget:cleanNum(row['club target']||row['clubtarget'])||null,
     notes:row['notes']||'',
   };
 }
@@ -515,10 +545,10 @@ function rowToTrade(row){
   return{
     date:row['date']||'', fund:row['fund']||'',
     company:row['company / description']||row['company']||'',
-    type:tp, ticker:row['ticker']||'',
-    shares:parseFloat(row['shares'])||null,
-    price:parseFloat(row['price per share']||row['price'])||null,
-    total:parseFloat(row['total amount']||row['total'])||0,
+    type:tp, ticker:(row['ticker']||'').trim().toUpperCase(),
+    shares:cleanNum(row['shares'])||null,
+    price:cleanNum(row['price per share']||row['price'])||null,
+    total:cleanNum(row['total amount']||row['total'])||0,
     approved:row['approved by']||row['approved']||'',
     notes:row['notes / thesis']||row['notes']||'',
   };
