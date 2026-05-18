@@ -1004,13 +1004,21 @@ function logoClick() {
   }
 }
 
-// Also open admin with Ctrl+Shift+A
-document.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && e.shiftKey && e.key === 'A') {
-    e.preventDefault();
+// Open admin via URL hash: site#admin
+// Or via typing secret code in any input: "ceeadmin"
+let secretBuffer = '';
+document.addEventListener('keypress', function(e) {
+  secretBuffer += e.key.toLowerCase();
+  if (secretBuffer.length > 8) secretBuffer = secretBuffer.slice(-8);
+  if (secretBuffer.includes('ceeadmin')) {
+    secretBuffer = '';
     openAdmin();
   }
 });
+// Also check URL hash on load
+if (window.location.hash === '#admin') {
+  window.addEventListener('load', () => setTimeout(openAdmin, 500));
+}
 
 function openAdmin() {
   // Check if password already set
