@@ -555,49 +555,116 @@ function rowToTrade(row){
 }
 
 // ── LOAD GOOGLE SHEETS ────────────────────────────────────────────────────
+async function fetchWithTimeout(url, ms=8000){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),ms);
+  try{
+    const res=await fetch(url,{signal:ctrl.signal});
+    clearTimeout(timer);
+    if(res.ok)return await res.text();
+    return null;
+  }catch(e){clearTimeout(timer);return null;}
+}
+
 async function fetchCSV(url){
-  // Try direct fetch first
-  try{
-    const res=await fetch(url);
-    if(res.ok)return res.text();
-  }catch(e){}
-  // Fallback: use allorigins CORS proxy
-  try{
-    const proxy='https://api.allorigins.win/raw?url='+encodeURIComponent(url);
-    const res=await fetch(proxy);
-    if(res.ok)return res.text();
-  }catch(e){}
-  // Second fallback: corsproxy.io
-  try{
-    const proxy2='https://corsproxy.io/?'+encodeURIComponent(url);
-    const res=await fetch(proxy2);
-    if(res.ok)return res.text();
-  }catch(e){}
-  throw new Error('Could not fetch CSV from any source');
+  // Try direct fetch
+  const direct=await fetchWithTimeout(url,6000);
+  if(direct)return direct;
+  // Try allorigins proxy
+  const p1=await fetchWithTimeout('https://api.allorigins.win/raw?url='+encodeURIComponent(url),8000);
+  if(p1)return p1;
+  // Try corsproxy
+  const p2=await fetchWithTimeout('https://corsproxy.io/?'+encodeURIComponent(url),8000);
+  if(p2)return p2;
+  throw new Error('Could not load Google Sheet');
 }
 
 async function loadGoogleSheets(){
   setSplash('Loading holdings from Google Sheets…');
   try{
-    const [endTxt,ceeTxt,trdTxt,ptTxt]=await Promise.all([
+    // Load with individual error handling so one failure doesn't block all
+    const results=await Promise.allSettled([
       fetchCSV(GS.end),fetchCSV(GS.cee),fetchCSV(GS.trd),fetchCSV(GS.pt)
     ]);
-    S.endEq=parseCSV(endTxt).map(rowToEquity).filter(Boolean);
-    S.ceeEq=parseCSV(ceeTxt).map(rowToEquity).filter(Boolean);
-    S.trades=parseCSV(trdTxt).map(rowToTrade).filter(Boolean);
-    S.ptData=parseCSV(ptTxt);
-    console.log('Loaded:',S.endEq.length,'end,',S.ceeEq.length,'cee,',S.trades.length,'trades');
+    const [endR,ceeR,trdR,ptR]=results;
+    if(endR.status==='fulfilled'&&endR.value){
+      const eq=parseCSV(endR.value).map(rowToEquity).filter(Boolean);
+      if(eq.length>0){S.endEq=eq;console.log('Endowment loaded:',eq.length,'positions');}
+    }
+    if(ceeR.status==='fulfilled'&&ceeR.value){
+      const eq=parseCSV(ceeR.value).map(rowToEquity).filter(Boolean);
+      if(eq.length>0){S.ceeEq=eq;console.log('CEE loaded:',eq.length,'positions');}
+    }
+    if(trdR.status==='fulfilled'&&trdR.value){
+      const tx=parseCSV(trdR.value).map(rowToTrade).filter(Boolean);
+      if(tx.length>0){S.trades=tx;console.log('Trades loaded:',tx.length);}
+    }
+    if(ptR.status==='fulfilled'&&ptR.value){
+      S.ptData=parseCSV(ptR.value);
+    }
+    // If nothing loaded fall back to embedded
+    if(S.endEq.length===0&&S.ceeEq.length===0){
+      console.warn('No data from Google Sheets, using embedded data');
+      loadFallback();
+    }
   }catch(e){
     console.error('Google Sheets load failed:',e);
-    setSplash('Could not load Google Sheets — using embedded data…');
     loadFallback();
   }
 }
 
 function loadFallback(){
-  // Use embedded data as fallback if Google Sheets fails
-  S.endTotal=508172.33; S.ceeTotal=208811.36;
-  S.endBeta=0.9918; S.ceeBeta=1.0703;
+  // Full embedded data fallback
+  S.endEq=[
+    {ticker:'GOOG',company:'Alphabet Inc.',shares:84.689,avgPrice:102.72,marketPrice:332.77,marketValue:28181.96,dayPct:-0.508,beta:1.1456,sector:'Communication Services',costBasis:8699,wsTarget:210,clubTarget:null},
+    {ticker:'META',company:'Meta Platforms',shares:16.072,avgPrice:616.37,marketPrice:676.87,marketValue:10878.86,dayPct:0.788,beta:1.3376,sector:'Communication Services',costBasis:9906,wsTarget:730,clubTarget:null},
+    {ticker:'NFLX',company:'Netflix',shares:43,avgPrice:92.26,marketPrice:107.79,marketValue:4634.97,dayPct:0.074,beta:1.7025,sector:'Communication Services',costBasis:3967,wsTarget:1200,clubTarget:null},
+    {ticker:'AMZN',company:'Amazon',shares:47,avgPrice:212.74,marketPrice:249.70,marketValue:11735.90,dayPct:0.483,beta:1.4165,sector:'Consumer Discretionary',costBasis:9999,wsTarget:280,clubTarget:null},
+    {ticker:'HD',company:'Home Depot',shares:10.071,avgPrice:378.36,marketPrice:337.15,marketValue:3395.44,dayPct:-0.519,beta:1.0563,sector:'Consumer Discretionary',costBasis:3810,wsTarget:390,clubTarget:null},
+    {ticker:'COST',company:'Costco',shares:4.241,avgPrice:418.30,marketPrice:987.21,marketValue:4186.66,dayPct:0.250,beta:0.9337,sector:'Consumer Staples',costBasis:1774,wsTarget:1050,clubTarget:null},
+    {ticker:'KO',company:'Coca-Cola',shares:104.292,avgPrice:55.01,marketPrice:75.18,marketValue:7840.65,dayPct:-0.173,beta:0.3380,sector:'Consumer Staples',costBasis:5737,wsTarget:78,clubTarget:null},
+    {ticker:'WMT',company:'Walmart',shares:55.405,avgPrice:97.20,marketPrice:124.82,marketValue:6915.68,dayPct:0.048,beta:0.6346,sector:'Consumer Staples',costBasis:5385,wsTarget:115,clubTarget:null},
+    {ticker:'XOM',company:'ExxonMobil',shares:14.096,avgPrice:149.26,marketPrice:151.98,marketValue:2142.36,dayPct:1.993,beta:0.1997,sector:'Energy',costBasis:2104,wsTarget:135,clubTarget:null},
+    {ticker:'BRK.B',company:'Berkshire Hathaway',shares:10,avgPrice:389.86,marketPrice:475.12,marketValue:4751.20,dayPct:0.217,beta:0.6508,sector:'Financials',costBasis:3899,wsTarget:530,clubTarget:null},
+    {ticker:'V',company:'Visa',shares:33.014,avgPrice:251.98,marketPrice:315.10,marketValue:10402.77,dayPct:-0.256,beta:0.7680,sector:'Financials',costBasis:8319,wsTarget:380,clubTarget:null},
+    {ticker:'MA',company:'Mastercard',shares:11,avgPrice:527.36,marketPrice:518.54,marketValue:5703.94,dayPct:-0.273,beta:0.8075,sector:'Financials',costBasis:5801,wsTarget:600,clubTarget:null},
+    {ticker:'LLY',company:'Eli Lilly',shares:7.023,avgPrice:842.55,marketPrice:903.99,marketValue:6348.45,dayPct:-0.115,beta:0.4855,sector:'Health Care',costBasis:5917,wsTarget:1050,clubTarget:null},
+    {ticker:'CAT',company:'Caterpillar',shares:23.822,avgPrice:202.02,marketPrice:772.66,marketValue:18405.99,dayPct:0.323,beta:1.5364,sector:'Industrials',costBasis:4812,wsTarget:430,clubTarget:null},
+    {ticker:'WM',company:'Waste Management',shares:20.330,avgPrice:153.75,marketPrice:224.08,marketValue:4555.50,dayPct:-0.379,beta:0.4953,sector:'Industrials',costBasis:3126,wsTarget:245,clubTarget:null},
+    {ticker:'AAPL',company:'Apple',shares:63.701,avgPrice:127.65,marketPrice:263.40,marketValue:16778.74,dayPct:-1.137,beta:1.0820,sector:'Information Technology',costBasis:8131,wsTarget:240,clubTarget:null},
+    {ticker:'MSFT',company:'Microsoft',shares:36.431,avgPrice:271.91,marketPrice:420.26,marketValue:15310.41,dayPct:2.198,beta:1.1188,sector:'Information Technology',costBasis:9901,wsTarget:500,clubTarget:null},
+    {ticker:'NVDA',company:'NVIDIA',shares:35,avgPrice:170.59,marketPrice:198.35,marketValue:6942.25,dayPct:-0.262,beta:2.3068,sector:'Information Technology',costBasis:5971,wsTarget:175,clubTarget:null},
+    {ticker:'TSM',company:'TSMC',shares:14,avgPrice:271.55,marketPrice:363.35,marketValue:5086.90,dayPct:-3.132,beta:1.3853,sector:'Information Technology',costBasis:3802,wsTarget:240,clubTarget:null},
+    {ticker:'NUE',company:'Nucor',shares:50.327,avgPrice:128.93,marketPrice:191.85,marketValue:9655.18,dayPct:1.187,beta:1.7625,sector:'Materials',costBasis:6488,wsTarget:145,clubTarget:null},
+    {ticker:'DLR',company:'Digital Realty',shares:25.913,avgPrice:120.74,marketPrice:199.05,marketValue:5158.06,dayPct:1.717,beta:1.0793,sector:'Real Estate',costBasis:3129,wsTarget:180,clubTarget:null},
+    {ticker:'CEG',company:'Constellation Energy',shares:16,avgPrice:371.19,marketPrice:299.14,marketValue:4786.24,dayPct:1.496,beta:1.1434,sector:'Utilities',costBasis:5939,wsTarget:340,clubTarget:null},
+  ];
+  S.ceeEq=[
+    {ticker:'GOOGL',company:'Alphabet Inc.',shares:34.275,avgPrice:136.47,marketPrice:336.02,marketValue:11516.92,dayPct:-0.326,beta:1.1456,sector:'Information Technology',costBasis:4678,wsTarget:210,clubTarget:null},
+    {ticker:'MSFT',company:'Microsoft',shares:22.672,avgPrice:330.84,marketPrice:420.26,marketValue:9528.26,dayPct:2.198,beta:1.1188,sector:'Information Technology',costBasis:7498,wsTarget:500,clubTarget:null},
+    {ticker:'TSM',company:'TSMC',shares:36,avgPrice:186.63,marketPrice:363.35,marketValue:13080.60,dayPct:-3.132,beta:1.3853,sector:'Information Technology',costBasis:6719,wsTarget:240,clubTarget:null},
+    {ticker:'PLTR',company:'Palantir',shares:36,avgPrice:103.37,marketPrice:142.76,marketValue:5139.36,dayPct:0.429,beta:1.6155,sector:'Information Technology',costBasis:3721,wsTarget:120,clubTarget:null},
+    {ticker:'WM',company:'Waste Management',shares:34.556,avgPrice:151.87,marketPrice:224.08,marketValue:7743.33,dayPct:-0.379,beta:0.4953,sector:'Industrials',costBasis:5249,wsTarget:245,clubTarget:null},
+    {ticker:'LLY',company:'Eli Lilly',shares:3.022,avgPrice:897.55,marketPrice:903.99,marketValue:2731.41,dayPct:-0.115,beta:0.4855,sector:'Health Care',costBasis:2712,wsTarget:1050,clubTarget:null},
+    {ticker:'ISRG',company:'Intuitive Surgical',shares:5,avgPrice:187.01,marketPrice:458.08,marketValue:2290.40,dayPct:-2.195,beta:1.5859,sector:'Health Care',costBasis:935,wsTarget:620,clubTarget:null},
+    {ticker:'AAPL',company:'Apple',shares:10.115,avgPrice:180.06,marketPrice:263.40,marketValue:2664.29,dayPct:-1.137,beta:1.0820,sector:'Information Technology',costBasis:1821,wsTarget:240,clubTarget:null},
+    {ticker:'PANW',company:'Palo Alto Networks',shares:22,avgPrice:128.37,marketPrice:166.97,marketValue:3673.34,dayPct:1.743,beta:0.7228,sector:'Information Technology',costBasis:2824,wsTarget:210,clubTarget:null},
+    {ticker:'ABBV',company:'AbbVie',shares:20.009,avgPrice:160.00,marketPrice:208.99,marketValue:4181.64,dayPct:0.274,beta:0.3193,sector:'Health Care',costBasis:3201,wsTarget:235,clubTarget:null},
+    {ticker:'ADI',company:'Analog Devices',shares:14.529,avgPrice:131.74,marketPrice:353.80,marketValue:5140.47,dayPct:1.684,beta:1.0844,sector:'Information Technology',costBasis:1914,wsTarget:280,clubTarget:null},
+    {ticker:'XOM',company:'ExxonMobil',shares:17.271,avgPrice:103.06,marketPrice:151.98,marketValue:2624.80,dayPct:1.993,beta:0.1997,sector:'Energy',costBasis:1780,wsTarget:135,clubTarget:null},
+  ];
+  S.trades=[
+    {date:'Apr 10, 2026',fund:'CEE Fund',company:'Oracle Corp',type:'BUY',ticker:'ORCL',shares:5,price:165.42,total:827.10,approved:'J. Smith',notes:'AI cloud thesis'},
+    {date:'Apr 5, 2026',fund:'CEE Fund',company:'Palantir Technologies',type:'BUY',ticker:'PLTR',shares:10,price:138.55,total:1385.50,approved:'M. Chen',notes:'AI government contracts expanding'},
+    {date:'Mar 28, 2026',fund:'CEE Fund',company:'Walt Disney',type:'SELL',ticker:'DIS',shares:5,price:110.25,total:551.25,approved:'J. Smith',notes:'Trimmed on valuation'},
+    {date:'Mar 20, 2026',fund:'CEE Fund',company:'TSMC',type:'BUY',ticker:'TSM',shares:8,price:345.80,total:2766.40,approved:'R. Davis',notes:'CoWoS demand'},
+    {date:'Mar 10, 2026',fund:'Endowment',company:'Caterpillar',type:'BUY',ticker:'CAT',shares:3,price:745.20,total:2235.60,approved:'J. Smith',notes:'Infrastructure spending'},
+  ];
+  S.endTotal=S.endEq.reduce((s,e)=>s+e.marketValue,0);
+  S.ceeTotal=S.ceeEq.reduce((s,e)=>s+e.marketValue,0);
+  S.endBeta=S.endEq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.endTotal;
+  S.ceeBeta=S.ceeEq.reduce((s,e)=>s+e.beta*e.marketValue,0)/S.ceeTotal;
+  console.log('Fallback data loaded — Endowment:',S.endEq.length,'CEE:',S.ceeEq.length);
 }
 
 // ── LIVE PRICES (FINNHUB) ─────────────────────────────────────────────────
