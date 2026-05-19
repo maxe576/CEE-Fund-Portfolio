@@ -1500,6 +1500,12 @@ function showTab(tab, btn) {
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   btn.classList.add('active');
+  // Load tab-specific data
+  if (tab === 'news') loadNews('market');
+  else if (tab === 'calendar') loadCalendar('portfolio');
+  else if (tab === 'targets') loadPriceTargets();
+  else if (tab === 'performance') renderPerformance();
+  else if (tab === 'sectorcompare') renderSectorCards();
 }
 function switchFund(fund, btn) {
   activeFund=fund;
@@ -1644,16 +1650,7 @@ let calCache = null;
 let wsTargetCache = {};
 let clubTargets = JSON.parse(localStorage.getItem('cee_club_targets') || '{}');
 
-// ── SHOW TAB OVERRIDE - trigger data loads ────────────────────────────────────
-const _origShowTab = showTab;
-function showTab(tab, btn) {
-  _origShowTab(tab, btn);
-  if (tab === 'news') loadNews('market');
-  if (tab === 'calendar') loadCalendar('portfolio');
-  if (tab === 'targets') loadPriceTargets();
-  if (tab === 'performance') renderPerformance();
-  if (tab === 'sectorcompare') renderSectorCards();
-}
+// Tab data loading handled in showTab function directly
 
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 let currentNewsFilter = 'market';
