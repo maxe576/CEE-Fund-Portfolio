@@ -105,6 +105,18 @@ tr:last-child td{border-bottom:none}
 .pt-buy{background:#dcfce7;color:#166534}
 .pt-hold{background:#fef9c3;color:#854d0e}
 .pt-sell{background:#fee2e2;color:#dc2626}
+.news-item{padding:12px 0;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start}
+.news-item:last-child{border-bottom:none}
+.news-source{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;white-space:nowrap;margin-top:2px}
+.news-headline{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px}
+.news-headline a{color:inherit;text-decoration:none}
+.news-headline a:hover{color:var(--blue);text-decoration:underline}
+.news-meta{font-size:11px;color:var(--muted)}
+.news-ticker{display:inline-block;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af;font-size:10px;font-weight:700;margin-right:4px}
+.cal-badge-bmo{background:#dcfce7;color:#166534;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700}
+.cal-badge-amc{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700}
+.cal-badge-tns{background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700}
+
 /* Sector Compare */
 .sc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
 .sc-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:all 0.2s}
@@ -160,6 +172,8 @@ tr:last-child td{border-bottom:none}
   <button class="nav-tab" onclick="showTab('sectorcompare',this)">🔬 Sector Analysis</button>
   <button class="nav-tab" onclick="showTab('benchmark',this)">📈 vs S&P 500</button>
   <button class="nav-tab" onclick="showTab('performance',this)">📉 Performance</button>
+  <button class="nav-tab" onclick="showTab('news',this)">📰 News</button>
+  <button class="nav-tab" onclick="showTab('calendar',this)">📅 Calendar</button>
   <button class="nav-tab" onclick="showTab('targets',this)">🎯 Price Targets</button>
   <button class="nav-tab" onclick="showTab('whatif',this)">🔮 What-If</button>
   <button class="nav-tab" onclick="showTab('ai',this)">🤖 AI Assistant</button>
@@ -299,6 +313,42 @@ tr:last-child td{border-bottom:none}
       <button class="filter-btn" onclick="filterTx('Sell',this)">Sells</button>
     </div>
     <div class="tbl-wrap"><table id="txTable"></table></div>
+  </div>
+</div>
+
+<!-- NEWS -->
+<div id="tab-news" class="tab-panel">
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">
+      Market News
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="filter-btn active" onclick="filterNews('market',this)" id="newsMarketBtn">Market</button>
+        <button class="filter-btn" onclick="filterNews('portfolio',this)">My Portfolio</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="newsTickerInput" placeholder="Search ticker..." 
+            style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:11px;width:110px"
+            onkeydown="if(event.key==='Enter')filterNews('search',document.getElementById('newsSearchBtn'))">
+          <button class="filter-btn" id="newsSearchBtn" onclick="filterNews('search',this)">Search</button>
+        </div>
+      </div>
+    </div>
+    <div id="newsLoading" style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center">Loading news...</div>
+    <div id="newsList"></div>
+  </div>
+</div>
+
+<!-- CALENDAR -->
+<div id="tab-calendar" class="tab-panel">
+  <div class="card">
+    <div class="card-title">
+      Earnings Calendar
+      <div style="display:flex;gap:8px">
+        <button class="filter-btn active" onclick="filterCalendar('portfolio',this)">My Portfolio</button>
+        <button class="filter-btn" onclick="filterCalendar('week',this)">This Week</button>
+      </div>
+    </div>
+    <div id="calLoading" style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center">Loading calendar...</div>
+    <div class="tbl-wrap"><table id="calTable"></table></div>
   </div>
 </div>
 
@@ -530,21 +580,33 @@ function renderAll() {
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
 function renderKPIs() {
-  const totalReturn = calcFundYTDReturn(S.fund);
-  const eqReturn = calcReturn(S.equities);
-  const etfReturn = calcReturn(S.etfs);
+  // Overview shows overall gain/loss from cost basis — not time-period specific
+  const totalCost = S.holdings.reduce((s,h) => s+(h.costBasis||0), 0);
+  const totalMV = S.holdings.reduce((s,h) => s+(h.marketValue||0), 0);
+  const totalGL = totalMV - totalCost;
+  const totalGLpct = totalCost ? totalGL/totalCost*100 : 0;
+  const eqCost = S.equities.reduce((s,h)=>s+(h.costBasis||0),0);
+  const eqMV = S.equities.reduce((s,h)=>s+(h.marketValue||0),0);
+  const eqGL = eqMV - eqCost;
+  const eqGLpct = eqCost ? eqGL/eqCost*100 : 0;
+  const etfCost = S.etfs.reduce((s,h)=>s+(h.costBasis||0),0);
+  const etfMV = S.etfs.reduce((s,h)=>s+(h.marketValue||0),0);
+  const etfGL = etfMV - etfCost;
+  const etfGLpct = etfCost ? etfGL/etfCost*100 : 0;
   const dayDollar = S.holdings.reduce((s,h) => s+(h.dayDollar||0), 0);
+
   document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi accent"><div class="kpi-label">Total Value</div><div class="kpi-value">${fmt(S.total)}</div><div class="kpi-sub">${S.fundName}</div></div>
-    <div class="kpi accent"><div class="kpi-label">Total Return</div><div class="kpi-value ${totalReturn>=0?'pos':'neg'}">${totalReturn>=0?'+':''}${totalReturn.toFixed(2)}%</div><div class="kpi-sub">On invested capital</div></div>
-    <div class="kpi"><div class="kpi-label">Equity Return</div><div class="kpi-value ${eqReturn>=0?'pos':'neg'}">${eqReturn>=0?'+':''}${eqReturn.toFixed(2)}%</div><div class="kpi-sub">${S.equities.length} positions</div></div>
-    <div class="kpi"><div class="kpi-label">ETF Return</div><div class="kpi-value ${etfReturn>=0?'pos':'neg'}">${etfReturn>=0?'+':''}${etfReturn.toFixed(2)}%</div><div class="kpi-sub">${S.etfs.length} positions</div></div>
-    <div class="kpi accent"><div class="kpi-label">Portfolio Beta</div><div class="kpi-value">${S.beta.toFixed(4)}</div><div class="kpi-sub">vs S&P = 1.00</div></div>
-    <div class="kpi"><div class="kpi-label">Today's Change</div><div class="kpi-value ${dayDollar>=0?'pos':'neg'}">${dayDollar>=0?'+':''}${fmt(dayDollar)}</div><div class="kpi-sub">Day P&L</div></div>
-    <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value">${S.holdings.length}</div><div class="kpi-sub">${S.equities.length} eq + ${S.etfs.length} ETF</div></div>
-    <div class="kpi"><div class="kpi-label">Cash</div><div class="kpi-value">${fmt(S.cash)}</div><div class="kpi-sub">${(S.cash/S.total*100).toFixed(1)}% of fund</div></div>
+    <div class="kpi accent"><div class="kpi-label">Total Fund Value</div><div class="kpi-value">${fmt(S.total)}</div><div class="kpi-sub">${S.fundName}</div></div>
+    <div class="kpi accent"><div class="kpi-label">Total Gain / Loss</div><div class="kpi-value ${totalGL>=0?'pos':'neg'}">${totalGL>=0?'+':''}$${fmt(Math.abs(totalGL))}</div><div class="kpi-sub">${totalGLpct>=0?'+':''}${totalGLpct.toFixed(2)}% on cost basis</div></div>
+    <div class="kpi"><div class="kpi-label">Equity G/L</div><div class="kpi-value ${eqGL>=0?'pos':'neg'}">${eqGL>=0?'+':''}$${fmt(Math.abs(eqGL))}</div><div class="kpi-sub">${eqGLpct>=0?'+':''}${eqGLpct.toFixed(2)}% · ${S.equities.length} stocks</div></div>
+    <div class="kpi"><div class="kpi-label">ETF G/L</div><div class="kpi-value ${etfGL>=0?'pos':'neg'}">${etfGL>=0?'+':''}$${fmt(Math.abs(etfGL))}</div><div class="kpi-sub">${etfGLpct>=0?'+':''}${etfGLpct.toFixed(2)}% · ${S.etfs.length} ETFs</div></div>
+    <div class="kpi accent"><div class="kpi-label">Portfolio Beta</div><div class="kpi-value">${S.beta.toFixed(4)}</div><div class="kpi-sub">vs S&P 500 = 1.00</div></div>
+    <div class="kpi"><div class="kpi-label">Today's Change</div><div class="kpi-value ${dayDollar>=0?'pos':'neg'}">${dayDollar>=0?'+':''}$${fmt(Math.abs(dayDollar))}</div><div class="kpi-sub">Day P&L</div></div>
+    <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value">${S.holdings.length}</div><div class="kpi-sub">${S.equities.length} equities + ${S.etfs.length} ETFs</div></div>
+    <div class="kpi"><div class="kpi-label">Cash</div><div class="kpi-value">$${fmt(S.cash)}</div><div class="kpi-sub">${(S.cash/S.total*100).toFixed(1)}% of fund</div></div>
   `;
 }
+
 
 // ── SECTOR BARS ───────────────────────────────────────────────────────────────
 function renderSectorBarsOverview() {
@@ -1241,77 +1303,7 @@ function renderTxTable(filter) {
     </tr>`).join('')}`;
 }
 
-// ── PRICE TARGETS ─────────────────────────────────────────────────────────────
-function renderTargets(filter) {
-  const all = [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs];
-  // Deduplicate
-  const seen = new Set();
-  const unique = all.filter(h=>{ if(seen.has(h.ticker)) return false; seen.add(h.ticker); return true; });
-
-  let holdings = unique.filter(h=>WS_TARGETS[h.ticker]);
-  if (filter==='Endowment') holdings=holdings.filter(h=>RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker));
-  else if (filter==='CEE Fund') holdings=holdings.filter(h=>RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker));
-  
-  const withTargets = holdings.map(h=>{
-    const wsTarget = WS_TARGETS[h.ticker]||0;
-    const clubTarget = CLUB_TARGETS[h.ticker]||null;
-    const wsUpside = h.price?(wsTarget-h.price)/h.price*100:0;
-    const clubUpside = (clubTarget&&h.price)?(clubTarget-h.price)/h.price*100:null;
-    return {...h, wsTarget, clubTarget, wsUpside, clubUpside};
-  });
-
-  let filtered = withTargets;
-  if (filter==='buy') filtered=withTargets.filter(h=>h.wsUpside>5);
-  else if (filter==='sell') filtered=withTargets.filter(h=>h.wsUpside<-5);
-  filtered.sort((a,b)=>b.wsUpside-a.wsUpside);
-
-  document.getElementById('targetsTable').innerHTML=`
-    <tr><th>Ticker</th><th>Company</th><th>Fund</th><th>Current Price</th><th>WS Target</th><th>WS Upside</th><th>Upside Bar</th><th>Club Target</th><th>Club Upside</th><th>Signal</th></tr>
-    ${filtered.map(h=>{
-      const inEnd = RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker);
-      const inCee = RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker);
-      const fundLabel = inEnd&&inCee?'Both':inEnd?'Endowment':'CEE Fund';
-      const barPct = Math.min(Math.abs(h.wsUpside)/50*100,100);
-      const barColor = h.wsUpside>10?'#16a34a':h.wsUpside>0?'#84cc16':h.wsUpside>-10?'#f97316':'#dc2626';
-      const signal = h.wsUpside>15?'BUY':h.wsUpside>-10?'HOLD':'SELL';
-      const signalClass = signal==='BUY'?'pt-buy':signal==='HOLD'?'pt-hold':'pt-sell';
-      return `<tr>
-        <td class="ticker-cell">${h.ticker}</td>
-        <td>${h.company}</td>
-        <td><span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${inEnd&&inCee?'#fef9c3':inEnd?'#dbeafe':'#fce7f3'};color:${inEnd&&inCee?'#854d0e':inEnd?'#1e40af':'#9d174d'}">${fundLabel}</span></td>
-        <td>$${h.price?h.price.toFixed(2):'—'}</td>
-        <td style="font-weight:600;color:var(--navy)">$${h.wsTarget.toFixed(2)}</td>
-        <td class="${h.wsUpside>=0?'pos':'neg'}" style="font-weight:700">${h.wsUpside>=0?'+':''}${h.wsUpside.toFixed(1)}%</td>
-        <td style="min-width:100px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <div class="pt-bar-track"><div class="pt-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div></div>
-          </div>
-        </td>
-        <td contenteditable="true" style="color:var(--blue);font-weight:600;min-width:80px;cursor:pointer" 
-            onblur="updateClubTarget('${h.ticker}',this)" 
-            title="Click to edit">
-          ${h.clubTarget?'$'+h.clubTarget.toFixed(2):'Click to add'}
-        </td>
-        <td class="${(h.clubUpside||0)>=0?'pos':'neg'}">${h.clubUpside!==null?(h.clubUpside>=0?'+':'')+h.clubUpside.toFixed(1)+'%':'—'}</td>
-        <td><span class="pt-badge ${signalClass}">${signal}</span></td>
-      </tr>`;
-    }).join('')}`;
-}
-
-function updateClubTarget(ticker, cell) {
-  const text = cell.textContent.trim().replace('$','').replace('Click to add','');
-  const val = parseFloat(text);
-  if (!isNaN(val) && val > 0) {
-    CLUB_TARGETS[ticker] = val;
-    renderTargets('all');
-  }
-}
-
-function filterTargets(filter, btn) {
-  document.querySelectorAll('#tab-targets .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); renderTargets(filter);
-}
-
+// ── PRICE TARGETS, NEWS, CALENDAR now handled by separate module ──────────────
 // ── WHAT-IF ───────────────────────────────────────────────────────────────────
 function wiAutoFill() {
   const ticker = document.getElementById('wi-ticker').value.toUpperCase().trim();
@@ -1507,8 +1499,6 @@ function showTab(tab, btn) {
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   btn.classList.add('active');
-  if (tab==='performance') renderPerformance();
-  if (tab==='sectorcompare') renderSectorCards();
 }
 function switchFund(fund, btn) {
   activeFund=fund;
@@ -1645,6 +1635,297 @@ function parseTransactions(rows) {
 }
 
 function resetToEmbedded() { if (confirm('Reset to original embedded data?')) location.reload(); }
+
+
+// ── NEWS & CALENDAR STATE ─────────────────────────────────────────────────────
+let newsCache = {};
+let calCache = null;
+let wsTargetCache = {};
+let clubTargets = JSON.parse(localStorage.getItem('cee_club_targets') || '{}');
+
+// ── SHOW TAB OVERRIDE - trigger data loads ────────────────────────────────────
+const _origShowTab = showTab;
+function showTab(tab, btn) {
+  _origShowTab(tab, btn);
+  if (tab === 'news') loadNews('market');
+  if (tab === 'calendar') loadCalendar('portfolio');
+  if (tab === 'targets') loadPriceTargets();
+  if (tab === 'performance') renderPerformance();
+  if (tab === 'sectorcompare') renderSectorCards();
+}
+
+// ── NEWS ──────────────────────────────────────────────────────────────────────
+let currentNewsFilter = 'market';
+let currentNewsTicker = '';
+
+async function filterNews(type, btn) {
+  document.querySelectorAll('#tab-news .filter-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  currentNewsFilter = type;
+  if (type === 'search') {
+    currentNewsTicker = document.getElementById('newsTickerInput').value.trim().toUpperCase();
+    if (!currentNewsTicker) return;
+  }
+  await loadNews(type);
+}
+
+async function loadNews(type) {
+  const loadEl = document.getElementById('newsLoading');
+  const listEl = document.getElementById('newsList');
+  if (loadEl) loadEl.style.display = 'block';
+  if (listEl) listEl.innerHTML = '';
+
+  let url = '';
+  const cacheKey = type === 'search' ? `search_${currentNewsTicker}` : type;
+
+  if (newsCache[cacheKey]) {
+    renderNews(newsCache[cacheKey]);
+    if (loadEl) loadEl.style.display = 'none';
+    return;
+  }
+
+  try {
+    if (type === 'market') {
+      url = `https://finnhub.io/api/v1/news?category=general&token=${FINNHUB}`;
+    } else if (type === 'portfolio') {
+      // Get news for top 5 holdings by market value
+      const top5 = [...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,5).map(h=>h.ticker);
+      const allNews = [];
+      for (const tk of top5) {
+        try {
+          const r = await fetchWithTimeout_yf(`https://finnhub.io/api/v1/company-news?symbol=${tk}&from=2026-05-01&to=2026-05-18&token=${FINNHUB}`, 6000);
+          if (r && Array.isArray(r)) {
+            allNews.push(...r.slice(0,4).map(n=>({...n, _ticker:tk})));
+          }
+        } catch(e) {}
+        await new Promise(res=>setTimeout(res,500));
+      }
+      allNews.sort((a,b)=>b.datetime-a.datetime);
+      newsCache[cacheKey] = allNews.slice(0,25);
+      renderNews(newsCache[cacheKey]);
+      if (loadEl) loadEl.style.display = 'none';
+      return;
+    } else if (type === 'search') {
+      url = `https://finnhub.io/api/v1/company-news?symbol=${currentNewsTicker}&from=2026-04-01&to=2026-05-18&token=${FINNHUB}`;
+    }
+
+    const data = await fetchWithTimeout_yf(url, 8000);
+    if (data && Array.isArray(data)) {
+      newsCache[cacheKey] = data.slice(0, 25);
+      renderNews(newsCache[cacheKey]);
+    } else {
+      if (listEl) listEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No news found.</div>';
+    }
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">Could not load news. Try again.</div>';
+  }
+  if (loadEl) loadEl.style.display = 'none';
+}
+
+function renderNews(articles) {
+  const listEl = document.getElementById('newsList');
+  const loadEl = document.getElementById('newsLoading');
+  if (loadEl) loadEl.style.display = 'none';
+  if (!articles || !articles.length) {
+    if (listEl) listEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No news found.</div>';
+    return;
+  }
+  listEl.innerHTML = articles.map(a => {
+    const date = new Date(a.datetime * 1000);
+    const timeStr = date.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    const ticker = a._ticker || a.related || '';
+    return `<div class="news-item">
+      <div style="flex:1">
+        ${ticker ? `<span class="news-ticker">${ticker}</span>` : ''}
+        <div class="news-headline"><a href="${a.url}" target="_blank" rel="noopener">${a.headline}</a></div>
+        <div class="news-meta">${a.source} · ${timeStr}</div>
+        ${a.summary ? `<div style="font-size:11px;color:var(--gray);margin-top:4px;line-height:1.4">${a.summary.slice(0,180)}${a.summary.length>180?'...':''}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────────────────────
+async function filterCalendar(type, btn) {
+  document.querySelectorAll('#tab-calendar .filter-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  await loadCalendar(type);
+}
+
+async function loadCalendar(type) {
+  const loadEl = document.getElementById('calLoading');
+  const tableEl = document.getElementById('calTable');
+  if (loadEl) loadEl.style.display = 'block';
+  if (tableEl) tableEl.innerHTML = '';
+
+  try {
+    // Get earnings from 2026-05-01 to 2026-06-30
+    const from = '2026-05-01';
+    const to = '2026-06-30';
+    let data = calCache;
+
+    if (!data) {
+      const r = await fetchWithTimeout_yf(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`, 8000);
+      if (r && r.earningsCalendar) {
+        calCache = r.earningsCalendar;
+        data = calCache;
+      }
+    }
+
+    if (!data) {
+      if (tableEl) tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';
+      if (loadEl) loadEl.style.display = 'none';
+      return;
+    }
+
+    // Filter by portfolio if needed
+    const portfolioTickers = new Set([...S.holdings.map(h=>h.ticker)]);
+    let filtered = type === 'portfolio'
+      ? data.filter(e => portfolioTickers.has(e.symbol))
+      : data;
+
+    // Sort by date
+    filtered = filtered.sort((a,b) => a.date.localeCompare(b.date)).slice(0, 50);
+
+    if (!filtered.length) {
+      tableEl.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings in this period.':'No earnings data found.'}</td></tr>`;
+      if (loadEl) loadEl.style.display = 'none';
+      return;
+    }
+
+    tableEl.innerHTML = `
+      <tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Estimate</th><th>In Portfolio</th></tr>
+      ${filtered.map(e => {
+        const inPort = portfolioTickers.has(e.symbol);
+        const when = e.hour === 'bmo' ? '<span class="cal-badge-bmo">Before Open</span>' :
+                     e.hour === 'amc' ? '<span class="cal-badge-amc">After Close</span>' :
+                     '<span class="cal-badge-tns">TBD</span>';
+        return `<tr style="${inPort?'background:#eff6ff;':''}">
+          <td>${e.date}</td>
+          <td class="ticker-cell">${e.symbol}</td>
+          <td>${e.company || '—'}</td>
+          <td>${when}</td>
+          <td>${e.epsEstimate != null ? '$'+parseFloat(e.epsEstimate).toFixed(2) : '—'}</td>
+          <td>${inPort ? '✅ Yes' : '—'}</td>
+        </tr>`;
+      }).join('')}`;
+  } catch(e) {
+    if (tableEl) tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';
+  }
+  if (loadEl) loadEl.style.display = 'none';
+}
+
+// ── PRICE TARGETS ─────────────────────────────────────────────────────────────
+async function loadPriceTargets() {
+  // Fetch WS targets from Yahoo Finance for all unique tickers
+  const allH = [...new Map(
+    [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
+    .map(h=>[h.ticker,h])
+  ).values()];
+
+  // Fetch in background - show N/A until loaded
+  renderTargetsTable(allH);
+
+  // Fetch WS targets from Yahoo Finance
+  const batchSize = 5;
+  for (let i = 0; i < allH.length; i += batchSize) {
+    const batch = allH.slice(i, i + batchSize);
+    await Promise.all(batch.map(async h => {
+      if (wsTargetCache[h.ticker] !== undefined) return;
+      try {
+        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${h.ticker}?modules=financialData`;
+        const d = await fetchWithTimeout_yf(url, 6000);
+        const fd = d?.quoteSummary?.result?.[0]?.financialData;
+        wsTargetCache[h.ticker] = fd?.targetMeanPrice?.raw || null;
+      } catch(e) {
+        wsTargetCache[h.ticker] = null;
+      }
+    }));
+    renderTargetsTable(allH);
+    if (i + batchSize < allH.length) await new Promise(res=>setTimeout(res,300));
+  }
+}
+
+function renderTargetsTable(allH) {
+  const filter = document.querySelector('#tab-targets .filter-btn.active')?.textContent || 'All';
+  let holdings = allH;
+  if (filter === 'Endowment') holdings = allH.filter(h=>RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker));
+  else if (filter === 'CEE Fund') holdings = allH.filter(h=>RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker));
+
+  const sorted = [...holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
+
+  document.getElementById('targetsTable').innerHTML = `
+    <tr>
+      <th>Ticker</th><th>Company</th><th>Fund</th><th>Current Price</th>
+      <th>Club Target</th><th>Club Upside</th>
+      <th>WS Target</th><th>WS Upside</th>
+      <th>We vs WS</th>
+    </tr>
+    ${sorted.map(h => {
+      const price = h.price || 0;
+      const clubTarget = clubTargets[h.ticker] || null;
+      const wsTarget = wsTargetCache[h.ticker] !== undefined ? wsTargetCache[h.ticker] : 'loading';
+      const clubUpside = clubTarget && price ? (clubTarget - price) / price * 100 : null;
+      const wsUpside = wsTarget && wsTarget !== 'loading' && price ? (wsTarget - price) / price * 100 : null;
+      const vsWS = clubUpside !== null && wsUpside !== null ? clubUpside - wsUpside : null;
+
+      const inEnd = RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker);
+      const inCee = RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker);
+      const fundLabel = inEnd&&inCee?'Both':inEnd?'Endowment':'CEE Fund';
+      const fundColor = inEnd&&inCee?'#fef9c3':inEnd?'#dbeafe':'#fce7f3';
+      const fundText = inEnd&&inCee?'#854d0e':inEnd?'#1e40af':'#9d174d';
+
+      return `<tr>
+        <td class="ticker-cell">${h.ticker}</td>
+        <td>${h.company}</td>
+        <td><span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${fundColor};color:${fundText}">${fundLabel}</span></td>
+        <td><strong>${price ? '$'+price.toFixed(2) : '—'}</strong></td>
+        <td contenteditable="true" 
+            style="color:var(--blue);font-weight:600;cursor:pointer;min-width:80px"
+            onblur="saveClubTarget('${h.ticker}',this)"
+            title="Click to edit">${clubTarget ? '$'+clubTarget.toFixed(2) : 'Click to set'}</td>
+        <td class="${clubUpside===null?'':clubUpside>=0?'pos':'neg'}" style="font-weight:700">
+          ${clubUpside!==null ? (clubUpside>=0?'+':'')+clubUpside.toFixed(1)+'%' : '—'}
+        </td>
+        <td style="font-weight:600;color:var(--navy)">
+          ${wsTarget==='loading'?'<span style="color:var(--muted);font-size:10px">Loading...</span>':wsTarget?'$'+parseFloat(wsTarget).toFixed(2):'N/A'}
+        </td>
+        <td class="${wsUpside===null?'':wsUpside>=0?'pos':'neg'}" style="font-weight:700">
+          ${wsUpside!==null ? (wsUpside>=0?'+':'')+wsUpside.toFixed(1)+'%' : '—'}
+        </td>
+        <td style="font-weight:700;color:${vsWS===null?'var(--muted)':vsWS>0?'var(--blue)':vsWS<0?'var(--red)':'var(--gray)'}">
+          ${vsWS!==null ? (vsWS>0?'↑ More bullish':vsWS<0?'↓ More bearish':'= In line') : '—'}
+          ${vsWS!==null ? '<span style="font-size:10px;font-weight:400"> ('+( vsWS>=0?'+':'')+vsWS.toFixed(1)+'%)</span>' : ''}
+        </td>
+      </tr>`;
+    }).join('')}`;
+}
+
+function saveClubTarget(ticker, cell) {
+  const text = cell.textContent.trim().replace('$','').replace('Click to set','');
+  const val = parseFloat(text);
+  if (!isNaN(val) && val > 0) {
+    clubTargets[ticker] = val;
+    localStorage.setItem('cee_club_targets', JSON.stringify(clubTargets));
+    // Refresh the row
+    const allH = [...new Map(
+      [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
+      .map(h=>[h.ticker,h])
+    ).values()];
+    renderTargetsTable(allH);
+  }
+}
+
+function filterTargets(filter, btn) {
+  document.querySelectorAll('#tab-targets .filter-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const allH = [...new Map(
+    [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
+    .map(h=>[h.ticker,h])
+  ).values()];
+  renderTargetsTable(allH);
+}
+
 
 window.addEventListener('load', init);
 </script>
