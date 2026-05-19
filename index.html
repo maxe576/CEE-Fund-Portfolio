@@ -97,6 +97,20 @@ tr:last-child td{border-bottom:none}
 .period-btn.active{background:var(--navy);color:white;border-color:var(--navy)}
 .period-btn:hover:not(.active){background:var(--bg);border-color:var(--navy);color:var(--navy)}
 .period-loading{font-size:11px;color:var(--muted);margin-left:8px;font-style:italic}
+
+
+.period-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.period-btn{padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;font-size:11px;font-weight:700;color:var(--gray);transition:all 0.2s;min-width:36px;text-align:center}
+.period-btn.active{background:var(--navy);color:white;border-color:var(--navy)}
+.period-btn:hover:not(.active){background:var(--bg);border-color:var(--navy);color:var(--navy)}
+.period-loading{font-size:11px;color:var(--muted);margin-left:8px;font-style:italic}
+
+
+.period-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.period-btn{padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;font-size:11px;font-weight:700;color:var(--gray);transition:all 0.2s;min-width:36px;text-align:center}
+.period-btn.active{background:var(--navy);color:white;border-color:var(--navy)}
+.period-btn:hover:not(.active){background:var(--bg);border-color:var(--navy);color:var(--navy)}
+.period-loading{font-size:11px;color:var(--muted);margin-left:8px;font-style:italic}
 .news-item{padding:12px 0;border-bottom:1px solid var(--border)}
 .news-item:last-child{border-bottom:none}
 .news-headline{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px}
@@ -145,7 +159,7 @@ tr:last-child td{border-bottom:none}
 
 <div class="header">
   <div class="header-left">
-    <span class="logo" onclick="logoClick()">⚓</span>
+    <img src="data:image/jpeg;base64,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" onclick="logoClick()" style="height:40px;width:40px;object-fit:contain;cursor:pointer;border-radius:4px" title="CEE Fund">
     <div>
       <div class="header-title">CAPTAINS EDUCATIONAL ENRICHMENT FUND</div>
       <div class="header-sub">Christopher Newport University &nbsp;·&nbsp; Investment Management</div>
@@ -290,6 +304,28 @@ tr:last-child td{border-bottom:none}
       <button class="period-btn" onclick="setPerfPeriod('1Y',this)">1Y</button>
       <button class="period-btn" onclick="setPerfPeriod('3Y',this)">3Y</button>
       <button class="period-btn" onclick="setPerfPeriod('5Y',this)">5Y</button>
+    </div>
+    <div class="period-row" id="perfPeriodRow">
+      <button class="period-btn" onclick="setPerfPeriod('1D',this)">1D</button>
+      <button class="period-btn" onclick="setPerfPeriod('1W',this)">1W</button>
+      <button class="period-btn" onclick="setPerfPeriod('1M',this)">1M</button>
+      <button class="period-btn" onclick="setPerfPeriod('3M',this)">3M</button>
+      <button class="period-btn" onclick="setPerfPeriod('6M',this)">6M</button>
+      <button class="period-btn active" onclick="setPerfPeriod('YTD',this)">YTD</button>
+      <button class="period-btn" onclick="setPerfPeriod('1Y',this)">1Y</button>
+      <button class="period-btn" onclick="setPerfPeriod('3Y',this)">3Y</button>
+      <button class="period-btn" onclick="setPerfPeriod('5Y',this)">5Y</button>
+    </div>
+    <div class="period-row" id="perfPeriodRow">
+      <button class="period-btn" onclick="setPerfPeriod('1D',this)">1D</button>
+      <button class="period-btn" onclick="setPerfPeriod('1W',this)">1W</button>
+      <button class="period-btn" onclick="setPerfPeriod('1M',this)">1M</button>
+      <button class="period-btn" onclick="setPerfPeriod('3M',this)">3M</button>
+      <button class="period-btn" onclick="setPerfPeriod('6M',this)">6M</button>
+      <button class="period-btn active" onclick="setPerfPeriod('YTD',this)">YTD</button>
+      <button class="period-btn" onclick="setPerfPeriod('1Y',this)">1Y</button>
+      <button class="period-btn" onclick="setPerfPeriod('3Y',this)">3Y</button>
+      <button class="period-btn" onclick="setPerfPeriod('5Y',this)">5Y</button>
       <span class="period-loading" id="perfPeriodLoading"></span>
     </div>
     <div class="chart-container"><canvas id="perfChart"></canvas></div>
@@ -395,8 +431,10 @@ tr:last-child td{border-bottom:none}
       <button class="chat-send" onclick="sendChat()">Send →</button>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--muted)">
-      Claude API key (required): 
-      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;width:260px;margin-left:4px">
+      Claude API key: 
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;width:260px;margin-left:4px" onchange="saveApiKey(this.value)">
+      <button onclick="clearApiKey()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:white;cursor:pointer;margin-left:4px;color:var(--gray)">Clear</button>
+      <span id="apiKeyStatus" style="font-size:10px;color:var(--green);margin-left:6px"></span>
       <span style="font-size:10px;color:var(--muted);display:block;margin-top:4px;margin-left:130px">Key is only stored in your browser memory — never saved or sent anywhere except Anthropic.</span>
     </div>
   </div>
@@ -467,6 +505,10 @@ const WS_TARGETS = {"GOOG": 210, "META": 730, "NFLX": 1200, "TKO": 220, "AMZN": 
 const FINNHUB = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
 const JAN1_PRICES = {"AAPL": 243.0, "ABBV": 181.57, "ADI": 224.89, "AMZN": 225.89, "BILS": 91.61, "BRK.B": 454.99, "BX": 158.5, "CAT": 357.34, "CEG": 258.6, "COF": 188.59, "COST": 972.49, "CRWD": 373.8, "DAR": 35.27, "DLR": 183.4, "ET": 20.29, "FDIS": 94.46, "FSLR": 165.37, "FTEC": 174.39, "GD": 302.4, "GOOG": 196.32, "GOOGL": 196.69, "GRMN": 224.07, "HCA": 368.2, "HD": 408.96, "IGV": 107.58, "IREN": 10.5, "ISRG": 524.65, "IYG": 92.0, "IYJ": 137.0, "KO": 62.63, "LLY": 799.14, "MA": 534.54, "META": 589.02, "MSFT": 422.0, "NLR": 55.36, "NUE": 117.59, "ORCL": 166.87, "PANW": 193.83, "PFE": 24.81, "PGR": 260.36, "PINS": 29.88, "PLTR": 73.22, "PSCT": 77.74, "QQQ": 518.86, "RSPN": 55.44, "SBGSF": 271.0, "SOFI": 15.93, "SOUN": 21.39, "SPGI": 491.24, "SYK": 375.64, "TROW": 99.49, "TSM": 205.7, "V": 316.17, "VCSH": 76.62, "VFH": 115.68, "VGLT": 53.39, "VGT": 594.62, "VHT": 262.6, "VIS": 230.8, "VMC": 264.67, "VOO": 545.91, "VTI": 291.98, "VUG": 402.97, "WM": 211.17, "WMT": 93.62, "XLB": 88.52, "XLC": 103.13, "XLE": 88.12, "XLF": 49.32, "XLP": 77.44, "XLU": 78.97, "XLV": 146.1, "XOM": 119.4};
 const YTD_BASELINES = {"endowment": {"jan1Cash": 76383.07, "jan1StockVal": 354194.64, "jan1Total": 455336.43, "curTotal": 521431.54, "ytdReturn": 14.5157}, "ceeFund": {"jan1Cash": 7728.82, "jan1StockVal": 190030.35, "jan1Total": 197759.18, "curTotal": 205993.69, "ytdReturn": 4.1639}};
+const JAN1_PRICES = {"AAPL": 243.0, "ABBV": 181.57, "ADI": 224.89, "AMZN": 225.89, "BILS": 91.61, "BRK.B": 454.99, "BX": 158.5, "CAT": 357.34, "CEG": 258.6, "COF": 188.59, "COST": 972.49, "CRWD": 373.8, "DAR": 35.27, "DLR": 183.4, "ET": 20.29, "FDIS": 94.46, "FSLR": 165.37, "FTEC": 174.39, "GD": 302.4, "GOOG": 196.32, "GOOGL": 196.69, "GRMN": 224.07, "HCA": 368.2, "HD": 408.96, "IGV": 107.58, "IREN": 10.5, "ISRG": 524.65, "IYG": 92.0, "IYJ": 137.0, "KO": 62.63, "LLY": 799.14, "MA": 534.54, "META": 589.02, "MSFT": 422.0, "NLR": 55.36, "NUE": 117.59, "ORCL": 166.87, "PANW": 193.83, "PFE": 24.81, "PGR": 260.36, "PINS": 29.88, "PLTR": 73.22, "PSCT": 77.74, "QQQ": 518.86, "RSPN": 55.44, "SBGSF": 271.0, "SOFI": 15.93, "SOUN": 21.39, "SPGI": 491.24, "SYK": 375.64, "TROW": 99.49, "TSM": 205.7, "V": 316.17, "VCSH": 76.62, "VFH": 115.68, "VGLT": 53.39, "VGT": 594.62, "VHT": 262.6, "VIS": 230.8, "VMC": 264.67, "VOO": 545.91, "VTI": 291.98, "VUG": 402.97, "WM": 211.17, "WMT": 93.62, "XLB": 88.52, "XLC": 103.13, "XLE": 88.12, "XLF": 49.32, "XLP": 77.44, "XLU": 78.97, "XLV": 146.1, "XOM": 119.4};
+const YTD_BASELINES = {"endowment": {"jan1Cash": 76383.07, "jan1StockVal": 354194.64, "jan1Total": 455336.43, "curTotal": 521431.54, "ytdReturn": 14.5157}, "ceeFund": {"jan1Cash": 7728.82, "jan1StockVal": 190030.35, "jan1Total": 197759.18, "curTotal": 205993.69, "ytdReturn": 4.1639}};
+const START_PRICES = {"endowment": {"GOOG": 196.32, "META": 589.02, "AMZN": 225.89, "HD": 408.96, "COST": 972.49, "KO": 62.63, "WMT": 93.62, "XOM": 119.4, "BRK.B": 454.99, "BX": 158.5, "MA": 534.54, "SPGI": 491.24, "V": 316.17, "HCA": 368.2, "LLY": 799.14, "PFE": 24.81, "SYK": 375.64, "CAT": 357.34, "SBGSF": 271.0, "WM": 211.17, "AAPL": 243.0, "CRWD": 373.8, "MSFT": 422.0, "ORCL": 166.87, "TSM": 205.7, "NUE": 117.59, "DLR": 183.4, "CEG": 258.6, "FDIS": 94.46, "FTEC": 174.39, "IGV": 107.58, "NLR": 55.36, "PSCT": 77.74, "QQQ": 518.86, "RSPN": 55.44, "VCSH": 76.62, "VFH": 115.68, "VHT": 262.6, "VIS": 230.8, "VOO": 545.91, "VTI": 291.98, "VUG": 402.97, "XLB": 88.52, "XLC": 103.13, "XLE": 88.12, "XLF": 49.32, "XLP": 77.44, "XLU": 78.97, "SMH": 407.72, "CVS": 77.06, "OLLI": 112.14, "TKO": 203.03, "HWM": 254.43, "TMUS": 198.18, "NFLX": 92.26, "NVDA": 170.59}, "ceeFund": {"AAPL": 243.0, "ABBV": 181.57, "ADI": 224.89, "BRK.B": 454.99, "COF": 188.59, "DAR": 35.27, "DLR": 183.4, "ET": 20.29, "FSLR": 165.37, "GD": 302.4, "GOOGL": 196.69, "GRMN": 224.07, "HD": 408.96, "IREN": 10.5, "ISRG": 524.65, "LLY": 799.14, "MSFT": 422.0, "PANW": 193.83, "PLTR": 73.22, "SOFI": 15.93, "SOUN": 21.39, "SPGI": 491.24, "TSM": 205.7, "V": 316.17, "VMC": 264.67, "WM": 211.17, "WMT": 93.62, "XOM": 119.4, "BILS": 91.61, "IGV": 107.58, "IYG": 92.0, "IYJ": 137.0, "RSPN": 55.44, "VGLT": 53.39, "VGT": 594.62, "XLB": 88.52, "XLC": 103.13, "XLE": 88.12, "XLP": 77.44, "XLU": 78.97, "XLV": 146.1, "PGR": 260.36, "PINS": 29.88, "PSCT": 77.74, "TROW": 99.49, "DIS": 107.43, "TTWO": 204.21, "VNQ": 92.19, "XLY": 117.53, "HWM": 257.71, "NFLX": 92.21, "HOOD": 69.63}};
+const SPY_JAN1 = 589.36;
 const MASTER_CODE = 'CEEFUND2026';
 
 // Club targets (editable, stored in memory)
@@ -534,12 +576,12 @@ function calcFundYTDReturn(fundKey) {
   const bondVal = fundKey==='endowment'?(RAW.endowment.bond?.marketValue||0):0;
   return ((curStocks+(fd.cash||0)+bondVal)-baseline.jan1Total)/baseline.jan1Total*100;
 }
-function calcReturn(holdings) {
+function calcReturn(holdings, fundKey) {
   let totalJan1=0, totalMV=0;
   for (const h of holdings) {
-    const p=JAN1_PRICES[h.ticker];
+    const spMap=fundKey?(START_PRICES[fundKey]||{}):{};const sp=spMap[h.ticker]||JAN1_PRICES[h.ticker]||null;
     totalMV+=h.marketValue||0;
-    totalJan1+=p&&h.shares?p*h.shares:(h.costBasis||h.marketValue||0);
+    totalJan1+=sp&&h.shares?sp*h.shares:(h.costBasis||h.marketValue||0);
   }
   if (!totalJan1) return 0;
   return (totalMV-totalJan1)/totalJan1*100;
@@ -717,9 +759,9 @@ function renderSectorCards() {
   document.getElementById('sectorCards').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
       ${sectors.map(s=>{
-        const eqReturn = calcReturn(s.holdings.filter(h=>h.type==='equity'));
-        const etfReturn = calcReturn(s.holdings.filter(h=>h.type==='etf'));
-        const secReturn = calcReturn(s.holdings);
+        const eqReturn = calcReturn(s.holdings.filter(h=>h.type==='equity'), S.fund);
+        const etfReturn = calcReturn(s.holdings.filter(h=>h.type==='etf'), S.fund);
+        const secReturn = calcReturn(s.holdings, S.fund); // equities + ETFs combined
         return `<div class="sc-card" onclick="showSectorComparePeriod('${s.name}',this)">
           <div class="sc-name">${s.name}</div>
           <div class="sc-pct ${secReturn>=0?'pos':'neg'}">${secReturn>=0?'+':''}${secReturn.toFixed(1)}%</div>
@@ -775,7 +817,7 @@ function renderBenchmark() {
     <div class="kpi accent"><div class="kpi-label">Portfolio Beta</div><div class="kpi-value">${fundBeta.toFixed(4)}</div><div class="kpi-sub">${fundBeta>1?'More':'Less'} volatile than S&P</div></div>
     <div class="kpi"><div class="kpi-label">Overweight Sectors</div><div class="kpi-value" style="color:var(--blue)">${ow}</div><div class="kpi-sub">vs S&P 500</div></div>
     <div class="kpi"><div class="kpi-label">Underweight Sectors</div><div class="kpi-value" style="color:var(--red)">${uw}</div><div class="kpi-sub">vs S&P 500</div></div>
-    <div class="kpi"><div class="kpi-label">S&P 500 (SPY)</div><div class="kpi-value" id="spxKpiVal" style="font-size:14px">${spxData?'$'+spxData.c.toFixed(2):'Fetching...'}</div><div class="kpi-sub" id="spxKpiSub">${spxData?((spxData.c-spxData.pc)/spxData.pc*100>=0?'+':'')+((spxData.c-spxData.pc)/spxData.pc*100).toFixed(2)+'% today':'Live via Finnhub'}</div></div>
+    <div class="kpi"><div class="kpi-label">S&P 500 (SPY)</div><div class="kpi-value" id="spxKpiVal">Loading...</div><div class="kpi-sub" id="spxKpiSub">Fetching live data</div></div>
   `;
 }
 
@@ -800,11 +842,12 @@ function buildPerfChart(fund) {
   const equities = fundData.equities;
   const etfs = fundData.etfs;
 
-  // Pure return on invested capital — not affected by cash movements
-  const totalReturn = calcReturn(allH);
-  const eqReturn = calcReturn(equities);
-  const etfReturn = calcReturn(etfs);
+  // Use correct start prices per holding
+  const totalReturn = calcReturn(allH, fund);
+  const eqReturn = calcReturn(equities, fund);
+  const etfReturn = calcReturn(etfs, fund);
 
+  const fundStartPrices = START_PRICES[fund] || {};
   // Build timeline using transaction dates
   const fundTx = TRANSACTIONS.filter(t=>fund==='endowment'?t.fund==='Endowment':t.fund==='CEE Fund').sort((a,b)=>a.date.localeCompare(b.date));
   const txDates = [...new Set(fundTx.map(t=>t.date))];
@@ -817,7 +860,7 @@ function buildPerfChart(fund) {
 
   // Set Jan 1 state
   Object.keys(jan1h).forEach(tk=>{
-    runningHoldings[tk] = {shares: jan1h[tk].shares, costBasis: (jan1h[tk].shares||0)*(jan1h[tk].avgCost||0)};
+    runningHoldings[tk] = {shares: jan1h[tk].shares || 0};
   });
 
   const dateReturns = {};
@@ -828,14 +871,8 @@ function buildPerfChart(fund) {
     while (txIdx < fundTx.length && fundTx[txIdx].date <= date) {
       const t = fundTx[txIdx];
       if (!runningHoldings[t.ticker]) runningHoldings[t.ticker] = {shares:0, costBasis:0};
-      if (t.action.toLowerCase()==='buy') {
-        runningHoldings[t.ticker].shares += t.shares;
-        runningHoldings[t.ticker].costBasis += t.shares * t.price;
-      } else {
-        const pct = t.shares / (runningHoldings[t.ticker].shares||1);
-        runningHoldings[t.ticker].costBasis *= (1-pct);
-        runningHoldings[t.ticker].shares -= t.shares;
-      }
+      if(t.action.toLowerCase()==='buy') runningHoldings[t.ticker].shares+=t.shares;
+      else runningHoldings[t.ticker].shares=Math.max(0,(runningHoldings[t.ticker].shares||0)-t.shares);
       txIdx++;
     }
 
@@ -847,21 +884,20 @@ function buildPerfChart(fund) {
       // Jan 1 return = 0 baseline
       dateReturns[date] = { total: 0, eq: 0, etf: 0 };
     } else {
-      // Estimate using transaction prices as market proxies
-      let totalCost=0, totalMV=0, eqCost=0, eqMV=0, etfCost=0, etfMV=0;
+      let eqS=0,eqM=0,etS=0,etM=0;
       allH.forEach(h=>{
-        const rh = runningHoldings[h.ticker];
-        if (!rh || rh.shares <= 0) return;
-        const mktVal = rh.shares * (h.price||h.avgCost||0);
-        const cost = rh.costBasis||0;
-        totalCost += cost; totalMV += mktVal;
-        if (h.type==='equity') { eqCost+=cost; eqMV+=mktVal; }
-        else { etfCost+=cost; etfMV+=mktVal; }
+        const shares=runningHoldings[h.ticker]?.shares||0;
+        if(shares<=0)return;
+        const sp=fundStartPrices[h.ticker]||JAN1_PRICES[h.ticker]||h.avgCost||0;
+        const cp=h.price||h.avgCost||0;
+        if(h.type==='equity'){eqS+=sp*shares;eqM+=cp*shares;}
+        else{etS+=sp*shares;etM+=cp*shares;}
       });
-      dateReturns[date] = {
-        total: totalCost>0?(totalMV-totalCost)/totalCost*100:0,
-        eq: eqCost>0?(eqMV-eqCost)/eqCost*100:0,
-        etf: etfCost>0?(etfMV-etfCost)/etfCost*100:0,
+      const totS=eqS+etS,totM=eqM+etM;
+      dateReturns[date]={
+        total:totS>0?(totM-totS)/totS*100:0,
+        eq:eqS>0?(eqM-eqS)/eqS*100:0,
+        etf:etS>0?(etM-etS)/etS*100:0,
       };
     }
   }
@@ -873,7 +909,7 @@ function buildPerfChart(fund) {
     '2026-01-30':1.88,'2026-02-01':2.20,'2026-02-07':3.30,'2026-02-09':2.69,
     '2026-02-13':3.94,'2026-02-20':2.97,'2026-02-28':-1.91,'2026-03-01':-2.10,
     '2026-03-07':-4.32,'2026-03-10':-5.13,'2026-03-14':-6.24,'2026-03-20':-7.22,
-    '2026-03-27':-5.94,'2026-04-01':-8.50,'2026-04-04':-15.07,'2026-04-12': spxData?((spxData.c-spyBase)/spyBase*100):-12.74,
+    '2026-03-27':-5.94,'2026-04-01':-8.50,'2026-04-04':-15.07,'2026-04-12': spxData?((spxData.c-SPY_JAN1)/SPY_JAN1*100):((738.65-SPY_JAN1)/SPY_JAN1*100),
   };
 
   // Interpolate SPX for missing dates
@@ -1037,8 +1073,8 @@ async function sendChat() {
   chatBox.innerHTML+=`<div class="msg user">${msg}</div>`;
   chatBox.innerHTML+=`<div class="msg ai" id="aiTyping">Thinking...</div>`;
   chatBox.scrollTop=chatBox.scrollHeight;
-  const apiKey=document.getElementById('apiKeyInput').value.trim();
-  if (!apiKey||apiKey==='sk-ant-...') {
+  const apiKey=document.getElementById('apiKeyInput').value.trim()||localStorage.getItem('cee_claude_key')||'';
+  if (!apiKey||apiKey.length<20) {
     document.getElementById('aiTyping').textContent='Please enter your Claude API key in the field below the chat box.';
     return;
   }
@@ -1093,6 +1129,7 @@ async function fetchLivePrices() {
 async function fetchSPX() {
   try {
     const r=await fetch(`https://finnhub.io/api/v1/quote?symbol=SPY&token=${FINNHUB}`);
+    if(r.status===429)return;
     if(r.status===429)return;
     const d=await r.json();
     if (d.c) {
@@ -1299,28 +1336,24 @@ async function fetchHistorical(symbol, period) {
     }
     try {
       const d=await fetchWithTimeout_yf(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB}`,5000);
-      if(d&&d.c&&d.pc&&d.c>0){
-        const pct=(d.c-d.pc)/d.pc*100;
-        const result={pct,points:[{t:'Open',v:0},{t:'Now',v:parseFloat(pct.toFixed(2))}]};
-        historicalCache[cacheKey]=result; return result;
-      }
+      if(d&&d.c&&d.pc&&d.c>0){const pct=(d.c-d.pc)/d.pc*100;const result={pct,points:[{t:'Open',v:0},{t:'Now',v:parseFloat(pct.toFixed(2))}]};historicalCache[cacheKey]=result;return result;}
     }catch(e){}
     historicalCache[cacheKey]=null; return null;
   }
-  const rangeMap={'1W':'5d','1M':'1mo','3M':'3mo','6M':'6mo','YTD':'ytd','1Y':'1y','3Y':'2y','5Y':'5y'};
-  const intervalMap={'1W':'1d','1M':'1d','3M':'1wk','6M':'1wk','YTD':'1wk','1Y':'1wk','3Y':'1mo','5Y':'1mo'};
-  const yahooUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${intervalMap[period]||'1wk'}&range=${rangeMap[period]||'ytd'}`;
-  const proxyUrl=`https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`;
-  for (const url of [yahooUrl,proxyUrl]) {
+  const rM={'1W':'5d','1M':'1mo','3M':'3mo','6M':'6mo','YTD':'ytd','1Y':'1y','3Y':'2y','5Y':'5y'};
+  const iM={'1W':'1d','1M':'1d','3M':'1wk','6M':'1wk','YTD':'1wk','1Y':'1wk','3Y':'1mo','5Y':'1mo'};
+  const yu=`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${iM[period]||'1wk'}&range=${rM[period]||'ytd'}`;
+  const pu=`https://api.allorigins.win/raw?url=${encodeURIComponent(yu)}`;
+  for (const url of [yu,pu]) {
     const d=await fetchWithTimeout_yf(url,7000);
     if(!d) continue;
     const rd=d?.chart?.result?.[0];
     if(!rd) continue;
-    const timestamps=rd.timestamp||[];
-    const closes=rd.indicators?.quote?.[0]?.close||[];
-    const valid=timestamps.map((t,i)=>({t,c:closes[i]})).filter(x=>x.c!==null&&x.c!==undefined&&!isNaN(x.c));
+    const ts=rd.timestamp||[];
+    const cl=rd.indicators?.quote?.[0]?.close||[];
+    const valid=ts.map((t,i)=>({t,c:cl[i]})).filter(x=>x.c!==null&&x.c!==undefined&&!isNaN(x.c));
     if(valid.length<2) continue;
-    const sp=valid[0].c, ep=valid[valid.length-1].c;
+    const sp=valid[0].c,ep=valid[valid.length-1].c;
     const pct=(ep-sp)/sp*100;
     const points=valid.map(x=>({t:new Date(x.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}),v:parseFloat(((x.c-sp)/sp*100).toFixed(2))}));
     const result={pct:parseFloat(pct.toFixed(2)),points};
@@ -1354,7 +1387,6 @@ async function buildPerfChartPeriod(fund,period) {
     await Promise.all(tickers.slice(i,i+8).map(async tk=>{const h=await fetchHistorical(tk,period);returns[tk]=h?h.pct:null;}));
     if(i+8<tickers.length)await new Promise(r=>setTimeout(r,300));
   }
-  // Always fetch benchmark separately first
   const spyHist=await fetchHistorical('SPY',period);
   const spyPoints=spyHist?.points||[{t:'Start',v:0},{t:'Now',v:0}];
   const spyPct=spyHist?.pct||0;
@@ -1362,9 +1394,9 @@ async function buildPerfChartPeriod(fund,period) {
   const totalMV=allH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const eqMV=fundData.equities.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const etfMV=fundData.etfs.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const pp=allH.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h]))*((h.marketValue||0)/totalMV),0);
-  const ep=fundData.equities.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h]))*((h.marketValue||0)/eqMV),0);
-  const ftp=fundData.etfs.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h]))*((h.marketValue||0)/etfMV),0);
+  const pp=allH.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/totalMV),0);
+  const ep=fundData.equities.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/eqMV),0);
+  const ftp=fundData.etfs.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/etfMV),0);
   const alpha=pp-spyPct;
   const fc=Object.values(returns).filter(v=>v!==null).length;
   document.getElementById('perfKpis').innerHTML=`
@@ -1387,7 +1419,199 @@ async function buildPerfChartPeriod(fund,period) {
   const noteEl=document.getElementById('perfNote');
   if(noteEl)noteEl.textContent=`${period} — ${fc}/${tickers.length} tickers from Yahoo Finance.`;
 }
-// (patch2 functions defined above)
+
+// API Key persistence
+let newsCache={}, calCache=null, wsTargetCache={};
+let clubTargets=JSON.parse(localStorage.getItem('cee_club_targets')||'{}');
+function saveApiKey(val){const k=val.trim();if(k&&k.startsWith('sk-ant')){localStorage.setItem('cee_claude_key',k);const el=document.getElementById('apiKeyStatus');if(el){el.textContent='✅ Saved';setTimeout(()=>el.textContent='',3000);}}}
+function clearApiKey(){localStorage.removeItem('cee_claude_key');document.getElementById('apiKeyInput').value='';const el=document.getElementById('apiKeyStatus');if(el){el.textContent='Cleared';setTimeout(()=>el.textContent='',2000);}}
+function loadSavedApiKey(){const s=localStorage.getItem('cee_claude_key');if(s){document.getElementById('apiKeyInput').value=s;}}
+
+
+// ── PERIOD STATE ──────────────────────────────────────────────────────────────
+// (activePerfPeriod defined above)
+let activeSCPeriod = '1D';
+let activeSCSector = null;
+// (currentSCView defined above)
+let historicalCache = {};
+
+// ── SAFE FETCH WITH TIMEOUT ───────────────────────────────────────────────────
+// (fetchWithTimeout_yf defined above)
+
+
+// ── FETCH HISTORICAL (Yahoo Finance + Finnhub 1D) ─────────────────────────────
+// (fetchHistorical defined above)
+
+
+// ── PERIOD CONTROLS ───────────────────────────────────────────────────────────
+// (setPerfPeriod defined above)
+
+
+// (setSCPeriod defined above)
+
+
+// ── SECTOR COMPARE WITH DRILL-DOWN ────────────────────────────────────────────
+async function showSectorComparePeriod(sectorName, cardEl) {
+  if (cardEl) {
+    document.querySelectorAll('.sc-card').forEach(c=>c.classList.remove('active'));
+    cardEl.classList.add('active');
+  }
+  activeSCSector = sectorName;
+  currentSCView = 'top';
+  await renderSCChart(sectorName, 'top', activeSCPeriod);
+}
+
+async function renderSCChart(sectorName, view, period) {
+  const sectors = calcSectors(S.holdings, S.total);
+  const sec = sectors.find(s=>s.name===sectorName);
+  if (!sec) return;
+  const equities = sec.holdings.filter(h=>h.type==='equity');
+  const etfs = sec.holdings.filter(h=>h.type==='etf');
+  const benchmark = SECTOR_BENCHMARKS[sectorName] || 'SPY';
+  currentSCView = view;
+
+  document.getElementById('sectorCompareDetail').style.display='block';
+  const loadEl = document.getElementById('scPeriodLoading');
+  if (loadEl) loadEl.textContent = '⏳ Loading...';
+
+  // Fetch returns for needed tickers
+  const returns = {};
+  const toFetch = [...new Set([...equities.map(h=>h.ticker),...etfs.map(h=>h.ticker),benchmark])];
+
+  if (period === '1D') {
+    [...equities,...etfs].forEach(h=>{ returns[h.ticker] = h.dayPct ? h.dayPct*100 : 0; });
+    const bHist = await fetchHistorical(benchmark, '1D');
+    returns[benchmark] = bHist ? bHist.pct : 0;
+  } else {
+    await Promise.all(toFetch.map(async tk=>{
+      const hist = await fetchHistorical(tk, period);
+      returns[tk] = hist ? hist.pct : null;
+    }));
+  }
+
+  if (loadEl) loadEl.textContent = '';
+
+  const eqMV = equities.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const etfMV = etfs.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const eqReturn = equities.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],activeFund))*(h.marketValue||0)/eqMV,0);
+  const etfReturn = etfs.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],activeFund))*(h.marketValue||0)/etfMV,0);
+  const benchReturn = returns[benchmark] ?? 0;
+  const alpha = eqReturn - benchReturn;
+
+  // Title with back button
+  const titleEl = document.getElementById('scChartTitle');
+  if (view !== 'top') {
+    titleEl.innerHTML = `${sectorName} ${view==='equities'?'Equities':'ETFs'} — ${period} <span style="color:var(--blue);cursor:pointer;font-size:11px;margin-left:8px" onclick="renderSCChart('${sectorName}','top','${period}')">← Back</span>`;
+  } else {
+    titleEl.textContent = `${sectorName} — ${period}: Equities vs ETFs vs ${benchmark}`;
+  }
+
+  // KPI cards
+  document.getElementById('scKpis').innerHTML = `
+    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'};border-color:${view==='equities'?'var(--navy)':'var(--border)'}" 
+         onclick="${view==='top'?`renderSCChart('${sectorName}','equities','${period}')`:''}" title="${view==='top'?'Click to see individual equities':''}">
+      <div class="perf-label">Equities${view==='top'?' ▶':''}</div>
+      <div class="perf-value ${eqReturn>=0?'pos':'neg'}">${eqReturn>=0?'+':''}${eqReturn.toFixed(2)}%</div>
+      <div class="perf-sub">${equities.length} stocks · ${period}</div>
+    </div>
+    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'};border-color:${view==='etfs'?'var(--navy)':'var(--border)'}"
+         onclick="${view==='top'?`renderSCChart('${sectorName}','etfs','${period}')`:''}" title="${view==='top'?'Click to see individual ETFs':''}">
+      <div class="perf-label">ETFs${view==='top'?' ▶':''}</div>
+      <div class="perf-value ${etfReturn>=0?'pos':'neg'}">${etfReturn>=0?'+':''}${etfReturn.toFixed(2)}%</div>
+      <div class="perf-sub">${etfs.length} ETFs · ${period}</div>
+    </div>
+    <div class="perf-card">
+      <div class="perf-label">${benchmark} Benchmark</div>
+      <div class="perf-value ${benchReturn>=0?'pos':'neg'}">${benchReturn>=0?'+':''}${benchReturn.toFixed(2)}%</div>
+      <div class="perf-sub">Sector ETF · ${period}</div>
+    </div>
+    <div class="perf-card">
+      <div class="perf-label">Alpha vs ${benchmark}</div>
+      <div class="perf-value ${alpha>=0?'pos':'neg'}">${alpha>=0?'+':''}${alpha.toFixed(2)}%</div>
+      <div class="perf-sub">Equities vs benchmark</div>
+    </div>
+    <div class="perf-card">
+      <div class="perf-label">Sector Weight</div>
+      <div class="perf-value">${(sec.pct*100).toFixed(1)}%</div>
+      <div class="perf-sub">of ${S.fundName}</div>
+    </div>
+    <div class="perf-card">
+      <div class="perf-label">Sector Beta</div>
+      <div class="perf-value">${sec.beta.toFixed(4)}</div>
+      <div class="perf-sub">Weighted avg</div>
+    </div>
+  `;
+
+  // Chart
+  let labels, vals, bgColors, borderColors;
+  if (view === 'top') {
+    labels = ['Equities ▶', 'ETFs ▶', `${benchmark} ★`];
+    vals = [parseFloat(eqReturn.toFixed(2)), parseFloat(etfReturn.toFixed(2)), parseFloat(benchReturn.toFixed(2))];
+    bgColors = ['rgba(0,31,91,0.7)','rgba(157,23,77,0.7)','rgba(249,115,22,0.8)'];
+    borderColors = ['#001F5B','#9d174d','#f97316'];
+  } else {
+    const holdings = view==='equities' ? equities : etfs;
+    const sorted = [...holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
+    labels = [...sorted.map(h=>h.ticker), `${benchmark}★`];
+    const holdingVals = sorted.map(h=>parseFloat((returns[h.ticker]??calcReturn([h],activeFund)).toFixed(2)));
+    vals = [...holdingVals, parseFloat(benchReturn.toFixed(2))];
+    const posColor = view==='equities'?'rgba(0,31,91,0.7)':'rgba(157,23,77,0.7)';
+    const posBorder = view==='equities'?'#001F5B':'#9d174d';
+    bgColors = [...holdingVals.map(v=>v>=0?posColor:'rgba(220,38,38,0.5)'), 'rgba(249,115,22,0.8)'];
+    borderColors = [...holdingVals.map(v=>v>=0?posBorder:'#dc2626'), '#f97316'];
+  }
+
+  if (scChartRef) scChartRef.destroy();
+  const ctx = document.getElementById('scChart').getContext('2d');
+  scChartRef = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ data:vals, backgroundColor:bgColors, borderColor:borderColors, borderWidth:1.5, borderRadius:4 }] },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      onClick: view==='top'?(evt,els)=>{ if(!els.length)return; const i=els[0].index; if(i===0)renderSCChart(sectorName,'equities',period); else if(i===1)renderSCChart(sectorName,'etfs',period); }:null,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          label:c=>`${c.label.replace('▶','').replace('★','')}: ${c.parsed.y>=0?'+':''}${c.parsed.y.toFixed(2)}%`,
+          afterLabel:view==='top'?c=>c.dataIndex<2?'Click to see individual holdings':'':(()=>'')
+        }}
+      },
+      scales:{
+        y:{ticks:{callback:v=>(v>=0?'+':'')+v+'%',font:{size:11}},grid:{color:'#f1f5f9'}},
+        x:{ticks:{font:{size:view==='top'?12:10},maxRotation:view==='top'?0:45},grid:{display:false}}
+      }
+    }
+  });
+
+  // Tables
+  const hdrRow = `<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>${period} Return</th><th>Total Return</th><th>Beta</th></tr>`;
+  const makeRow = (h,ret) => {
+    const rv = ret!==null&&ret!==undefined ? ret : calcReturn([h]);
+    const tr = h.glPct ? h.glPct*100 : 0;
+    return `<tr><td class="ticker-cell">${h.ticker}</td><td>${h.company}</td><td>$${fmt(h.marketValue||0)}</td>
+    <td class="${rv>=0?'pos':'neg'}" style="font-weight:700">${(rv>=0?'+':'')+rv.toFixed(2)}%</td>
+    <td class="${tr>=0?'pos':'neg'}">${(tr>=0?'+':'')+tr.toFixed(1)}%</td>
+    <td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;
+  };
+  document.getElementById('scEqTable').innerHTML = equities.length ? hdrRow+[...equities].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).map(h=>makeRow(h,returns[h.ticker])).join('') : '<tr><td colspan="6" style="color:var(--muted);text-align:center">No equities</td></tr>';
+  document.getElementById('scEtfTable').innerHTML = etfs.length ? hdrRow+[...etfs].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).map(h=>makeRow(h,returns[h.ticker])).join('') : '<tr><td colspan="6" style="color:var(--muted);text-align:center">No ETFs</td></tr>';
+
+  document.getElementById('scLegend').innerHTML = view==='top'
+    ? `<div class="legend-item"><div class="legend-dot" style="background:#001F5B"></div><span>Equities (click bar)</span></div>
+       <div class="legend-item"><div class="legend-dot" style="background:#9d174d"></div><span>ETFs (click bar)</span></div>
+       <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span>${benchmark} Benchmark</span></div>`
+    : `<div class="legend-item"><div class="legend-dot" style="background:${view==='equities'?'#001F5B':'#9d174d'}"></div><span>Individual ${view==='equities'?'Equities':'ETFs'}</span></div>
+       <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span>${benchmark} Benchmark ★</span></div>
+       <span style="font-size:11px;color:var(--blue);cursor:pointer;margin-left:12px" onclick="renderSCChart('${sectorName}','top','${period}')">← Back to overview</span>`;
+
+  document.getElementById('sectorCompareDetail').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// ── PERFORMANCE CHART WITH YAHOO FINANCE ──────────────────────────────────────
+// (buildPerfChartPeriod defined above)
+
+
+
 
 // ── NEWS & CALENDAR STATE ─────────────────────────────────────────────────────
 let newsCache = {};
@@ -1395,7 +1619,7 @@ let calCache = null;
 let wsTargetCache = {};
 let clubTargets = JSON.parse(localStorage.getItem('cee_club_targets') || '{}');
 
-// Tab loading handled in main showTab function
+
 
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 let currentNewsFilter = 'market';
@@ -1415,9 +1639,10 @@ async function filterNews(type, btn) {
 async function loadNews(type) {
   const loadEl = document.getElementById('newsLoading');
   const listEl = document.getElementById('newsList');
-  if (loadEl) { loadEl.style.display = 'block'; loadEl.textContent = 'Loading news...'; }
+  if (loadEl) loadEl.style.display = 'block';
   if (listEl) listEl.innerHTML = '';
 
+  let url = '';
   const cacheKey = type === 'search' ? `search_${currentNewsTicker}` : type;
 
   if (newsCache[cacheKey]) {
@@ -1426,11 +1651,7 @@ async function loadNews(type) {
     return;
   }
 
-  // Small delay to avoid rate limiting from other Finnhub calls
-  await new Promise(res => setTimeout(res, 500));
-
   try {
-    let url = '';
     if (type === 'market') {
       url = `https://finnhub.io/api/v1/news?category=general&token=${FINNHUB}`;
     } else if (type === 'portfolio') {
@@ -1503,418 +1724,78 @@ async function loadCalendar(type) {
   const tableEl = document.getElementById('calTable');
   if (loadEl) loadEl.style.display = 'block';
   if (tableEl) tableEl.innerHTML = '';
-  // Always calculate dates dynamically so events are always upcoming
+  await new Promise(res => setTimeout(res, 500));
+
+  // Dynamic dates - always upcoming
   const nowDate = new Date();
   const from = nowDate.toISOString().split('T')[0];
-  const futureEnd = new Date(nowDate); futureEnd.setDate(futureEnd.getDate()+60);
-  const to = futureEnd.toISOString().split('T')[0];
+  const futEnd = new Date(nowDate); futEnd.setDate(futEnd.getDate()+60);
+  const to = futEnd.toISOString().split('T')[0];
 
   if (type === 'economic') {
     try {
-      // Always use today forward so we only show UPCOMING events
-      const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
-      const futureDate = new Date(today);
-      futureDate.setDate(futureDate.getDate() + 90); // 90 days forward
-      const futureDateStr = futureDate.toISOString().split('T')[0];
-
-      const data = await fetchWithTimeout_yf(
-        `https://finnhub.io/api/v1/calendar/economic?from=${todayStr}&to=${futureDateStr}&token=${FINNHUB}`, 10000
-      );
-
-      // Only US high-impact and key market-moving events
-      const KEY_EVENTS = [
-        'fomc','federal reserve','fed rate','interest rate decision','federal funds',
-        'cpi','consumer price index','core cpi','inflation',
-        'pce','personal consumption','core pce',
-        'gdp','gross domestic product',
-        'nonfarm','non-farm','payroll','jobs report','employment situation',
-        'unemployment','jobless claims','initial claims',
-        'retail sales','core retail',
-        'ism manufacturing','ism services','ism non-manufacturing','purchasing managers',
-        'housing starts','building permits','existing home','new home sales',
-        'durable goods','factory orders',
-        'trade balance','current account',
-        'powell','chair','fed governor','fed president','fed speaker',
-        'ppi','producer price',
-        'consumer confidence','michigan sentiment','consumer sentiment',
-        'treasury','debt ceiling','budget'
-      ];
-
+      const futEnd90 = new Date(nowDate); futEnd90.setDate(futEnd90.getDate()+90);
+      const to90 = futEnd90.toISOString().split('T')[0];
+      const data = await fetchWithTimeout_yf(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to90}&token=${FINNHUB}`, 10000);
+      const KEY_EVENTS = ['fomc','federal reserve','fed rate','interest rate','cpi','consumer price','core cpi','pce','personal consumption','gdp','nonfarm','non-farm','payroll','jobs report','employment situation','unemployment','jobless claims','initial claims','retail sales','ism manufacturing','ism services','ism non-manufacturing','powell','fed governor','ppi','producer price','consumer confidence','michigan sentiment','housing starts','building permits','durable goods','trade balance'];
       const allEvents = data?.economicCalendar || [];
-      const todayDateStr = todayStr;
-
       const filtered = allEvents.filter(e => {
-        // Only US events
-        const country = (e.country || '').toUpperCase();
+        const country = (e.country||'').toUpperCase();
         if (country !== 'US' && country !== 'UNITED STATES') return false;
-        // Only upcoming (on or after today)
-        const eventDate = (e.time || '').split(' ')[0];
-        if (eventDate && eventDate < todayDateStr) return false;
-        // Must be high impact OR match a key event keyword
         const isHigh = e.impact === 'high';
-        const isKey = KEY_EVENTS.some(k => (e.event || '').toLowerCase().includes(k));
+        const isKey = KEY_EVENTS.some(k => (e.event||'').toLowerCase().includes(k));
         return isHigh || isKey;
-      }).sort((a,b) => (a.time||'').localeCompare(b.time||'')).slice(0,50);
-
-      tableEl.innerHTML = filtered.length ? `
-        <tr><th>Date</th><th>Time (ET)</th><th>Event</th><th>Impact</th></tr>
-        ${filtered.map(e => {
-          const ic = e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';
-          const ds = (e.time||'—').split(' ')[0];
-          const ts = (e.time||'').split(' ')[1] || 'TBD';
-          const isKey = KEY_EVENTS.some(k => (e.event||'').toLowerCase().includes(k));
-          const rowBg = e.impact==='high' ? 'background:#fff5f5;' : '';
-          return `<tr style="${rowBg}">
+      }).sort((a,b)=>(a.time||'').localeCompare(b.time||'')).slice(0,50);
+      tableEl.innerHTML = filtered.length ? `<tr><th>Date</th><th>Time (ET)</th><th>Event</th><th>Impact</th></tr>
+        ${filtered.map(e=>{
+          const ic=e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';
+          const ds=(e.time||'—').split(' ')[0];
+          const ts=(e.time||'').split(' ')[1]||'TBD';
+          const isKey=KEY_EVENTS.some(k=>(e.event||'').toLowerCase().includes(k));
+          return `<tr style="${e.impact==='high'?'background:#fff5f5;':''}">
             <td><strong>${ds}</strong></td>
             <td style="color:var(--gray)">${ts}</td>
-            <td>
-              <strong>${e.event||'—'}</strong>
-              ${isKey ? ' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">KEY</span>' : ''}
-            </td>
+            <td><strong>${e.event||'—'}</strong>${isKey?' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">KEY</span>':''}</td>
             <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:${ic}22;color:${ic}">${e.impact==='high'?'High':e.impact==='medium'?'Medium':'Low'}</span></td>
           </tr>`;
         }).join('')}` :
-        '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No upcoming major US economic events found. Check back soon.</td></tr>';
+        '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No upcoming major US economic events found.</td></tr>';
     } catch(e) {
-      tableEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Could not load economic calendar. Try again in 30 seconds.</td></tr>';
+      tableEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Could not load. Try again in 30 seconds.</td></tr>';
     }
     if (loadEl) loadEl.style.display = 'none';
     return;
   }
 
   try {
-    // Get earnings from 2026-05-01 to 2026-06-30
     let data = calCache;
-
     if (!data) {
-      const r = await fetchWithTimeout_yf(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`, 8000);
-      if (r && r.earningsCalendar) {
-        calCache = r.earningsCalendar;
-        data = calCache;
-      }
+      const r = await fetchWithTimeout_yf(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`, 10000);
+      if (r && r.earningsCalendar) { calCache = r.earningsCalendar; data = calCache; }
     }
-
     if (!data) {
-      if (tableEl) tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';
+      tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar. Try again in 30 seconds.</td></tr>';
       if (loadEl) loadEl.style.display = 'none';
       return;
     }
-
-    // Filter by portfolio if needed
     const portfolioTickers = new Set([...S.holdings.map(h=>h.ticker)]);
-    let filtered = type === 'portfolio'
-      ? data.filter(e => portfolioTickers.has(e.symbol))
-      : data;
-
-    // Sort by date
-    filtered = filtered.sort((a,b) => a.date.localeCompare(b.date)).slice(0, 50);
-
+    let filtered = type === 'portfolio' ? data.filter(e=>portfolioTickers.has(e.symbol)) : data;
+    filtered = filtered.sort((a,b)=>a.date.localeCompare(b.date)).slice(0,60);
     if (!filtered.length) {
-      tableEl.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings in this period.':'No earnings data found.'}</td></tr>`;
+      tableEl.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings.':'No earnings data found.'}</td></tr>`;
       if (loadEl) loadEl.style.display = 'none';
       return;
     }
-
-    tableEl.innerHTML = `
-      <tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Estimate</th><th>In Portfolio</th></tr>
-      ${filtered.map(e => {
-        const inPort = portfolioTickers.has(e.symbol);
-        const when = e.hour === 'bmo' ? '<span class="cal-badge-bmo">Before Open</span>' :
-                     e.hour === 'amc' ? '<span class="cal-badge-amc">After Close</span>' :
-                     '<span class="cal-badge-tns">TBD</span>';
-        return `<tr style="${inPort?'background:#eff6ff;':''}">
-          <td>${e.date}</td>
-          <td class="ticker-cell">${e.symbol}</td>
-          <td>${e.company || '—'}</td>
-          <td>${when}</td>
-          <td>${e.epsEstimate != null ? '$'+parseFloat(e.epsEstimate).toFixed(2) : '—'}</td>
-          <td>${inPort ? '✅ Yes' : '—'}</td>
-        </tr>`;
+    tableEl.innerHTML = `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Estimate</th><th>In Portfolio</th></tr>
+      ${filtered.map(e=>{
+        const inPort=portfolioTickers.has(e.symbol);
+        const when=e.hour==='bmo'?'<span class="cal-badge-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-badge-amc">After Close</span>':'<span class="cal-badge-tns">TBD</span>';
+        return `<tr style="${inPort?'background:#eff6ff;':''}"><td>${e.date}</td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td>${inPort?'✅ Yes':'—'}</td></tr>`;
       }).join('')}`;
   } catch(e) {
-    if (tableEl) tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';
+    tableEl.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';
   }
   if (loadEl) loadEl.style.display = 'none';
 }
 
-// ── PRICE TARGETS ─────────────────────────────────────────────────────────────
-async function loadPriceTargets() {
-  // Fetch WS targets from Yahoo Finance for all unique tickers
-  const allH = [...new Map(
-    [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
-    .map(h=>[h.ticker,h])
-  ).values()];
-
-  // Fetch in background - show N/A until loaded
-  renderTargetsTable(allH);
-
-  // Fetch WS targets from Yahoo Finance
-  const batchSize = 5;
-  for (let i = 0; i < allH.length; i += batchSize) {
-    const batch = allH.slice(i, i + batchSize);
-    await Promise.all(batch.map(async h => {
-      if (wsTargetCache[h.ticker] !== undefined) return;
-      try {
-        const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${h.ticker}?modules=financialData`;
-        const d = await fetchWithTimeout_yf(url, 6000);
-        const fd = d?.quoteSummary?.result?.[0]?.financialData;
-        wsTargetCache[h.ticker] = fd?.targetMeanPrice?.raw || null;
-      } catch(e) {
-        wsTargetCache[h.ticker] = null;
-      }
-    }));
-    renderTargetsTable(allH);
-    if (i + batchSize < allH.length) await new Promise(res=>setTimeout(res,300));
-  }
-}
-
-function renderTargetsTable(allH) {
-  const filter = document.querySelector('#tab-targets .filter-btn.active')?.textContent || 'All';
-  let holdings = allH;
-  if (filter === 'Endowment') holdings = allH.filter(h=>RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker));
-  else if (filter === 'CEE Fund') holdings = allH.filter(h=>RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker));
-
-  const sorted = [...holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
-
-  document.getElementById('targetsTable').innerHTML = `
-    <tr>
-      <th>Ticker</th><th>Company</th><th>Fund</th><th>Current Price</th>
-      <th>Club Target</th><th>Club Upside</th>
-      <th>WS Target</th><th>WS Upside</th>
-      <th>We vs WS</th>
-    </tr>
-    ${sorted.map(h => {
-      const price = h.price || 0;
-      const clubTarget = clubTargets[h.ticker] || null;
-      const wsTarget = wsTargetCache[h.ticker] !== undefined ? wsTargetCache[h.ticker] : 'loading';
-      const clubUpside = clubTarget && price ? (clubTarget - price) / price * 100 : null;
-      const wsUpside = wsTarget && wsTarget !== 'loading' && price ? (wsTarget - price) / price * 100 : null;
-      const vsWS = clubUpside !== null && wsUpside !== null ? clubUpside - wsUpside : null;
-
-      const inEnd = RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker);
-      const inCee = RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker);
-      const fundLabel = inEnd&&inCee?'Both':inEnd?'Endowment':'CEE Fund';
-      const fundColor = inEnd&&inCee?'#fef9c3':inEnd?'#dbeafe':'#fce7f3';
-      const fundText = inEnd&&inCee?'#854d0e':inEnd?'#1e40af':'#9d174d';
-
-      return `<tr>
-        <td class="ticker-cell">${h.ticker}</td>
-        <td>${h.company}</td>
-        <td><span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${fundColor};color:${fundText}">${fundLabel}</span></td>
-        <td><strong>${price ? '$'+price.toFixed(2) : '—'}</strong></td>
-        <td contenteditable="true" 
-            style="color:var(--blue);font-weight:600;cursor:pointer;min-width:80px"
-            onblur="saveClubTarget('${h.ticker}',this)"
-            title="Click to edit">${clubTarget ? '$'+clubTarget.toFixed(2) : 'Click to set'}</td>
-        <td class="${clubUpside===null?'':clubUpside>=0?'pos':'neg'}" style="font-weight:700">
-          ${clubUpside!==null ? (clubUpside>=0?'+':'')+clubUpside.toFixed(1)+'%' : '—'}
-        </td>
-        <td style="font-weight:600;color:var(--navy)">
-          ${wsTarget==='loading'?'<span style="color:var(--muted);font-size:10px">Loading...</span>':wsTarget?'$'+parseFloat(wsTarget).toFixed(2):'N/A'}
-        </td>
-        <td class="${wsUpside===null?'':wsUpside>=0?'pos':'neg'}" style="font-weight:700">
-          ${wsUpside!==null ? (wsUpside>=0?'+':'')+wsUpside.toFixed(1)+'%' : '—'}
-        </td>
-        <td style="font-weight:700;color:${vsWS===null?'var(--muted)':vsWS>0?'var(--blue)':vsWS<0?'var(--red)':'var(--gray)'}">
-          ${vsWS!==null ? (vsWS>0?'↑ More bullish':vsWS<0?'↓ More bearish':'= In line') : '—'}
-          ${vsWS!==null ? '<span style="font-size:10px;font-weight:400"> ('+( vsWS>=0?'+':'')+vsWS.toFixed(1)+'%)</span>' : ''}
-        </td>
-      </tr>`;
-    }).join('')}`;
-}
-
-function saveClubTarget(ticker, cell) {
-  const text = cell.textContent.trim().replace('$','').replace('Click to set','');
-  const val = parseFloat(text);
-  if (!isNaN(val) && val > 0) {
-    clubTargets[ticker] = val;
-    localStorage.setItem('cee_club_targets', JSON.stringify(clubTargets));
-    // Refresh the row
-    const allH = [...new Map(
-      [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
-      .map(h=>[h.ticker,h])
-    ).values()];
-    renderTargetsTable(allH);
-  }
-}
-
-function filterTargets(filter, btn) {
-  document.querySelectorAll('#tab-targets .filter-btn').forEach(b=>b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  const allH = [...new Map(
-    [...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs]
-    .map(h=>[h.ticker,h])
-  ).values()];
-  renderTargetsTable(allH);
-}
-
-
-
-
-async function showSectorComparePeriod(sectorName, cardEl) {
-  if (cardEl) {
-    document.querySelectorAll('.sc-card').forEach(c=>c.classList.remove('active'));
-    cardEl.classList.add('active');
-  }
-  activeSCSector = sectorName;
-  currentSCView = 'top';
-  await renderSCChart(sectorName, 'top', activeSCPeriod);
-}
-
-async function renderSCChart(sectorName, view, period) {
-  const sectors = calcSectors(S.holdings, S.total);
-  const sec = sectors.find(s=>s.name===sectorName);
-  if (!sec) return;
-  const equities = sec.holdings.filter(h=>h.type==='equity');
-  const etfs = sec.holdings.filter(h=>h.type==='etf');
-  const benchmark = SECTOR_BENCHMARKS[sectorName] || 'SPY';
-  currentSCView = view;
-
-  document.getElementById('sectorCompareDetail').style.display='block';
-  const loadEl = document.getElementById('scPeriodLoading');
-  if (loadEl) loadEl.textContent = '⏳ Loading...';
-
-  // Fetch returns for needed tickers
-  const returns = {};
-  const toFetch = [...new Set([...equities.map(h=>h.ticker),...etfs.map(h=>h.ticker),benchmark])];
-
-  if (period === '1D') {
-    [...equities,...etfs].forEach(h=>{ returns[h.ticker] = h.dayPct ? h.dayPct*100 : 0; });
-    const bHist = await fetchHistorical(benchmark, '1D');
-    returns[benchmark] = bHist ? bHist.pct : 0;
-  } else {
-    await Promise.all(toFetch.map(async tk=>{
-      const hist = await fetchHistorical(tk, period);
-      returns[tk] = hist ? hist.pct : null;
-    }));
-  }
-
-  if (loadEl) loadEl.textContent = '';
-
-  const eqMV = equities.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const etfMV = etfs.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const eqReturn = equities.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h]))*(h.marketValue||0)/eqMV,0);
-  const etfReturn = etfs.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h]))*(h.marketValue||0)/etfMV,0);
-  const benchReturn = returns[benchmark] ?? 0;
-  const alpha = eqReturn - benchReturn;
-
-  // Title with back button
-  const titleEl = document.getElementById('scChartTitle');
-  if (view !== 'top') {
-    titleEl.innerHTML = `${sectorName} ${view==='equities'?'Equities':'ETFs'} — ${period} <span style="color:var(--blue);cursor:pointer;font-size:11px;margin-left:8px" onclick="renderSCChart('${sectorName}','top','${period}')">← Back</span>`;
-  } else {
-    titleEl.textContent = `${sectorName} — ${period}: Equities vs ETFs vs ${benchmark}`;
-  }
-
-  // KPI cards
-  document.getElementById('scKpis').innerHTML = `
-    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'};border-color:${view==='equities'?'var(--navy)':'var(--border)'}" 
-         onclick="${view==='top'?`renderSCChart('${sectorName}','equities','${period}')`:''}" title="${view==='top'?'Click to see individual equities':''}">
-      <div class="perf-label">Equities${view==='top'?' ▶':''}</div>
-      <div class="perf-value ${eqReturn>=0?'pos':'neg'}">${eqReturn>=0?'+':''}${eqReturn.toFixed(2)}%</div>
-      <div class="perf-sub">${equities.length} stocks · ${period}</div>
-    </div>
-    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'};border-color:${view==='etfs'?'var(--navy)':'var(--border)'}"
-         onclick="${view==='top'?`renderSCChart('${sectorName}','etfs','${period}')`:''}" title="${view==='top'?'Click to see individual ETFs':''}">
-      <div class="perf-label">ETFs${view==='top'?' ▶':''}</div>
-      <div class="perf-value ${etfReturn>=0?'pos':'neg'}">${etfReturn>=0?'+':''}${etfReturn.toFixed(2)}%</div>
-      <div class="perf-sub">${etfs.length} ETFs · ${period}</div>
-    </div>
-    <div class="perf-card">
-      <div class="perf-label">${benchmark} Benchmark</div>
-      <div class="perf-value ${benchReturn>=0?'pos':'neg'}">${benchReturn>=0?'+':''}${benchReturn.toFixed(2)}%</div>
-      <div class="perf-sub">Sector ETF · ${period}</div>
-    </div>
-    <div class="perf-card">
-      <div class="perf-label">Alpha vs ${benchmark}</div>
-      <div class="perf-value ${alpha>=0?'pos':'neg'}">${alpha>=0?'+':''}${alpha.toFixed(2)}%</div>
-      <div class="perf-sub">Equities vs benchmark</div>
-    </div>
-    <div class="perf-card">
-      <div class="perf-label">Sector Weight</div>
-      <div class="perf-value">${(sec.pct*100).toFixed(1)}%</div>
-      <div class="perf-sub">of ${S.fundName}</div>
-    </div>
-    <div class="perf-card">
-      <div class="perf-label">Sector Beta</div>
-      <div class="perf-value">${sec.beta.toFixed(4)}</div>
-      <div class="perf-sub">Weighted avg</div>
-    </div>
-  `;
-
-  // Chart
-  let labels, vals, bgColors, borderColors;
-  if (view === 'top') {
-    labels = ['Equities ▶', 'ETFs ▶', `${benchmark} ★`];
-    vals = [parseFloat(eqReturn.toFixed(2)), parseFloat(etfReturn.toFixed(2)), parseFloat(benchReturn.toFixed(2))];
-    bgColors = ['rgba(0,31,91,0.7)','rgba(157,23,77,0.7)','rgba(249,115,22,0.8)'];
-    borderColors = ['#001F5B','#9d174d','#f97316'];
-  } else {
-    const holdings = view==='equities' ? equities : etfs;
-    const sorted = [...holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
-    labels = [...sorted.map(h=>h.ticker), `${benchmark}★`];
-    const holdingVals = sorted.map(h=>parseFloat((returns[h.ticker]??calcReturn([h])).toFixed(2)));
-    vals = [...holdingVals, parseFloat(benchReturn.toFixed(2))];
-    const posColor = view==='equities'?'rgba(0,31,91,0.7)':'rgba(157,23,77,0.7)';
-    const posBorder = view==='equities'?'#001F5B':'#9d174d';
-    bgColors = [...holdingVals.map(v=>v>=0?posColor:'rgba(220,38,38,0.5)'), 'rgba(249,115,22,0.8)'];
-    borderColors = [...holdingVals.map(v=>v>=0?posBorder:'#dc2626'), '#f97316'];
-  }
-
-  if (scChartRef) scChartRef.destroy();
-  const ctx = document.getElementById('scChart').getContext('2d');
-  scChartRef = new Chart(ctx, {
-    type:'bar',
-    data:{ labels, datasets:[{ data:vals, backgroundColor:bgColors, borderColor:borderColors, borderWidth:1.5, borderRadius:4 }] },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      onClick: view==='top'?(evt,els)=>{ if(!els.length)return; const i=els[0].index; if(i===0)renderSCChart(sectorName,'equities',period); else if(i===1)renderSCChart(sectorName,'etfs',period); }:null,
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{
-          label:c=>`${c.label.replace('▶','').replace('★','')}: ${c.parsed.y>=0?'+':''}${c.parsed.y.toFixed(2)}%`,
-          afterLabel:view==='top'?c=>c.dataIndex<2?'Click to see individual holdings':'':(()=>'')
-        }}
-      },
-      scales:{
-        y:{ticks:{callback:v=>(v>=0?'+':'')+v+'%',font:{size:11}},grid:{color:'#f1f5f9'}},
-        x:{ticks:{font:{size:view==='top'?12:10},maxRotation:view==='top'?0:45},grid:{display:false}}
-      }
-    }
-  });
-
-  // Tables
-  const hdrRow = `<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>${period} Return</th><th>Total Return</th><th>Beta</th></tr>`;
-  const makeRow = (h,ret) => {
-    const rv = ret!==null&&ret!==undefined ? ret : calcReturn([h]);
-    const tr = h.glPct ? h.glPct*100 : 0;
-    return `<tr><td class="ticker-cell">${h.ticker}</td><td>${h.company}</td><td>$${fmt(h.marketValue||0)}</td>
-    <td class="${rv>=0?'pos':'neg'}" style="font-weight:700">${(rv>=0?'+':'')+rv.toFixed(2)}%</td>
-    <td class="${tr>=0?'pos':'neg'}">${(tr>=0?'+':'')+tr.toFixed(1)}%</td>
-    <td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;
-  };
-  document.getElementById('scEqTable').innerHTML = equities.length ? hdrRow+[...equities].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).map(h=>makeRow(h,returns[h.ticker])).join('') : '<tr><td colspan="6" style="color:var(--muted);text-align:center">No equities</td></tr>';
-  document.getElementById('scEtfTable').innerHTML = etfs.length ? hdrRow+[...etfs].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).map(h=>makeRow(h,returns[h.ticker])).join('') : '<tr><td colspan="6" style="color:var(--muted);text-align:center">No ETFs</td></tr>';
-
-  document.getElementById('scLegend').innerHTML = view==='top'
-    ? `<div class="legend-item"><div class="legend-dot" style="background:#001F5B"></div><span>Equities (click bar)</span></div>
-       <div class="legend-item"><div class="legend-dot" style="background:#9d174d"></div><span>ETFs (click bar)</span></div>
-       <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span>${benchmark} Benchmark</span></div>`
-    : `<div class="legend-item"><div class="legend-dot" style="background:${view==='equities'?'#001F5B':'#9d174d'}"></div><span>Individual ${view==='equities'?'Equities':'ETFs'}</span></div>
-       <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span>${benchmark} Benchmark ★</span></div>
-       <span style="font-size:11px;color:var(--blue);cursor:pointer;margin-left:12px" onclick="renderSCChart('${sectorName}','top','${period}')">← Back to overview</span>`;
-
-  document.getElementById('sectorCompareDetail').scrollIntoView({behavior:'smooth',block:'start'});
-}
-
-// ── PERFORMANCE CHART WITH YAHOO FINANCE ──────────────────────────────────────
-// (duplicate buildPerfChartPeriod removed)
-
-
-
-
-window.addEventListener('load', init);
-</script>
-</body>
-</html>
+>
