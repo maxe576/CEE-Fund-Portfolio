@@ -574,8 +574,9 @@ function calcCostReturn(holdings) {
 function renderAll() {
   renderKPIs(); renderSectorBarsOverview(); renderComposition();
   renderTop10(); renderHoldings('all'); renderSectorDetail();
-  renderSectorBeta(); renderBenchmark(); renderTargets('all');
+  renderSectorBeta(); renderBenchmark();
   renderSectorCards();
+  // Price targets loaded on demand when tab is opened
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
