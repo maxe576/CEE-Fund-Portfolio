@@ -591,7 +591,7 @@ function renderBenchmark() {
   const fundBeta=S.beta;
   document.getElementById('riskComparison').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Metric</span><span style="text-align:center">${S.fundName}</span><span style="text-align:center">S&P 500</span></div>
-    ${[['Beta',fundBeta.toFixed(4),'1.0000'],['Total Return',calcReturn(S.holdings,S.fund).toFixed(2)+'%','See chart'],['Positions',S.holdings.length,'500'],['Top Holding Wt',((Math.max(...S.holdings.map(h=>h.marketValue||0))/S.total)*100).toFixed(1)+'%','~7%'],['Cash Weight',(S.cash/S.total*100).toFixed(1)+'%','~0%']].map(([l,f,sp])=>`
+    ${[['Beta',fundBeta.toFixed(4),'1.0000'],['Positions',S.holdings.length,'500'],['Top Holding Wt',((Math.max(...S.holdings.map(h=>h.marketValue||0))/S.total)*100).toFixed(1)+'%','~7%'],['Cash Weight',(S.cash/S.total*100).toFixed(1)+'%','~0%']].map(([l,f,sp])=>`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
     <span style="color:var(--gray)">${l}</span><span style="text-align:center;font-weight:700;color:var(--navy)">${f}</span><span style="text-align:center;color:var(--gray)">${sp}</span></div>`).join('')}`;
   const rows=Object.keys(SP500_SECTORS).map(sec=>{
