@@ -1187,10 +1187,34 @@ Top sectors: ${sectors.slice(0,5).map(s=>`${s.name} ${(s.pct*100).toFixed(1)}% (
 Transactions 2026: ${TRANSACTIONS.length} | S&P 500 sector weights available for comparison.
 Answer concisely and professionally.`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:context,messages:[{role:'user',content:msg}]})});
-    const data=await res.json();
-    document.getElementById('aiTyping').textContent=data.content?.[0]?.text||'Check your API key and try again.';
-  }catch(e){document.getElementById('aiTyping').textContent='Connection error. Check your API key.';}
+    const body = JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      system:context,
+      messages:[{role:'user',content:msg}]
+    });
+    const headers = {
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    };
+    let res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers,body});
+    // If CORS blocks direct call, try via allorigins proxy
+    if(!res.ok && res.status === 0) {
+      const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.anthropic.com/v1/messages');
+      res = await fetch(proxyUrl, {method:'POST', headers, body});
+    }
+    const data = await res.json();
+    if(data.error) {
+      document.getElementById('aiTyping').textContent = 'API Error: ' + (data.error.message || JSON.stringify(data.error));
+    } else {
+      document.getElementById('aiTyping').textContent = data.content?.[0]?.text || 'No response received.';
+    }
+  }catch(e){
+    console.error('AI error:', e);
+    document.getElementById('aiTyping').textContent = 'Connection error: ' + (e.message||'Unknown') + '. The API may be blocked by your browser security settings.';
+  }
   chatBox.scrollTop=chatBox.scrollHeight;
 }
 
@@ -1305,14 +1329,23 @@ async function renderSCChart(sectorName, view, period) {
   const toFetch = [...new Set([...equities.map(h=>h.ticker),...etfs.map(h=>h.ticker),benchmark])];
 
   if (period === '1D') {
-    [...equities,...etfs].forEach(h=>{ returns[h.ticker] = h.dayPct ? h.dayPct*100 : 0; });
-    const bHist = await fetchHistorical(benchmark, '1D');
-    returns[benchmark] = bHist ? bHist.pct : 0;
-  } else {
-    await Promise.all(toFetch.map(async tk=>{
-      const hist = await fetchHistorical(tk, period);
-      returns[tk] = hist ? hist.pct : null;
-    }));
+    [...equities,...etfs].forEach(h=>{ returns[h.ticker] = h.dayPct !== undefined ? h.dayPct*100 : null; });
+  }
+  // Always fetch benchmark first separately to ensure it loads
+  const bHist = await fetchHistorical(benchmark, period);
+  returns[benchmark] = bHist ? bHist.pct : null;
+
+  if (period !== '1D') {
+    // Fetch holdings in batches
+    const holdingTickers = toFetch.filter(tk => tk !== benchmark);
+    for (let i=0; i<holdingTickers.length; i+=6) {
+      await Promise.all(holdingTickers.slice(i,i+6).map(async tk=>{
+        if (returns[tk] !== undefined) return;
+        const hist = await fetchHistorical(tk, period);
+        returns[tk] = hist ? hist.pct : null;
+      }));
+      if (i+6 < holdingTickers.length) await new Promise(r=>setTimeout(r,200));
+    }
   }
 
   if (loadEl) loadEl.textContent = '';
