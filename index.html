@@ -265,7 +265,7 @@ tr:last-child td{border-bottom:none}
         <button class="filter-btn" onclick="filterTargets('CEE Fund',this)">CEE Fund</button>
       </div>
     </div>
-    <p style="font-size:11px;color:var(--muted);margin-bottom:12px">WS targets fetched live from Yahoo Finance. Click Club Target cell to edit — saves automatically.</p>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:12px">Click any Club Target cell to set your price target — saves automatically in your browser. Signal shown based on upside from current price.</p>
     <div class="tbl-wrap"><table id="targetsTable"></table></div>
   </div>
 </div>
@@ -298,7 +298,7 @@ tr:last-child td{border-bottom:none}
       <button class="chat-send" onclick="sendChat()">Send →</button>
     </div>
     <div style="margin-top:8px;font-size:11px;color:var(--muted)">
-      Claude API key: <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;width:240px;margin-left:4px" onchange="saveApiKey(this.value)">
+      Claude API key (optional — key is embedded): <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;width:240px;margin-left:4px" onchange="saveApiKey(this.value)">
       <button onclick="clearApiKey()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:white;cursor:pointer;margin-left:4px;color:var(--gray)">Clear</button>
       <span id="apiKeyStatus" style="font-size:10px;color:var(--green);margin-left:6px"></span>
       <span style="display:block;font-size:10px;color:var(--muted);margin-top:4px;margin-left:130px">Saved in your browser — auto-loads next time.</span>
@@ -897,24 +897,7 @@ function calcWhatIf() {
 
 // ── PRICE TARGETS ─────────────────────────────────────────────────────────────
 function loadPriceTargets() {
-  const allH=ALL_HOLDINGS();
-  renderTargetsTable(allH);
-  // Fetch WS targets from Yahoo Finance
-  const batchSize=5;
-  (async()=>{
-    for(let i=0;i<allH.length;i+=batchSize){
-      await Promise.all(allH.slice(i,i+batchSize).map(async h=>{
-        if(wsTargetCache[h.ticker]!==undefined)return;
-        try{
-          const url=`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${h.ticker}?modules=financialData`;
-          const d=await fetchYF(url,6000);
-          wsTargetCache[h.ticker]=d?.quoteSummary?.result?.[0]?.financialData?.targetMeanPrice?.raw||null;
-        }catch(e){wsTargetCache[h.ticker]=null;}
-      }));
-      renderTargetsTable(allH);
-      if(i+batchSize<allH.length)await new Promise(r=>setTimeout(r,300));
-    }
-  })();
+  renderTargetsTable(ALL_HOLDINGS());
 }
 
 function renderTargetsTable(allH) {
@@ -926,27 +909,23 @@ function renderTargetsTable(allH) {
   const inEnd=t=>RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===t);
   const inCee=t=>RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===t);
   document.getElementById('targetsTable').innerHTML=`
-    <tr><th>Ticker</th><th>Company</th><th>Fund</th><th>Current Price</th><th>Club Target</th><th>Club Upside</th><th>WS Target</th><th>WS Upside</th><th>We vs WS</th></tr>
+    <tr><th>Ticker</th><th>Company</th><th>Fund</th><th>Current Price</th><th>Club Target</th><th>Club Upside/Downside</th><th>Signal</th></tr>
     ${sorted.map(h=>{
       const price=h.price||0;
       const ct=clubTargets[h.ticker]||null;
-      const wst=wsTargetCache[h.ticker]!==undefined?wsTargetCache[h.ticker]:'loading';
       const cu=ct&&price?(ct-price)/price*100:null;
-      const wu=wst&&wst!=='loading'&&price?(wst-price)/price*100:null;
-      const vsWS=cu!==null&&wu!==null?cu-wu:null;
       const ie=inEnd(h.ticker),ic=inCee(h.ticker);
       const fl=ie&&ic?'Both':ie?'Endowment':'CEE Fund';
       const fc=ie&&ic?'#fef9c3':ie?'#dbeafe':'#fce7f3';
       const ft=ie&&ic?'#854d0e':ie?'#1e40af':'#9d174d';
+      const signal=cu===null?'—':cu>15?'🟢 Strong Buy':cu>5?'🔵 Buy':cu>-5?'⚪ Hold':cu>-15?'🟡 Reduce':'🔴 Sell';
       return `<tr>
         <td class="ticker-cell">${h.ticker}</td><td>${h.company}</td>
         <td><span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${fc};color:${ft}">${fl}</span></td>
         <td><strong>${price?'$'+price.toFixed(2):'—'}</strong></td>
         <td contenteditable="true" style="color:var(--blue);font-weight:600;cursor:pointer;min-width:80px" onblur="saveClubTarget('${h.ticker}',this)" title="Click to edit">${ct?'$'+ct.toFixed(2):'Click to set'}</td>
-        <td class="${cu===null?'':cu>=0?'pos':'neg'}" style="font-weight:700">${cu!==null?(cu>=0?'+':'')+cu.toFixed(1)+'%':'—'}</td>
-        <td style="font-weight:600;color:var(--navy)">${wst==='loading'?'<span style="color:var(--muted);font-size:10px">Loading...</span>':wst?'$'+parseFloat(wst).toFixed(2):'N/A'}</td>
-        <td class="${wu===null?'':wu>=0?'pos':'neg'}" style="font-weight:700">${wu!==null?(wu>=0?'+':'')+wu.toFixed(1)+'%':'—'}</td>
-        <td style="font-weight:700;color:${vsWS===null?'var(--muted)':vsWS>0?'var(--blue)':vsWS<0?'var(--red)':'var(--gray)'}">${vsWS!==null?(vsWS>0?'↑ More bullish':vsWS<0?'↓ More bearish':'= In line'):'—'}${vsWS!==null?' <span style="font-size:10px;font-weight:400">('+(vsWS>=0?'+':'')+vsWS.toFixed(1)+'%)</span>':''}</td>
+        <td class="${cu===null?'':cu>=0?'pos':'neg'}" style="font-weight:700;font-size:14px">${cu!==null?(cu>=0?'+':'')+cu.toFixed(1)+'%':'—'}</td>
+        <td style="font-size:12px">${signal}</td>
       </tr>`;
     }).join('')}`;
 }
@@ -1195,8 +1174,10 @@ async function sendChat(){
   chatBox.innerHTML+=`<div class="msg user">${msg}</div>`;
   chatBox.innerHTML+=`<div class="msg ai" id="aiTyping">Thinking...</div>`;
   chatBox.scrollTop=chatBox.scrollHeight;
-  const apiKey=document.getElementById('apiKeyInput').value.trim()||localStorage.getItem('cee_claude_key')||'';
-  if(!apiKey||apiKey.length<20){document.getElementById('aiTyping').textContent='Please paste your Claude API key below the chat box. It saves automatically.';return;}
+  const HARDCODED_KEY = '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';
+  const apiKey = HARDCODED_KEY.startsWith('sk-ant') ? HARDCODED_KEY :
+    (document.getElementById('apiKeyInput').value.trim()||localStorage.getItem('cee_claude_key')||'');
+  if(!apiKey||apiKey.length<20){document.getElementById('aiTyping').textContent='Please paste your Claude API key below the chat box.';return;}
   const sectors=calcSectors(S.holdings,S.total);
   const context=`You are an investment analyst for the CNU Captains Educational Enrichment Fund.
 Active fund: ${S.fundName} | Total: $${fmt(S.total)} | Beta: ${S.beta.toFixed(4)}
