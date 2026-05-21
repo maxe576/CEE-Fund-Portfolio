@@ -261,6 +261,187 @@ tr:last-child td{border-bottom:none}
     <div class="tbl-wrap"><table id="calTable"></table></div>
   </div>
 </div>
+
+<!-- INVESTMENT THESIS -->
+<div id="tab-thesis" class="tab-panel">
+  <!-- Sector Cards Row -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">
+      Investment Thesis
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="filter-btn active" onclick="filterThesisEquities('all',this)">All</button>
+        <button class="filter-btn" onclick="filterThesisEquities('Growth',this)">🌱 Growth</button>
+        <button class="filter-btn" onclick="filterThesisEquities('Aggressive',this)">⚡ Aggressive</button>
+        <button class="filter-btn" onclick="filterThesisEquities('Yield',this)">💰 Yield</button>
+        <button class="filter-btn" onclick="filterThesisEquities('Defensive',this)">🛡 Defensive</button>
+        <select id="mcapFilter" onchange="filterThesisEquities('cap',this)" style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px">
+          <option value="">All Market Caps</option>
+          <option value="Mega Cap">Mega Cap (&gt;$200B)</option>
+          <option value="Large Cap">Large Cap ($10B-$200B)</option>
+          <option value="Mid Cap">Mid Cap ($2B-$10B)</option>
+          <option value="Small Cap">Small Cap (&lt;$2B)</option>
+        </select>
+        <select id="upsideSort" onchange="sortThesisTable(this.value)" style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px">
+          <option value="">Sort by...</option>
+          <option value="upside">Highest Upside</option>
+          <option value="return">Best Return</option>
+          <option value="weight">Highest Weight</option>
+          <option value="alpha">Alphabetical</option>
+        </select>
+      </div>
+    </div>
+    <!-- Sector Cards -->
+    <div id="thesisSectorCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px"></div>
+  </div>
+
+  <!-- Sector Thesis Panel (shown when sector clicked) -->
+  <div id="thesisSectorPanel" style="display:none;margin-bottom:16px">
+    <div class="card">
+      <div class="card-title">
+        <span id="thesisSectorName">Sector</span> Thesis
+        <button onclick="document.getElementById('thesisSectorPanel').style.display='none'" 
+          style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--gray)">← Back</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 300px;gap:16px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;display:block;margin-bottom:6px">Sector Thesis</label>
+          <textarea id="sectorThesisText" placeholder="Write your sector thesis here..." 
+            style="width:100%;height:100px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit"
+            oninput="autoSaveSectorThesis()"></textarea>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px" id="sectorThesisSaved"></div>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;display:block;margin-bottom:6px">Sector Composition</label>
+          <div style="position:relative;height:180px"><canvas id="sectorPieChart"></canvas></div>
+        </div>
+      </div>
+      <!-- Holdings in sector -->
+      <div style="margin-top:16px">
+        <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:8px">Holdings in Sector</div>
+        <div id="sectorHoldingsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Equity/ETF Detail Panel -->
+  <div id="thesisDetailPanel" style="display:none;margin-bottom:16px">
+    <div class="card">
+      <div class="card-title">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="detailTicker" style="font-size:18px;font-weight:800;color:var(--navy)"></span>
+          <span id="detailCompany" style="font-size:13px;color:var(--gray)"></span>
+          <span id="detailTag" style="font-size:10px;padding:2px 8px;border-radius:12px;font-weight:700"></span>
+          <a id="detailIR" href="#" target="_blank" rel="noopener" 
+            style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:white;color:var(--blue);text-decoration:none;font-weight:600">
+            🔗 Investor Relations
+          </a>
+        </div>
+        <button onclick="closeThesisDetail()" 
+          style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--gray)">← Back</button>
+      </div>
+
+      <!-- Quick stats row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:8px">
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Current Price</div><div style="font-size:16px;font-weight:700" id="detailPrice"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Cost Basis</div><div style="font-size:16px;font-weight:700" id="detailCost"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Purchase Date</div><div style="font-size:16px;font-weight:700" id="detailDate"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Current Return</div><div style="font-size:16px;font-weight:700" id="detailReturn"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Market Cap</div><div style="font-size:16px;font-weight:700" id="detailMcap"></div></div>
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Fund Weight</div><div style="font-size:16px;font-weight:700" id="detailWeight"></div></div>
+      </div>
+
+      <!-- ETF view (simple) -->
+      <div id="detailEtfView" style="display:none">
+        <label style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;display:block;margin-bottom:6px">Why We Hold This ETF</label>
+        <textarea id="etfNoteText" placeholder="Explain why this ETF was chosen for the portfolio..." 
+          style="width:100%;height:80px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit"
+          oninput="autoSaveEtfNote()"></textarea>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px" id="etfNoteSaved"></div>
+      </div>
+
+      <!-- Equity view (full) -->
+      <div id="detailEquityView" style="display:none">
+        <!-- Price Target Visual -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:10px">Price Targets</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="fg">
+              <label>🔴 Price Floor (Low)</label>
+              <input type="number" id="ptFloor" placeholder="e.g. 150.00" step="0.01" min="0" oninput="updatePriceBar()">
+            </div>
+            <div class="fg">
+              <label>🎯 Price Target (Base)</label>
+              <input type="number" id="ptBase" placeholder="e.g. 220.00" step="0.01" min="0" oninput="updatePriceBar()">
+            </div>
+            <div class="fg">
+              <label>🚀 High Case Target</label>
+              <input type="number" id="ptHigh" placeholder="e.g. 300.00" step="0.01" min="0" oninput="updatePriceBar()">
+            </div>
+          </div>
+          <!-- Price bar visualization -->
+          <div id="priceBarContainer" style="display:none;margin-bottom:12px">
+            <div style="position:relative;height:60px;margin:0 8px">
+              <div id="priceBarTrack" style="position:absolute;top:24px;left:0;right:0;height:12px;background:#e2e8f0;border-radius:6px"></div>
+              <div id="priceBarFill" style="position:absolute;top:24px;height:12px;border-radius:6px;background:linear-gradient(to right,#dc2626,#f97316,#16a34a);transition:all 0.3s"></div>
+              <div id="priceFloorMark" style="position:absolute;top:14px;width:2px;height:32px;background:#dc2626;border-radius:1px"></div>
+              <div id="priceCurrentMark" style="position:absolute;top:10px;width:3px;height:40px;background:#001F5B;border-radius:2px"></div>
+              <div id="priceTargetMark" style="position:absolute;top:14px;width:2px;height:32px;background:#f97316;border-radius:1px"></div>
+              <div id="priceHighMark" style="position:absolute;top:14px;width:2px;height:32px;background:#16a34a;border-radius:1px"></div>
+              <div id="priceFloorLabel" style="position:absolute;bottom:0;font-size:9px;color:#dc2626;font-weight:700;transform:translateX(-50%)"></div>
+              <div id="priceCurrentLabel" style="position:absolute;top:0;font-size:9px;color:#001F5B;font-weight:700;transform:translateX(-50%)">NOW</div>
+              <div id="priceTargetLabel" style="position:absolute;bottom:0;font-size:9px;color:#f97316;font-weight:700;transform:translateX(-50%)"></div>
+              <div id="priceHighLabel" style="position:absolute;bottom:0;font-size:9px;color:#16a34a;font-weight:700;transform:translateX(-50%)"></div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;flex-wrap:wrap" id="priceUpsideRow"></div>
+          </div>
+        </div>
+
+        <!-- Tag -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:8px">Investment Tag</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="tagButtons">
+            <button class="tag-btn" data-tag="Growth" onclick="selectTag('Growth',this)">🌱 Growth</button>
+            <button class="tag-btn" data-tag="Aggressive" onclick="selectTag('Aggressive',this)">⚡ Aggressive</button>
+            <button class="tag-btn" data-tag="Yield" onclick="selectTag('Yield',this)">💰 Yield</button>
+            <button class="tag-btn" data-tag="Defensive" onclick="selectTag('Defensive',this)">🛡 Defensive</button>
+          </div>
+        </div>
+
+        <!-- Thesis / Catalysts / Risks -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div class="fg">
+            <label>📝 Investment Thesis</label>
+            <textarea id="thesisText" placeholder="Why we own this stock..." 
+              style="height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+              oninput="autoSaveEquityThesis()"></textarea>
+          </div>
+          <div class="fg">
+            <label>⚡ Catalysts</label>
+            <textarea id="catalystsText" placeholder="Key upcoming events or triggers..." 
+              style="height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+              oninput="autoSaveEquityThesis()"></textarea>
+          </div>
+          <div class="fg">
+            <label>⚠️ Risks</label>
+            <textarea id="risksText" placeholder="Key risks to monitor..." 
+              style="height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+              oninput="autoSaveEquityThesis()"></textarea>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px" id="equityThesisSaved"></div>
+      </div>
+
+      <button class="calc-btn" onclick="saveThesisNow()" style="margin-top:16px">💾 Save</button>
+    </div>
+  </div>
+
+  <!-- Master Equity Table -->
+  <div class="card">
+    <div class="card-title">All Equities <span id="thesisCount" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
+    <div class="tbl-wrap"><table id="thesisMasterTable"></table></div>
+  </div>
+</div>
+
 <!-- WHAT-IF -->
 <div id="tab-whatif" class="tab-panel">
   <div class="card" style="margin-bottom:16px">
@@ -410,7 +591,9 @@ function renderAll() {
 function showTab(tab, btn) {
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
+  const panel = document.getElementById('tab-'+tab);
+  if (!panel) return; // panel not found, skip
+  panel.classList.add('active');
   btn.classList.add('active');
   if (tab==='news') loadNews('market');
   else if (tab==='calendar') loadCalendar('portfolio');
@@ -1908,19 +2091,25 @@ async function fetchMcap(ticker) {
   } catch(e) {}
 }
 
+// Embedded market caps (May 2026, in $M) — avoids Finnhub rate limits
+const MCAP_EMBEDDED = {'AAPL': 3100000, 'MSFT': 3000000, 'NVDA': 2800000, 'GOOG': 2000000, 'GOOGL': 2000000, 'AMZN': 2100000, 'META': 1400000, 'BRK.B': 1050000, 'TSM': 900000, 'LLY': 700000, 'V': 650000, 'MA': 500000, 'COST': 420000, 'NFLX': 410000, 'XOM': 480000, 'WMT': 780000, 'SPGI': 160000, 'ISRG': 185000, 'HD': 380000, 'KO': 260000, 'ABBV': 320000, 'SYK': 145000, 'CAT': 180000, 'PANW': 120000, 'ADI': 95000, 'CRWD': 115000, 'BX': 145000, 'TMUS': 230000, 'HCA': 75000, 'ORCL': 480000, 'CEG': 85000, 'GD': 75000, 'VMC': 32000, 'HWM': 38000, 'WM': 82000, 'DLR': 55000, 'COF': 65000, 'NUE': 15000, 'PLTR': 270000, 'DIS': 195000, 'TKO': 32000, 'FSLR': 18000, 'TTWO': 38000, 'GRMN': 38000, 'ET': 62000, 'DAR': 6500, 'SOUN': 4500, 'SOFI': 12000, 'IREN': 3200, 'HOOD': 22000, 'SBGSF': 45000, 'PFE': 155000};
+
 async function fetchMcapsForThesis() {
+  // Load embedded market caps instantly
+  Object.entries(MCAP_EMBEDDED).forEach(([tk, mcap]) => { mcapCache[tk] = mcap; });
+  renderMcapBreakdown();
+  // Then try to fetch any missing ones slowly in background
   const equities = [...new Set([...RAW.endowment.equities,...RAW.ceeFund.equities].map(h=>h.ticker))];
-  for (let i = 0; i < equities.length; i += 5) {
-    await Promise.all(equities.slice(i,i+5).map(tk => {
-      if (!mcapCache[tk]) return fetchMcap(tk);
-    }));
-    if (i+5 < equities.length) await new Promise(r => setTimeout(r, 400));
+  const missing = equities.filter(tk => !mcapCache[tk]);
+  for (let i = 0; i < missing.length; i++) {
+    await fetchMcap(missing[i]);
+    await new Promise(r => setTimeout(r, 2000)); // 1 per 2 seconds to avoid 429
   }
   renderMcapBreakdown();
 }
 
-// Also call on page load after a delay
-setTimeout(fetchMcapsForThesis, 4000);
+// Call on page load - embedded data is instant
+setTimeout(fetchMcapsForThesis, 2000);
 
 // ── MASTER TABLE ──────────────────────────────────────────────────────────────
 function filterThesisEquities(filter, el) {
