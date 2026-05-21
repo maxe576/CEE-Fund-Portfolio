@@ -1035,7 +1035,7 @@ async function loadCalendar(type){
       const r = await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`, 10000);
       const recentData = (r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
       tableEl.innerHTML = recentData.length ? `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Report</th></tr>
-        ${recentData.map(e=>{const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';const rUrl=`https://www.marketwatch.com/investing/stock/${e.symbol.toLowerCase()}/financials`;return `<tr style="background:#eff6ff"><td><strong>${e.date}</strong></td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td class="${e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):''}">${e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—'}</td><td><a href="${rUrl}" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">📄 View Report</a></td></tr>`;}).join('')}`
+        ${recentData.map(e=>{const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';const rUrl=IR_URLS[e.symbol]||ETF_IR_URLS[e.symbol]||`https://finance.yahoo.com/quote/${e.symbol}`;return `<tr style="background:#eff6ff"><td><strong>${e.date}</strong></td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td class="${e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):''}">${e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—'}</td><td><a href="${rUrl}" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">🔗 Investor Relations</a></td></tr>`;}).join('')}`
         : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio in the last 30 days.</td></tr>';
     } catch(e) { tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load recent earnings.</td></tr>'; }
     if(loadEl) loadEl.style.display='none'; return;
@@ -1541,30 +1541,67 @@ let sectorPieRef = null;
 let thesisAutoSaveTimer = null;
 
 // ── LOAD/SAVE from persistent storage ────────────────────────────────────────
+// ── JSONBIN SHARED STORAGE ───────────────────────────────────────────────────
+const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a0f90b56877513b27b009ed';
+const JSONBIN_KEY = '$2a$10$GIaYJQ.Ew64uvAcxG6IilOZZS/oWmxF8L/SKOi2TB6UmrKpmdRCeO';
+
 async function loadThesisFromStorage() {
-  try {
-    const r1 = await window.storage.get(STORAGE_KEY);
-    if (r1) thesisData = JSON.parse(r1.value);
-  } catch(e) { thesisData = {}; }
-  try {
-    const r2 = await window.storage.get(SECTOR_THESIS_KEY);
-    if (r2) sectorThesis = JSON.parse(r2.value);
-  } catch(e) { sectorThesis = {}; }
-  try {
-    const r3 = await window.storage.get(ETF_NOTES_KEY);
-    if (r3) etfNotes = JSON.parse(r3.value);
-  } catch(e) { etfNotes = {}; }
+  // Try JSONBin with master key (works for private bins)
+  for (const headers of [
+    { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' },
+    { 'X-Access-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' },
+    { 'X-Bin-Meta': 'false' }  // public read attempt
+  ]) {
+    try {
+      const r = await fetch(JSONBIN_URL + '/latest', { headers });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && (d.thesis || d.sectorThesis)) {
+          thesisData = d.thesis || {};
+          sectorThesis = d.sectorThesis || {};
+          etfNotes = d.etfNotes || {};
+          console.log('JSONBin loaded successfully');
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+  console.warn('JSONBin load failed, using localStorage');
+  // Fallback to localStorage
+  try { const d = localStorage.getItem(STORAGE_KEY); if (d) thesisData = JSON.parse(d); } catch(e) {}
+  try { const d = localStorage.getItem(SECTOR_THESIS_KEY); if (d) sectorThesis = JSON.parse(d); } catch(e) {}
+  try { const d = localStorage.getItem(ETF_NOTES_KEY); if (d) etfNotes = JSON.parse(d); } catch(e) {}
 }
 
-async function saveThesisToStorage() {
-  try { await window.storage.set(STORAGE_KEY, JSON.stringify(thesisData), true); } catch(e) {}
+async function saveAllToJSONBin() {
+  try {
+    await fetch(JSONBIN_URL, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_KEY
+      },
+      body: JSON.stringify({
+        thesis: thesisData,
+        sectorThesis: sectorThesis,
+        etfNotes: etfNotes
+      })
+    });
+    // Also save to localStorage as backup
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
+    localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
+    localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
+  } catch(e) {
+    // Fallback to localStorage only
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
+    localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
+    localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
+  }
 }
-async function saveSectorThesisToStorage() {
-  try { await window.storage.set(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis), true); } catch(e) {}
-}
-async function saveEtfNotesToStorage() {
-  try { await window.storage.set(ETF_NOTES_KEY, JSON.stringify(etfNotes), true); } catch(e) {}
-}
+
+async function saveThesisToStorage() { await saveAllToJSONBin(); }
+async function saveSectorThesisToStorage() { await saveAllToJSONBin(); }
+async function saveEtfNotesToStorage() { await saveAllToJSONBin(); }
 
 // ── INIT THESIS TAB ───────────────────────────────────────────────────────────
 async function initThesisTab() {
@@ -1664,7 +1701,7 @@ function autoSaveSectorThesis() {
     sectorThesis[currentThesisSector] = document.getElementById('sectorThesisText').value;
     await saveSectorThesisToStorage();
     const el = document.getElementById('sectorThesisSaved');
-    el.textContent = '✅ Saved';
+    el.textContent = '✅ Saved — visible to everyone';
     setTimeout(() => el.textContent = '', 2000);
     renderThesisSectorCards();
   }, 800);
@@ -1829,7 +1866,7 @@ async function saveThesisNow() {
   td.risks = document.getElementById('risksText').value;
   await saveThesisToStorage();
   const el = document.getElementById('equityThesisSaved');
-  if (el) { el.textContent = '✅ Saved for everyone'; setTimeout(() => el.textContent = '', 2000); }
+  if (el) { el.textContent = '✅ Saved — visible to everyone'; setTimeout(() => el.textContent = '', 2000); }
   renderThesisMasterTable(thesisFilter);
 }
 
@@ -1877,9 +1914,13 @@ async function fetchMcapsForThesis() {
     await Promise.all(equities.slice(i,i+5).map(tk => {
       if (!mcapCache[tk]) return fetchMcap(tk);
     }));
-    if (i+5 < equities.length) await new Promise(r => setTimeout(r, 300));
+    if (i+5 < equities.length) await new Promise(r => setTimeout(r, 400));
   }
+  renderMcapBreakdown();
 }
+
+// Also call on page load after a delay
+setTimeout(fetchMcapsForThesis, 4000);
 
 // ── MASTER TABLE ──────────────────────────────────────────────────────────────
 function filterThesisEquities(filter, el) {
