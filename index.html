@@ -1758,7 +1758,7 @@ async function loadThesisFromStorage() {
 
 async function saveAllToJSONBin() {
   try {
-    await fetch(JSONBIN_URL, {
+    const res = await fetch(JSONBIN_URL, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -1770,12 +1770,17 @@ async function saveAllToJSONBin() {
         etfNotes: etfNotes
       })
     });
-    // Also save to localStorage as backup
+    if (res.ok) {
+      console.log('✅ JSONBin save successful');
+    } else {
+      console.warn('JSONBin save failed:', res.status, res.statusText);
+    }
+    // Always save to localStorage as backup
     localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
     localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
     localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
   } catch(e) {
-    // Fallback to localStorage only
+    console.warn('JSONBin error, using localStorage:', e.message);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
     localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
     localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
@@ -1885,7 +1890,8 @@ function autoSaveSectorThesis() {
     await saveSectorThesisToStorage();
     const el = document.getElementById('sectorThesisSaved');
     el.textContent = '✅ Saved — visible to everyone';
-    setTimeout(() => el.textContent = '', 2000);
+    el.style.color = '#16a34a';
+    setTimeout(() => { el.textContent = ''; }, 3000);
     renderThesisSectorCards();
   }, 800);
 }
@@ -2047,10 +2053,17 @@ async function saveThesisNow() {
   td.thesis = document.getElementById('thesisText').value;
   td.catalysts = document.getElementById('catalystsText').value;
   td.risks = document.getElementById('risksText').value;
-  await saveThesisToStorage();
+  // Show saving indicator
   const el = document.getElementById('equityThesisSaved');
-  if (el) { el.textContent = '✅ Saved — visible to everyone'; setTimeout(() => el.textContent = '', 2000); }
+  if (el) el.textContent = '💾 Saving...';
+  await saveThesisToStorage();
+  if (el) {
+    el.textContent = '✅ Saved — visible to everyone';
+    el.style.color = '#16a34a';
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
   renderThesisMasterTable(thesisFilter);
+  renderThesisSectorCards(); // update gold borders on sector cards
 }
 
 let etfAutoSaveTimer = null;
@@ -2061,7 +2074,7 @@ function autoSaveEtfNote() {
     etfNotes[currentThesisTicker] = document.getElementById('etfNoteText').value;
     await saveEtfNotesToStorage();
     const el = document.getElementById('etfNoteSaved');
-    if (el) { el.textContent = '✅ Saved'; setTimeout(() => el.textContent = '', 2000); }
+    if (el) { el.textContent = '✅ Saved — visible to everyone'; el.style.color='#16a34a'; setTimeout(() => el.textContent = '', 3000); }
   }, 800);
 }
 
