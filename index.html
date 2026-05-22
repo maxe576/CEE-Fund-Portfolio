@@ -2037,6 +2037,8 @@ function updatePriceBar() {
 function selectTag(tag, btn) {
   if (!thesisData[currentThesisTicker]) thesisData[currentThesisTicker] = {};
   thesisData[currentThesisTicker].tag = tag;
+  // Save tag immediately to Firebase
+  scheduleSave();
   document.querySelectorAll('.tag-btn').forEach(b => {
     const isActive = b.dataset.tag === tag;
     b.style.background = isActive ? TAG_BG[b.dataset.tag] : 'white';
@@ -2054,27 +2056,33 @@ function selectTag(tag, btn) {
 // ── AUTO SAVE ─────────────────────────────────────────────────────────────────
 function autoSaveEquityThesis() {
   clearTimeout(thesisAutoSaveTimer);
-  thesisAutoSaveTimer = setTimeout(saveThesisNow, 1500);
+  thesisAutoSaveTimer = setTimeout(saveThesisNow, 800);
 }
 
 async function saveThesisNow() {
   if (!currentThesisTicker) return;
   if (!thesisData[currentThesisTicker]) thesisData[currentThesisTicker] = {};
   const td = thesisData[currentThesisTicker];
+  // Preserve existing tag - don't overwrite it
+  const existingTag = td.tag || null;
   td.floor = parseFloat(document.getElementById('ptFloor').value) || null;
   td.base = parseFloat(document.getElementById('ptBase').value) || null;
   td.high = parseFloat(document.getElementById('ptHigh').value) || null;
   td.thesis = document.getElementById('thesisText').value;
   td.catalysts = document.getElementById('catalystsText').value;
   td.risks = document.getElementById('risksText').value;
-  // Show saving indicator
+  if (existingTag && !td.tag) td.tag = existingTag; // restore tag if cleared
+  // Show saving indicator - Save button bypasses queue and writes immediately
   const el = document.getElementById('equityThesisSaved');
-  if (el) { el.textContent = '💾 Queued to save...'; el.style.color = '#f97316'; }
-  await saveThesisToStorage();
+  if (el) { el.textContent = '💾 Saving to Firebase...'; el.style.color = '#f97316'; }
+  // Immediate write - bypass the 2s debounce
+  clearTimeout(fbSaveTimer);
+  fbSavePending = true;
+  await flushToFirebase();
   if (el) {
-    el.textContent = '✅ Saved — visible to everyone';
-    el.style.color = '#16a34a';
-    setTimeout(() => { el.textContent = ''; }, 3000);
+    el.textContent = fbSavePending ? '⚠️ Save may have failed - try again' : '✅ Saved — visible to everyone';
+    el.style.color = fbSavePending ? '#dc2626' : '#16a34a';
+    setTimeout(() => { el.textContent = ''; }, 4000);
   }
   renderThesisMasterTable(thesisFilter);
   renderThesisSectorCards(); // update gold borders on sector cards
