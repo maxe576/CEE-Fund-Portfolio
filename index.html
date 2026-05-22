@@ -1750,7 +1750,31 @@ async function loadThesisFromStorage() {
   try { const d = localStorage.getItem(ETF_NOTES_KEY); if (d) etfNotes = JSON.parse(d); } catch(e) {}
 }
 
-async function saveAllToFirebase() {
+// ── SAVE QUEUE - batches writes to avoid Firebase rate limits ────────────────
+let fbSaveTimer = null;
+let fbSavePending = false;
+let fbSaving = false;
+
+function scheduleSave() {
+  // Always save to localStorage immediately as backup
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
+  localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
+  localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
+  // Debounce Firebase write - wait 2 seconds after last change
+  fbSavePending = true;
+  clearTimeout(fbSaveTimer);
+  fbSaveTimer = setTimeout(flushToFirebase, 2000);
+}
+
+async function flushToFirebase() {
+  if (fbSaving) {
+    // Already saving - reschedule for after current save completes
+    fbSaveTimer = setTimeout(flushToFirebase, 2000);
+    return;
+  }
+  if (!fbSavePending) return;
+  fbSaving = true;
+  fbSavePending = false;
   const payload = {
     thesis: thesisData,
     sectorThesis: sectorThesis,
@@ -1767,19 +1791,19 @@ async function saveAllToFirebase() {
     } else {
       const err = await res.text();
       console.warn('Firebase save failed:', res.status, err);
+      fbSavePending = true; // retry on next schedule
     }
   } catch(e) {
     console.warn('Firebase error:', e.message);
+    fbSavePending = true; // retry on next schedule
   }
-  // Always backup to localStorage
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
-  localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
-  localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
+  fbSaving = false;
 }
 
-async function saveThesisToStorage() { await saveAllToFirebase(); }
-async function saveSectorThesisToStorage() { await saveAllToFirebase(); }
-async function saveEtfNotesToStorage() { await saveAllToFirebase(); }
+async function saveAllToFirebase() { scheduleSave(); }
+async function saveThesisToStorage() { scheduleSave(); }
+async function saveSectorThesisToStorage() { scheduleSave(); }
+async function saveEtfNotesToStorage() { scheduleSave(); }
 
 // ── INIT THESIS TAB ───────────────────────────────────────────────────────────
 async function initThesisTab() {
@@ -2030,7 +2054,7 @@ function selectTag(tag, btn) {
 // ── AUTO SAVE ─────────────────────────────────────────────────────────────────
 function autoSaveEquityThesis() {
   clearTimeout(thesisAutoSaveTimer);
-  thesisAutoSaveTimer = setTimeout(saveThesisNow, 800);
+  thesisAutoSaveTimer = setTimeout(saveThesisNow, 1500);
 }
 
 async function saveThesisNow() {
@@ -2045,7 +2069,7 @@ async function saveThesisNow() {
   td.risks = document.getElementById('risksText').value;
   // Show saving indicator
   const el = document.getElementById('equityThesisSaved');
-  if (el) el.textContent = '💾 Saving...';
+  if (el) { el.textContent = '💾 Queued to save...'; el.style.color = '#f97316'; }
   await saveThesisToStorage();
   if (el) {
     el.textContent = '✅ Saved — visible to everyone';
