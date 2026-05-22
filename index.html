@@ -1724,72 +1724,62 @@ let sectorPieRef = null;
 let thesisAutoSaveTimer = null;
 
 // ── LOAD/SAVE from persistent storage ────────────────────────────────────────
-// ── JSONBIN SHARED STORAGE ───────────────────────────────────────────────────
-const JSONBIN_URL = 'https://api.jsonbin.io/v3/b/6a0f90b56877513b27b009ed';
-const JSONBIN_KEY = '$2a$10$GIaYJQ.Ew64uvAcxG6IilOZZS/oWmxF8L/SKOi2TB6UmrKpmdRCeO';
+// ── FIREBASE REALTIME DATABASE STORAGE ───────────────────────────────────────
+const FB_DB_URL = 'https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com';
+const FB_NODE = '/ceeThesis';  // path in the database
 
 async function loadThesisFromStorage() {
-  // Try JSONBin with master key (works for private bins)
-  for (const headers of [
-    { 'X-Master-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' },
-    { 'X-Access-Key': JSONBIN_KEY, 'X-Bin-Meta': 'false' },
-    { 'X-Bin-Meta': 'false' }  // public read attempt
-  ]) {
-    try {
-      const r = await fetch(JSONBIN_URL + '/latest', { headers });
-      if (r.ok) {
-        const d = await r.json();
-        if (d && (d.thesis || d.sectorThesis)) {
-          thesisData = d.thesis || {};
-          sectorThesis = d.sectorThesis || {};
-          etfNotes = d.etfNotes || {};
-          console.log('JSONBin loaded successfully');
-          return;
-        }
+  try {
+    const r = await fetch(FB_DB_URL + FB_NODE + '.json');
+    if (r.ok) {
+      const d = await r.json();
+      if (d) {
+        thesisData = d.thesis || {};
+        sectorThesis = d.sectorThesis || {};
+        etfNotes = d.etfNotes || {};
+        console.log('✅ Firebase loaded successfully');
+        return;
       }
-    } catch(e) {}
+    }
+  } catch(e) {
+    console.warn('Firebase load failed:', e.message);
   }
-  console.warn('JSONBin load failed, using localStorage');
   // Fallback to localStorage
   try { const d = localStorage.getItem(STORAGE_KEY); if (d) thesisData = JSON.parse(d); } catch(e) {}
   try { const d = localStorage.getItem(SECTOR_THESIS_KEY); if (d) sectorThesis = JSON.parse(d); } catch(e) {}
   try { const d = localStorage.getItem(ETF_NOTES_KEY); if (d) etfNotes = JSON.parse(d); } catch(e) {}
 }
 
-async function saveAllToJSONBin() {
+async function saveAllToFirebase() {
+  const payload = {
+    thesis: thesisData,
+    sectorThesis: sectorThesis,
+    etfNotes: etfNotes
+  };
   try {
-    const res = await fetch(JSONBIN_URL, {
+    const res = await fetch(FB_DB_URL + FB_NODE + '.json', {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_KEY
-      },
-      body: JSON.stringify({
-        thesis: thesisData,
-        sectorThesis: sectorThesis,
-        etfNotes: etfNotes
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     if (res.ok) {
-      console.log('✅ JSONBin save successful');
+      console.log('✅ Firebase save successful');
     } else {
-      console.warn('JSONBin save failed:', res.status, res.statusText);
+      const err = await res.text();
+      console.warn('Firebase save failed:', res.status, err);
     }
-    // Always save to localStorage as backup
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
-    localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
-    localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
   } catch(e) {
-    console.warn('JSONBin error, using localStorage:', e.message);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
-    localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
-    localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
+    console.warn('Firebase error:', e.message);
   }
+  // Always backup to localStorage
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(thesisData));
+  localStorage.setItem(SECTOR_THESIS_KEY, JSON.stringify(sectorThesis));
+  localStorage.setItem(ETF_NOTES_KEY, JSON.stringify(etfNotes));
 }
 
-async function saveThesisToStorage() { await saveAllToJSONBin(); }
-async function saveSectorThesisToStorage() { await saveAllToJSONBin(); }
-async function saveEtfNotesToStorage() { await saveAllToJSONBin(); }
+async function saveThesisToStorage() { await saveAllToFirebase(); }
+async function saveSectorThesisToStorage() { await saveAllToFirebase(); }
+async function saveEtfNotesToStorage() { await saveAllToFirebase(); }
 
 // ── INIT THESIS TAB ───────────────────────────────────────────────────────────
 async function initThesisTab() {
