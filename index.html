@@ -1734,9 +1734,10 @@ async function loadThesisFromStorage() {
     if (r.ok) {
       const d = await r.json();
       if (d) {
-        thesisData = d.thesis || {};
+        // Restore sanitized keys (BRK_B -> BRK.B etc)
+        thesisData = restoreKeysFromFirebase(d.thesis || {});
         sectorThesis = d.sectorThesis || {};
-        etfNotes = d.etfNotes || {};
+        etfNotes = restoreKeysFromFirebase(d.etfNotes || {});
         console.log('✅ Firebase loaded successfully');
         return;
       }
@@ -1748,6 +1749,19 @@ async function loadThesisFromStorage() {
   try { const d = localStorage.getItem(STORAGE_KEY); if (d) thesisData = JSON.parse(d); } catch(e) {}
   try { const d = localStorage.getItem(SECTOR_THESIS_KEY); if (d) sectorThesis = JSON.parse(d); } catch(e) {}
   try { const d = localStorage.getItem(ETF_NOTES_KEY); if (d) etfNotes = JSON.parse(d); } catch(e) {}
+}
+
+
+// Restore Firebase-sanitized keys back to original ticker format
+function restoreKeysFromFirebase(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const clean = {};
+  for (const [k, v] of Object.entries(obj)) {
+    // BRK_B -> BRK.B (only restore known dot-tickers)
+    const origKey = k.replace(/BRK_B/g, 'BRK.B');
+    clean[origKey] = typeof v === 'object' && v !== null ? restoreKeysFromFirebase(v) : v;
+  }
+  return clean;
 }
 
 // ── SAVE QUEUE - batches writes to avoid Firebase rate limits ────────────────
@@ -1766,19 +1780,40 @@ function scheduleSave() {
   fbSaveTimer = setTimeout(flushToFirebase, 2000);
 }
 
+let fbLastSaveOk = false;
+
 async function flushToFirebase() {
   if (fbSaving) {
-    // Already saving - reschedule for after current save completes
     fbSaveTimer = setTimeout(flushToFirebase, 2000);
     return;
   }
-  if (!fbSavePending) return;
+  fbSavePending = true; // ensure we attempt
   fbSaving = true;
   fbSavePending = false;
+  fbLastSaveOk = false;
+  // Firebase keys cannot contain . # $ [ ] - sanitize ticker keys
+  function sanitizeKeys(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const clean = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const safeKey = k.replace(/\./g, '_').replace(/#/g,'_').replace(/\$/g,'_').replace(/\[/g,'_').replace(/\]/g,'_');
+      clean[safeKey] = typeof v === 'object' && v !== null ? sanitizeKeys(v) : v;
+    }
+    return clean;
+  }
+  function restoreKeys(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const clean = {};
+    for (const [k, v] of Object.entries(obj)) {
+      const origKey = k.replace(/_/g, '.'); // best effort restore
+      clean[origKey] = typeof v === 'object' && v !== null ? restoreKeys(v) : v;
+    }
+    return clean;
+  }
   const payload = {
-    thesis: thesisData,
-    sectorThesis: sectorThesis,
-    etfNotes: etfNotes
+    thesis: sanitizeKeys(thesisData),
+    sectorThesis: sanitizeKeys(sectorThesis),
+    etfNotes: sanitizeKeys(etfNotes)
   };
   try {
     const res = await fetch(FB_DB_URL + FB_NODE + '.json', {
@@ -1787,15 +1822,19 @@ async function flushToFirebase() {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
+      fbLastSaveOk = true;
       console.log('✅ Firebase save successful');
     } else {
-      const err = await res.text();
-      console.warn('Firebase save failed:', res.status, err);
-      fbSavePending = true; // retry on next schedule
+      const errText = await res.text();
+      console.warn('Firebase save failed:', res.status, errText);
+      // Show actual error in UI
+      const el = document.getElementById('equityThesisSaved');
+      if (el) { el.textContent = '❌ Error: ' + res.status + ' - ' + errText.slice(0,50); el.style.color='#dc2626'; }
     }
   } catch(e) {
     console.warn('Firebase error:', e.message);
-    fbSavePending = true; // retry on next schedule
+    const el = document.getElementById('equityThesisSaved');
+    if (el) { el.textContent = '❌ Network error: ' + e.message; el.style.color='#dc2626'; }
   }
   fbSaving = false;
 }
@@ -2080,8 +2119,12 @@ async function saveThesisNow() {
   fbSavePending = true;
   await flushToFirebase();
   if (el) {
-    el.textContent = fbSavePending ? '⚠️ Save may have failed - try again' : '✅ Saved — visible to everyone';
-    el.style.color = fbSavePending ? '#dc2626' : '#16a34a';
+    if (fbLastSaveOk) {
+      el.textContent = '✅ Saved — visible to everyone';
+      el.style.color = '#16a34a';
+    } else {
+      // Already set error message in flushToFirebase
+    }
     setTimeout(() => { el.textContent = ''; }, 4000);
   }
   renderThesisMasterTable(thesisFilter);
