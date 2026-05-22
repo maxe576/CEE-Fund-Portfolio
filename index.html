@@ -251,6 +251,8 @@ tr:last-child td{border-bottom:none}
       <div style="display:flex;gap:8px">
         <button class="filter-btn active" onclick="filterCalendar('portfolio',this)">My Portfolio</button>
         <button class="filter-btn" onclick="filterCalendar('all',this)">All Earnings</button>
+        <button class="filter-btn" onclick="filterCalendar('recent',this)">📣 Recent Earnings</button>
+        <button class="filter-btn" onclick="filterCalendar('dividends',this)">💰 Dividends</button>
         <button class="filter-btn" onclick="filterCalendar('economic',this)">📊 Economic Events</button>
       </div>
     </div>
@@ -796,7 +798,10 @@ function filterSectorHoldings(sector,btn){
 }
 
 function renderSectorBeta() {
-  const sectors=calcSectors(S.holdings,S.total);
+  const EXCL=['Broad Market','Fixed Income'];
+  const filtHB=S.holdings.filter(h=>!EXCL.includes(h.sector));
+  const filtTB=filtHB.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const sectors=calcSectors(filtHB,filtTB);
   document.getElementById('sectorBeta').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Sector</span><span style="text-align:right">Beta · Weight</span></div>
     ${sectors.map(s=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
@@ -807,7 +812,10 @@ function renderSectorBeta() {
 
 // ── SECTOR CARDS ──────────────────────────────────────────────────────────────
 function renderSectorCards() {
-  const sectors=calcSectors(S.holdings,S.total);
+  const EXCL2=['Broad Market','Fixed Income'];
+  const filteredH=S.holdings.filter(h=>!EXCL2.includes(h.sector));
+  const filteredT=filteredH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const sectors=calcSectors(filteredH,filteredT);
   document.getElementById('sectorCards').innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
     ${sectors.map(s=>{
@@ -822,7 +830,11 @@ function renderSectorCards() {
 
 // ── BENCHMARK ─────────────────────────────────────────────────────────────────
 function renderBenchmark() {
-  const sectors=calcSectors(S.holdings,S.total);
+  const EXCL2=['Broad Market','Fixed Income'];
+  const filtBench=S.holdings.filter(h=>!EXCL2.includes(h.sector));
+  const filtBenchT=filtBench.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const benchSectors=calcSectors(filtBench,filtBenchT);
+  const sectors=benchSectors;
   const fundBeta=S.beta;
   document.getElementById('riskComparison').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Metric</span><span style="text-align:center">${S.fundName}</span><span style="text-align:center">S&P 500</span></div>
@@ -1252,6 +1264,41 @@ async function loadCalendar(type){
     }catch(e){tableEl.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Could not load. Try again in 30 seconds.</td></tr>';}
     if(loadEl)loadEl.style.display='none';return;
   }
+
+  // Recent earnings - last 30 days from portfolio
+  if (type === 'recent') {
+    try {
+      const pastDate = new Date(nowDate); pastDate.setDate(pastDate.getDate()-30);
+      const pastFrom = pastDate.toISOString().split('T')[0];
+      const portTickers = new Set([...S.holdings.map(h=>h.ticker)]);
+      const r = await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`, 10000);
+      const recentData = (r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+      tableEl.innerHTML = recentData.length ? `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Report</th></tr>
+        ${recentData.map(e=>{const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';const rUrl=IR_URLS[e.symbol]||ETF_IR_URLS[e.symbol]||`https://finance.yahoo.com/quote/${e.symbol}`;return `<tr style="background:#eff6ff"><td><strong>${e.date}</strong></td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td class="${e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):''}">${e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—'}</td><td><a href="${rUrl}" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">🔗 Investor Relations</a></td></tr>`;}).join('')}`
+        : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio in the last 30 days.</td></tr>';
+    } catch(e) { tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load recent earnings.</td></tr>'; }
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
+  // Dividends
+  if (type === 'dividends') {
+    try {
+      const topH=[...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,20).map(h=>h.ticker);
+      const allDivs=[];
+      for(let i=0;i<topH.length;i+=5){
+        await Promise.all(topH.slice(i,i+5).map(async tk=>{
+          try{const d=await fetchYF(`https://finnhub.io/api/v1/stock/dividend2?symbol=${tk}&token=${FINNHUB}`,5000);if(d&&d.data&&d.data.length){const upcoming=d.data.filter(div=>div.payDate>=from).slice(0,2);upcoming.forEach(div=>allDivs.push({...div,ticker:tk}));}}catch(e){}
+        }));
+        if(i+5<topH.length)await new Promise(r=>setTimeout(r,500));
+      }
+      allDivs.sort((a,b)=>(a.payDate||'').localeCompare(b.payDate||''));
+      tableEl.innerHTML=allDivs.length?`<tr><th>Ticker</th><th>Ex-Dividend Date</th><th>Pay Date</th><th>Amount</th><th>Frequency</th><th>Est. Annual Yield</th></tr>
+        ${allDivs.map(d=>{const h=S.holdings.find(x=>x.ticker===d.ticker);const y=d.amount&&h?.price?(d.amount*(d.frequency||4)/h.price*100).toFixed(2)+'%':'—';return `<tr><td class="ticker-cell">${d.ticker}</td><td>${d.exDividendDate||'—'}</td><td><strong>${d.payDate||'—'}</strong></td><td style="font-weight:700;color:#16a34a">$${parseFloat(d.amount||0).toFixed(4)}</td><td style="font-size:11px">${{1:'Annual',2:'Semi-Annual',4:'Quarterly',12:'Monthly'}[d.frequency]||'—'}</td><td style="font-weight:600">${y}</td></tr>`;}).join('')}`
+        :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found.</td></tr>';
+    }catch(e){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load dividend data.</td></tr>';}
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
 
   try{
     if(!calCache){const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,10000);if(r?.earningsCalendar)calCache=r.earningsCalendar;}
