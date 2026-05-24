@@ -151,7 +151,6 @@ tr:last-child td{border-bottom:none}
   <button class="nav-tab" onclick="showTab('benchmark',this)">📈 vs S&P 500</button>
   <button class="nav-tab" onclick="showTab('news',this)">📰 News</button>
   <button class="nav-tab" onclick="showTab('calendar',this)">📅 Calendar</button>
-  <button class="nav-tab" onclick="showTab('targets',this)">🎯 Price Targets</button>
   <button class="nav-tab" onclick="showTab('thesis',this)">📋 Investment Thesis</button>
   <button class="nav-tab" onclick="showTab('movers',this)">📊 Movers</button>
   <button class="nav-tab" onclick="showTab('whatif',this)">🔮 What-If</button>
@@ -261,21 +260,6 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 <!-- PRICE TARGETS -->
-<div id="tab-targets" class="tab-panel">
-  <div class="card">
-    <div class="card-title">Price Targets
-      <div style="display:flex;gap:6px">
-        <button class="filter-btn active" onclick="filterTargets('all',this)">All</button>
-        <button class="filter-btn" onclick="filterTargets('Endowment',this)">Endowment</button>
-        <button class="filter-btn" onclick="filterTargets('CEE Fund',this)">CEE Fund</button>
-      </div>
-    </div>
-    <p style="font-size:11px;color:var(--muted);margin-bottom:12px">WS targets fetched live from Yahoo Finance. Click Club Target cell to edit — saves automatically.</p>
-    <div class="tbl-wrap"><table id="targetsTable"></table></div>
-  </div>
-</div>
-
-<!-- INVESTMENT THESIS -->
 <div id="tab-thesis" class="tab-panel">
   <!-- Sector Cards Row -->
   <div class="card" style="margin-bottom:16px">
@@ -639,11 +623,10 @@ function renderAll() {
 function showTab(tab, btn) {
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
+  const _panel=document.getElementById('tab-'+tab); if(!_panel)return; _panel.classList.add('active');
   btn.classList.add('active');
   if (tab==='news') loadNews('market');
   else if (tab==='calendar') loadCalendar('portfolio');
-  else if (tab==='targets') loadPriceTargets();
   else if (tab==='sectorcompare') renderSectorCards();
   else if (tab==='thesis') initThesisTab();
   else if (tab==='movers') { if(!moversData.week&&!moversData.month) loadMovers(); else renderMovers(activeMoversView); }
@@ -666,7 +649,6 @@ function switchFund(fund, btn) {
     else if (tab==='thesis') initThesisTab();
   else if (tab==='movers') { if(!moversData.week&&!moversData.month) loadMovers(); else renderMovers(activeMoversView); }
     else if (tab==='sectorcompare') renderSectorCards();
-    else if (tab==='movers') { moversData={week:null,month:null}; loadMovers(); }
   }
 }
 
@@ -830,19 +812,19 @@ function renderSectorCards() {
 
 // ── BENCHMARK ─────────────────────────────────────────────────────────────────
 function renderBenchmark() {
-  const EXCL2=['Broad Market','Fixed Income'];
-  const filtBench=S.holdings.filter(h=>!EXCL2.includes(h.sector));
-  const filtBenchT=filtBench.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const benchSectors=calcSectors(filtBench,filtBenchT);
-  const sectors=benchSectors;
+  const sectors=calcSectors(S.holdings,S.total);
   const fundBeta=S.beta;
   document.getElementById('riskComparison').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Metric</span><span style="text-align:center">${S.fundName}</span><span style="text-align:center">S&P 500</span></div>
     ${[['Beta',fundBeta.toFixed(4),'1.0000'],['Total Return',calcReturn(S.holdings,S.fund).toFixed(2)+'%','See chart'],['Positions',S.holdings.length,'500'],['Top Holding Wt',((Math.max(...S.holdings.map(h=>h.marketValue||0))/S.total)*100).toFixed(1)+'%','~7%'],['Cash Weight',(S.cash/S.total*100).toFixed(1)+'%','~0%']].map(([l,f,sp])=>`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
     <span style="color:var(--gray)">${l}</span><span style="text-align:center;font-weight:700;color:var(--navy)">${f}</span><span style="text-align:center;color:var(--gray)">${sp}</span></div>`).join('')}`;
+  const EXCL2b=['Broad Market','Fixed Income'];
+  const filtBench=S.holdings.filter(h=>!EXCL2b.includes(h.sector));
+  const filtBenchT=filtBench.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const benchSectors=calcSectors(filtBench,filtBenchT);
   const rows=Object.keys(SP500_SECTORS).map(sec=>{
-    const fs=sectors.find(s=>s.name===sec);
+    const fs=benchSectors.find(s=>s.name===sec);
     const fp=fs?fs.pct*100:0;
     const sp=SP500_SECTORS[sec];
     return {sec,fp,sp,diff:fp-sp};
@@ -1144,7 +1126,7 @@ function loadPriceTargets() {
 }
 
 function renderTargetsTable(allH) {
-  const filter=document.querySelector('#tab-targets .filter-btn.active')?.textContent||'All';
+  const filter='All'; // targets tab removed
   let holdings=allH;
   if(filter==='Endowment')holdings=allH.filter(h=>RAW.endowment.equities.concat(RAW.endowment.etfs).some(e=>e.ticker===h.ticker));
   else if(filter==='CEE Fund')holdings=allH.filter(h=>RAW.ceeFund.equities.concat(RAW.ceeFund.etfs).some(e=>e.ticker===h.ticker));
@@ -1178,7 +1160,7 @@ function renderTargetsTable(allH) {
 }
 
 function saveClubTarget(ticker,cell){const v=parseFloat(cell.textContent.trim().replace('$','').replace('Click to set',''));if(!isNaN(v)&&v>0){clubTargets[ticker]=v;localStorage.setItem('cee_club_targets',JSON.stringify(clubTargets));const allH=ALL_HOLDINGS();renderTargetsTable(allH);}}
-function filterTargets(filter,btn){document.querySelectorAll('#tab-targets .filter-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderTargetsTable(ALL_HOLDINGS());}
+function filterTargets(filter,btn){// targets tab removedrenderTargetsTable(ALL_HOLDINGS());}
 
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 let currentNewsFilter='market',currentNewsTicker='';
@@ -1225,10 +1207,10 @@ function renderNews(articles){
     const date=new Date(a.datetime*1000);
     const timeStr=date.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' · '+date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
     return `<div class="news-item">
-      ${a._ticker?`<span class="ntk">${a._ticker}</span>`:''}
+      ${a._ticker?'<span class="ntk">'+a._ticker+'</span>':''}
       <div class="news-headline"><a href="${a.url}" target="_blank" rel="noopener">${a.headline}</a></div>
       <div class="news-meta">${a.source} · ${timeStr}</div>
-      ${a.summary?`<div style="font-size:11px;color:var(--gray);margin-top:4px;line-height:1.4">${a.summary.slice(0,180)}${a.summary.length>180?'...':''}</div>`:''}
+      ${a.summary?'<div style="font-size:11px;color:var(--gray);margin-top:4px;line-height:1.4">'+a.summary.slice(0,180)+(a.summary.length>180?'...':'')+'</div>':''}
     </div>`;
   }).join('');
 }
@@ -1265,40 +1247,30 @@ async function loadCalendar(type){
     if(loadEl)loadEl.style.display='none';return;
   }
 
-  // Recent earnings - last 30 days from portfolio
-  if (type === 'recent') {
+  if (type==='recent') {
     try {
-      const pastDate = new Date(nowDate); pastDate.setDate(pastDate.getDate()-30);
-      const pastFrom = pastDate.toISOString().split('T')[0];
-      const portTickers = new Set([...S.holdings.map(h=>h.ticker)]);
-      const r = await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`, 10000);
-      const recentData = (r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
-      tableEl.innerHTML = recentData.length ? `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Report</th></tr>
-        ${recentData.map(e=>{const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';const rUrl=IR_URLS[e.symbol]||ETF_IR_URLS[e.symbol]||`https://finance.yahoo.com/quote/${e.symbol}`;return `<tr style="background:#eff6ff"><td><strong>${e.date}</strong></td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td class="${e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):''}">${e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—'}</td><td><a href="${rUrl}" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">🔗 Investor Relations</a></td></tr>`;}).join('')}`
-        : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio in the last 30 days.</td></tr>';
-    } catch(e) { tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load recent earnings.</td></tr>'; }
-    if(loadEl)loadEl.style.display='none'; return;
+      const pastDate=new Date(nowDate);pastDate.setDate(pastDate.getDate()-30);
+      const pastFrom=pastDate.toISOString().split('T')[0];
+      const portTickers=new Set([...S.holdings.map(h=>h.ticker)]);
+      const r=await fetchYF('https://finnhub.io/api/v1/calendar/earnings?from='+pastFrom+'&to='+from+'&token='+FINNHUB,10000);
+      const rd=(r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+      tableEl.innerHTML=rd.length?'<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>IR</th></tr>'+rd.map(e=>{const w=e.hour==='bmo'?'<span class="cal-bmo">BMO</span>':e.hour==='amc'?'<span class="cal-amc">AMC</span>':'<span class="cal-tbd">TBD</span>';const u=IR_URLS[e.symbol]||ETF_IR_URLS[e.symbol]||'https://finance.yahoo.com/quote/'+e.symbol;return '<tr style="background:#eff6ff"><td><strong>'+e.date+'</strong></td><td class="ticker-cell">'+e.symbol+'</td><td>'+(e.company||'—')+'</td><td>'+w+'</td><td>'+(e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—')+'</td><td class="'+(e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):'')+'">'+(e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—')+'</td><td><a href="'+u+'" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">🔗 IR</a></td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No recent earnings.</td></tr>';
+    }catch(e){tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Could not load.</td></tr>';}
+    if(loadEl)loadEl.style.display='none';return;
   }
-
-  // Dividends
-  if (type === 'dividends') {
+  if (type==='dividends') {
     try {
       const topH=[...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,20).map(h=>h.ticker);
       const allDivs=[];
       for(let i=0;i<topH.length;i+=5){
-        await Promise.all(topH.slice(i,i+5).map(async tk=>{
-          try{const d=await fetchYF(`https://finnhub.io/api/v1/stock/dividend2?symbol=${tk}&token=${FINNHUB}`,5000);if(d&&d.data&&d.data.length){const upcoming=d.data.filter(div=>div.payDate>=from).slice(0,2);upcoming.forEach(div=>allDivs.push({...div,ticker:tk}));}}catch(e){}
-        }));
+        await Promise.all(topH.slice(i,i+5).map(async tk=>{try{const d=await fetchYF('https://finnhub.io/api/v1/stock/dividend2?symbol='+tk+'&token='+FINNHUB,5000);if(d?.data?.length){d.data.filter(div=>div.payDate>=from).slice(0,2).forEach(div=>allDivs.push({...div,ticker:tk}));}}catch(e){}}));
         if(i+5<topH.length)await new Promise(r=>setTimeout(r,500));
       }
       allDivs.sort((a,b)=>(a.payDate||'').localeCompare(b.payDate||''));
-      tableEl.innerHTML=allDivs.length?`<tr><th>Ticker</th><th>Ex-Dividend Date</th><th>Pay Date</th><th>Amount</th><th>Frequency</th><th>Est. Annual Yield</th></tr>
-        ${allDivs.map(d=>{const h=S.holdings.find(x=>x.ticker===d.ticker);const y=d.amount&&h?.price?(d.amount*(d.frequency||4)/h.price*100).toFixed(2)+'%':'—';return `<tr><td class="ticker-cell">${d.ticker}</td><td>${d.exDividendDate||'—'}</td><td><strong>${d.payDate||'—'}</strong></td><td style="font-weight:700;color:#16a34a">$${parseFloat(d.amount||0).toFixed(4)}</td><td style="font-size:11px">${{1:'Annual',2:'Semi-Annual',4:'Quarterly',12:'Monthly'}[d.frequency]||'—'}</td><td style="font-weight:600">${y}</td></tr>`;}).join('')}`
-        :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found.</td></tr>';
-    }catch(e){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load dividend data.</td></tr>';}
-    if(loadEl)loadEl.style.display='none'; return;
+      tableEl.innerHTML=allDivs.length?'<tr><th>Ticker</th><th>Ex-Div Date</th><th>Pay Date</th><th>Amount</th><th>Frequency</th><th>Est. Yield</th></tr>'+allDivs.map(d=>{const h=S.holdings.find(x=>x.ticker===d.ticker);const y=d.amount&&h?.price?(d.amount*(d.frequency||4)/h.price*100).toFixed(2)+'%':'—';return '<tr><td class="ticker-cell">'+d.ticker+'</td><td>'+(d.exDividendDate||'—')+'</td><td><strong>'+(d.payDate||'—')+'</strong></td><td style="color:#16a34a;font-weight:700">$'+parseFloat(d.amount||0).toFixed(4)+'</td><td>'+({1:'Annual',2:'Semi-Annual',4:'Quarterly',12:'Monthly'}[d.frequency]||'—')+'</td><td style="font-weight:600">'+y+'</td></tr>';}).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found.</td></tr>';
+    }catch(e){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Could not load dividends.</td></tr>';}
+    if(loadEl)loadEl.style.display='none';return;
   }
-
 
   try{
     if(!calCache){const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,10000);if(r?.earningsCalendar)calCache=r.earningsCalendar;}
@@ -1357,13 +1329,9 @@ async function fetchSPX(){
 }
 
 // ── YAHOO FINANCE FETCH ───────────────────────────────────────────────────────
-const CF_PROXY = 'https://ceefund.wmaxe576.workers.dev';
-
+const CF_PROXY='https://ceefund.wmaxe576.workers.dev';
 async function fetchYF(url, ms=7000){
-  // Route Yahoo Finance through Cloudflare proxy to bypass CORS
-  const fetchUrl = url.includes('yahoo.com') 
-    ? CF_PROXY + '?url=' + encodeURIComponent(url)
-    : url;
+  const fetchUrl=url.includes('yahoo.com')?CF_PROXY+'?url='+encodeURIComponent(url):url;
   try{
     const ctrl=new AbortController();
     const timer=setTimeout(()=>ctrl.abort(),ms);
@@ -1376,47 +1344,28 @@ async function fetchYF(url, ms=7000){
 
 // ── PERIOD RETURNS via Yahoo Finance + Cloudflare Proxy ──────────────────────
 const candleCache = {};
-
-const YF_RANGES = {
-  '1W':'5d', '1M':'1mo', '3M':'3mo', '6M':'6mo',
-  '1Y':'1y', '3Y':'2y', '5Y':'5y', 'YTD':'ytd'
-};
-const YF_INTERVALS = {
-  '1W':'1d', '1M':'1d', '3M':'1wk', '6M':'1wk',
-  '1Y':'1wk', '3Y':'1mo', '5Y':'1mo', 'YTD':'1wk'
-};
+const YF_RANGES = {'1W':'5d','1M':'1mo','3M':'3mo','6M':'6mo','1Y':'1y','3Y':'2y','5Y':'5y','YTD':'ytd'};
+const YF_INTERVALS = {'1W':'1d','1M':'1d','3M':'1wk','6M':'1wk','1Y':'1wk','3Y':'1mo','5Y':'1mo','YTD':'1wk'};
 
 async function fetchCandleReturn(ticker, period) {
-  if (period === '1D') return null; // handled via Finnhub quote
+  if (period === '1D') return null;
   const cacheKey = ticker + '_' + period;
   if (candleCache[cacheKey] !== undefined) return candleCache[cacheKey];
-
-  const range = YF_RANGES[period] || '1mo';
-  const interval = YF_INTERVALS[period] || '1d';
+  const range = YF_RANGES[period]||'1mo';
+  const interval = YF_INTERVALS[period]||'1d';
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&range=${range}`;
-
   try {
-    const r = await fetchYF(url, 8000); // fetchYF routes through CF_PROXY for yahoo.com
-    if (!r) { candleCache[cacheKey] = null; return null; }
-    const result = r.chart?.result?.[0];
-    if (!result) { candleCache[cacheKey] = null; return null; }
-    const closes = result.indicators?.quote?.[0]?.close || [];
-    const valid = closes.filter(x => x !== null && x !== undefined && !isNaN(x));
-    if (valid.length < 2) { candleCache[cacheKey] = null; return null; }
-    const pct = (valid[valid.length-1] - valid[0]) / valid[0] * 100;
-    // Sanity check
-    if (Math.abs(pct) > 500) {
-      console.warn(`Suspicious ${ticker} ${period}: ${pct.toFixed(1)}% - rejecting`);
-      candleCache[cacheKey] = null; return null;
-    }
+    const r = await fetchYF(url, 8000);
+    if (!r) { candleCache[cacheKey]=null; return null; }
+    const closes = r.chart?.result?.[0]?.indicators?.quote?.[0]?.close||[];
+    const valid = closes.filter(x=>x!==null&&x!==undefined&&!isNaN(x));
+    if (valid.length<2) { candleCache[cacheKey]=null; return null; }
+    const pct = (valid[valid.length-1]-valid[0])/valid[0]*100;
+    if (Math.abs(pct)>500) { candleCache[cacheKey]=null; return null; }
     candleCache[cacheKey] = parseFloat(pct.toFixed(2));
     return candleCache[cacheKey];
-  } catch(e) {
-    candleCache[cacheKey] = null;
-    return null;
-  }
+  } catch(e) { candleCache[cacheKey]=null; return null; }
 }
-
 
 function setSCPeriod(period,btn){
   activeSCPeriod=period;
@@ -1432,37 +1381,20 @@ async function buildPerfChartPeriod(fund,period){
   if(loadEl)loadEl.textContent='⏳ Loading...';
   const tickers=[...new Set(allH.map(h=>h.ticker))];
   const returns={};
-  if(loadEl)loadEl.textContent='⏳ Fetching data...';
   for(let i=0;i<tickers.length;i+=8){
-    await Promise.all(tickers.slice(i,i+8).map(async tk=>{
-      returns[tk] = await fetchCandleReturn(tk, period);
-    }));
+    await Promise.all(tickers.slice(i,i+8).map(async tk=>{const h=await fetchHistorical(tk,period);returns[tk]=h?h.pct:null;}));
     if(i+8<tickers.length)await new Promise(r=>setTimeout(r,300));
-    if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+8,tickers.length)}/${tickers.length}...`;
   }
-  const spyRet = await fetchCandleReturn('SPY', period);
-  const spyHist = spyRet !== null ? {pct: spyRet} : null;
-  // Convert returns format to match expected structure
-  Object.keys(returns).forEach(tk => { if(returns[tk]!==null) returns[tk]=returns[tk]; });
-  const spyPct = spyRet !== null ? spyRet : 0;
-  const spyPoints = [{t:'Period Start',v:0},{t:'Now',v:parseFloat(spyPct.toFixed(2))}];
+  const spyHist=await fetchHistorical('SPY',period);
+  const spyPoints=spyHist?.points||[{t:'Start',v:0},{t:'Now',v:0}];
+  const spyPct=spyHist?.pct||0;
   if(loadEl)loadEl.textContent='';
   const totalMV=allH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const eqMV=fundData.equities.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const etfMV=fundData.etfs.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  // Only use holdings with real Finnhub data - no fallback to avoid inflation
-  function wRetPerf(holdings, totMV) {
-    let sw=0, sr=0;
-    holdings.forEach(h=>{
-      if(returns[h.ticker]!==null&&returns[h.ticker]!==undefined){
-        const w=(h.marketValue||0)/totMV; sr+=returns[h.ticker]*w; sw+=w;
-      }
-    });
-    return sw>0 ? sr/sw : 0;
-  }
-  const pp=wRetPerf(allH,totalMV);
-  const ep=wRetPerf(fundData.equities,eqMV);
-  const ftp=wRetPerf(fundData.etfs,etfMV);
+  const pp=allH.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/totalMV),0);
+  const ep=fundData.equities.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/eqMV),0);
+  const ftp=fundData.etfs.reduce((s,h)=>s+(returns[h.ticker]??calcReturn([h],fund))*((h.marketValue||0)/etfMV),0);
   const alpha=pp-spyPct;
   const fc=Object.values(returns).filter(v=>v!==null).length;
   document.getElementById('perfKpis').innerHTML=`
@@ -1620,30 +1552,16 @@ async function renderSCChart(sectorName, view, period) {
 
   if(period==='1D'){
     sec.holdings.forEach(h=>{returns[h.ticker]=h.dayPct!==undefined&&h.dayPct!==null?h.dayPct*100:null;});
-    // Fetch benchmark 1D from Finnhub quote
-    try{
-      const bq=await fetchYF(`https://finnhub.io/api/v1/quote?symbol=${benchmark}&token=${FINNHUB}`,5000);
-      returns[benchmark]=bq&&bq.c&&bq.pc&&bq.c>0?parseFloat(((bq.c-bq.pc)/bq.pc*100).toFixed(2)):null;
-    }catch(e){returns[benchmark]=null;}
+    const bh=await fetchHistorical(benchmark,'1D');returns[benchmark]=bh?bh.pct:null;
   } else if(period==='YTD'){
     sec.holdings.forEach(h=>{returns[h.ticker]=calcReturn([h],S.fund);});
-    // Fetch benchmark YTD using candle from Jan 1 2026
-    const ytdFrom=Math.floor(new Date('2026-01-01').getTime()/1000);
-    const ytdTo=Math.floor(Date.now()/1000);
-    try{const yr=await fetchYF(`https://finnhub.io/api/v1/stock/candle?symbol=${benchmark}&resolution=D&from=${ytdFrom}&to=${ytdTo}&token=${FINNHUB}`,8000);if(yr&&yr.s!=='no_data'&&yr.c&&yr.c.length>=2){returns[benchmark]=parseFloat(((yr.c[yr.c.length-1]-yr.c[0])/yr.c[0]*100).toFixed(2));}else{returns[benchmark]=null;}}catch(e){returns[benchmark]=null;}
+    const bh=await fetchHistorical(benchmark,'YTD');returns[benchmark]=bh?bh.pct:null;
   } else {
-    // Use Finnhub candle data for reliable period returns
-    if(loadEl)loadEl.textContent=`⏳ Fetching ${period} data...`;
-    const benchRet = await fetchCandleReturn(benchmark, period);
-    returns[benchmark] = benchRet;
+    const bh=await fetchHistorical(benchmark,period);returns[benchmark]=bh?bh.pct:null;
     const tks=sec.holdings.map(h=>h.ticker);
-    // Yahoo Finance via proxy - can batch more aggressively
-    for(let i=0;i<tks.length;i+=8){
-      await Promise.all(tks.slice(i,i+8).map(async tk=>{
-        returns[tk] = await fetchCandleReturn(tk, period);
-      }));
-      if(i+8<tks.length)await new Promise(r=>setTimeout(r,300));
-      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+8,tks.length)}/${tks.length} loaded...`;
+    for(let i=0;i<tks.length;i+=5){
+      await Promise.all(tks.slice(i,i+5).map(async tk=>{const h=await fetchHistorical(tk,period);returns[tk]=h?h.pct:null;}));
+      if(i+5<tks.length)await new Promise(r=>setTimeout(r,200));
     }
   }
   if(loadEl)loadEl.textContent='';
@@ -1666,10 +1584,13 @@ async function renderSCChart(sectorName, view, period) {
   const fr=(v,lbl='')=>v!==null&&v!==undefined?`<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(2)}%</span>`:`<span style="color:var(--muted)">—</span>`;
   const frp=(v)=>v!==null&&v!==undefined?`${v>=0?'+':''}${v.toFixed(2)}%`:'—';
 
+    // Build KPI cards without nested backticks
+  const eqOnClick = view==='top' ? `onclick="renderSCChart('${sectorName}','equities','${period}')"` : '';
+  const etfOnClick = view==='top' ? `onclick="renderSCChart('${sectorName}','etfs','${period}')"` : '';
   document.getElementById('scKpis').innerHTML=`
     <div class="perf-card" style="border-left:3px solid var(--gold)"><div class="perf-label">Sector Total (${period})</div><div class="perf-value">${fr(sectorTotalReturn)}</div><div class="perf-sub">Eq+ETF combined</div></div>
-    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${view==='top'?`"renderSCChart('${sectorName}','equities','${period}')"`:``}"><div class="perf-label">Equities (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(eqReturn)}</div><div class="perf-sub">${equities.length} stocks</div></div>
-    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${view==='top'?`"renderSCChart('${sectorName}','etfs','${period}')"`:``}"><div class="perf-label">ETFs (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(etfReturn)}</div><div class="perf-sub">${etfs.length} ETFs</div></div>
+    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" ${eqOnClick}><div class="perf-label">Equities (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(eqReturn)}</div><div class="perf-sub">${equities.length} stocks</div></div>
+    <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" ${etfOnClick}><div class="perf-label">ETFs (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(etfReturn)}</div><div class="perf-sub">${etfs.length} ETFs</div></div>
     <div class="perf-card"><div class="perf-label">${benchmark} (${period})</div><div class="perf-value">${fr(benchReturn)}</div><div class="perf-sub">Sector benchmark</div></div>
     <div class="perf-card"><div class="perf-label">Alpha vs ${benchmark}</div><div class="perf-value">${sectorTotalReturn!==null&&benchReturn!==null?fr(sectorTotalReturn-benchReturn):'<span style="color:var(--muted)">—</span>'}</div><div class="perf-sub">Sector vs benchmark</div></div>
     <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of ${S.fundName} · β${sec.beta.toFixed(2)}</div></div>`;
@@ -1680,23 +1601,16 @@ async function renderSCChart(sectorName, view, period) {
   let labels=[],vals=[],bgColors=[],borderColors=[];
   if(view==='top'){
     labels=['Equities','ETFs','Sector Total',benchmark];
-    vals=[(eqReturn||0),(etfReturn||0),(sectorTotalReturn||0),(benchReturn||0)].map(v=>parseFloat((v||0).toFixed(2)));
+    vals=[eqReturn??0,etfReturn??0,sectorTotalReturn??0,benchReturn??0].map(v=>parseFloat(v.toFixed(2)));
     bgColors=['rgba(0,31,91,0.7)','rgba(157,23,77,0.7)','rgba(22,163,74,0.7)','rgba(249,115,22,0.8)'];
     borderColors=['#001F5B','#9d174d','#16a34a','#f97316'];
   } else {
     const sorted=view==='equities'?[...equities].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)):[...etfs].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
     labels=[...sorted.map(h=>h.ticker),benchmark];
-    vals=[...sorted.map(h=>{const v=returns[h.ticker];return v!==null&&v!==undefined?parseFloat(v.toFixed(2)):0;}),parseFloat((benchReturn??0).toFixed(2))];
+    vals=[...sorted.map(h=>parseFloat((returns[h.ticker]??0).toFixed(2))),parseFloat((benchReturn??0).toFixed(2))];
     bgColors=[...sorted.map(h=>(returns[h.ticker]??0)>=0?'rgba(0,31,91,0.7)':'rgba(220,38,38,0.7)'),'rgba(249,115,22,0.8)'];
     borderColors=[...sorted.map(h=>(returns[h.ticker]??0)>=0?'#001F5B':'#dc2626'),'#f97316'];
-    const makeRow=h=>{
-      const rv=returns[h.ticker]!==null&&returns[h.ticker]!==undefined?returns[h.ticker]:null;
-      const tr=h.glPct?h.glPct*100:0;
-      return `<tr><td class="ticker-cell">${h.ticker}</td><td>${h.company}</td>
-      <td><strong>$${fmt(h.marketValue||0)}</strong></td>
-      <td class="${rv!==null?(rv>=0?'pos':'neg'):''}">${rv!==null?frp(rv):'—'} <span style="font-size:9px;color:var(--muted)">(${period})</span></td>
-      <td class="${tr>=0?'pos':'neg'}">${tr>=0?'+':''}${(tr||0).toFixed(1)}% <span style="font-size:9px;color:var(--muted)">(YTD)</span></td>
-      <td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;};
+    const makeRow=h=>{const rv=returns[h.ticker];const tr=h.glPct?h.glPct*100:0;return `<tr><td class="ticker-cell">${h.ticker}</td><td>${h.company}</td><td><strong>$${fmt(h.marketValue||0)}</strong></td><td class="${rv!==null?(rv>=0?'pos':'neg'):''}">${frp(rv)} <span style="font-size:9px;color:var(--muted)">(${period})</span></td><td class="${tr>=0?'pos':'neg'}">${tr>=0?'+':''}${tr.toFixed(1)}% <span style="font-size:9px;color:var(--muted)">(YTD)</span></td><td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;};
     const hdr='<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>Return</th><th>YTD Return</th><th>Beta</th></tr>';
     document.getElementById('scEqTable').innerHTML=hdr+equities.map(makeRow).join('');
     document.getElementById('scEtfTable').innerHTML=hdr+etfs.map(makeRow).join('');
@@ -1709,7 +1623,7 @@ async function renderSCChart(sectorName, view, period) {
   const leg=document.getElementById('scLegend');
   if(leg){
     if(view==='top'){leg.innerHTML=`<div class="legend-item"><div class="legend-dot" style="background:#001F5B"></div>Equities</div><div class="legend-item"><div class="legend-dot" style="background:#9d174d"></div>ETFs</div><div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div>Sector Total</div><div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>${benchmark}</div>`;}
-    else{leg.innerHTML=`<button onclick="renderSCChart('${sectorName}','top','${period}')" style="font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--navy);font-weight:600">← Back to sector overview</button>`;}
+    else{const backBtn=document.createElement('button');backBtn.textContent='← Back to sector overview';backBtn.style.cssText='font-size:11px;padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--navy);font-weight:600';backBtn.onclick=()=>renderSCChart(sectorName,'top',period);leg.innerHTML='';leg.appendChild(backBtn);}
   }
 }
 
@@ -1950,7 +1864,7 @@ function openSectorThesis(sectorName) {
         <span style="font-weight:700;color:var(--navy);width:50px">${h.ticker}</span>
         <span style="font-size:12px;color:var(--gray)">${h.company}</span>
         <span class="badge type-${h.type}">${h.type.toUpperCase()}</span>
-        ${tag ? `<span style="font-size:10px;font-weight:700;padding:1px 8px;border-radius:12px;background:${TAG_BG[tag]};color:${TAG_COLORS[tag]}">${tag}</span>` : ''}
+        ${tag ? '<span style="font-size:10px;font-weight:700;padding:1px 8px;border-radius:12px;background:'+TAG_BG[tag]+';color:'+TAG_COLORS[tag]+'">'+ tag+'</span>' : ''}
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <span style="font-size:12px;font-weight:700">$${fmt(h.marketValue||0)}</span>
@@ -2221,7 +2135,7 @@ function renderThesisMasterTable(filter, sort) {
         <td>${h.company}</td>
         <td style="font-size:11px">${h.sector||'—'}</td>
         <td><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${tierColor}22;color:${tierColor}">${tier}</span></td>
-        <td>${td.tag?`<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${TAG_BG[td.tag]};color:${TAG_COLORS[td.tag]}">${td.tag}</span>`:'—'}</td>
+        <td>${td.tag?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:'+TAG_BG[td.tag]+';color:'+TAG_COLORS[td.tag]+'">'+td.tag+'</span>':'—'}</td>
         <td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
         <td style="font-weight:600">${td.base?'$'+td.base.toFixed(2):'—'}</td>
         <td class="${upside===null?'':upside>=0?'pos':'neg'}" style="font-weight:700">${upside!==null?(upside>=0?'+':'')+upside.toFixed(1)+'%':'—'}</td>
@@ -2335,16 +2249,16 @@ function renderMovers(view) {
           <span style="font-size:16px">🚀</span> Top Gainers (${label} ≥+${threshold}%) · ${gainers.length} stocks
         </div>
         ${gainers.length > 0 
-          ? `<div style="display:grid;gap:10px">${gainers.map(h => makeCard(h, true)).join('')}</div>`
-          : `<div style="padding:20px;text-align:center;color:var(--muted);background:#f8fafc;border-radius:8px;font-size:12px">No gainers above +${threshold}%</div>`}
+          ? '<div style="display:grid;gap:10px">'+gainers.map(h => makeCard(h, true)).join('')+'</div>'
+          : '<div style="padding:20px;text-align:center;color:var(--muted);background:#f8fafc;border-radius:8px;font-size:12px">No gainers above +'+threshold+'%</div>'}
       </div>
       <div>
         <div style="font-size:12px;font-weight:700;color:#dc2626;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px">
           <span style="font-size:16px">📉</span> Top Losers (${label} ≤-${threshold}%) · ${losers.length} stocks
         </div>
         ${losers.length > 0
-          ? `<div style="display:grid;gap:10px">${[...losers].reverse().map(h => makeCard(h, false)).join('')}</div>`
-          : `<div style="padding:20px;text-align:center;color:var(--muted);background:#f8fafc;border-radius:8px;font-size:12px">No losers below -${threshold}%</div>`}
+          ? '<div style="display:grid;gap:10px">'+[...losers].reverse().map(h => makeCard(h, false)).join('')+'</div>'
+          : '<div style="padding:20px;text-align:center;color:var(--muted);background:#f8fafc;border-radius:8px;font-size:12px">No losers below -'+threshold+'%</div>'}
       </div>
     </div>`;
 }
@@ -2379,7 +2293,7 @@ async function loadMoverNews(ticker, company) {
       return `<div class="news-item">
         <div class="news-headline"><a href="${a.url}" target="_blank" rel="noopener">${a.headline}</a></div>
         <div class="news-meta">${a.source} · ${dateStr}</div>
-        ${a.summary ? `<div style="font-size:11px;color:var(--gray);margin-top:4px;line-height:1.4">${a.summary.slice(0,200)}${a.summary.length>200?'...':''}</div>` : ''}
+        ${a.summary ? '<div style="font-size:11px;color:var(--gray);margin-top:4px;line-height:1.4">'+a.summary.slice(0,200)+(a.summary.length>200?'...':'')+'</div>' : ''}
       </div>`;
     }).join('');
   } catch(e) {
