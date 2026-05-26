@@ -1827,22 +1827,45 @@ function restoreKeysFromFirebase(obj) {
 }
 
 async function loadThesisFromStorage() {
+  // Try Firebase first
   try {
     const r = await fetch(FB_DB_URL + FB_NODE + '.json');
     if (r.ok) {
       const d = await r.json();
-      if (d) {
+      const hasData = d && d.thesis && Object.keys(d.thesis).length > 0;
+      if (hasData) {
         thesisData = restoreKeysFromFirebase(d.thesis || {});
         sectorThesis = d.sectorThesis || {};
         etfNotes = restoreKeysFromFirebase(d.etfNotes || {});
-        console.log('✅ Firebase loaded');
+        console.log('✅ Firebase loaded:', Object.keys(thesisData).length, 'equities');
         return;
       }
     }
   } catch(e) { console.warn('Firebase load failed:', e.message); }
-  try { const d = localStorage.getItem('cee_thesis_data'); if(d) thesisData = JSON.parse(d); } catch(e) {}
+
+  // Firebase empty or failed - load from localStorage
+  let localHasData = false;
+  try { const d = localStorage.getItem('cee_thesis_data'); if(d) { const p = JSON.parse(d); if(Object.keys(p).length > 0){ thesisData = p; localHasData = true; } } } catch(e) {}
   try { const d = localStorage.getItem('cee_sector_thesis'); if(d) sectorThesis = JSON.parse(d); } catch(e) {}
   try { const d = localStorage.getItem('cee_etf_notes'); if(d) etfNotes = JSON.parse(d); } catch(e) {}
+
+  // Auto-migrate localStorage data up to Firebase so everyone sees it
+  if (localHasData) {
+    console.log('📤 Migrating local data to Firebase:', Object.keys(thesisData).length, 'equities...');
+    try {
+      const res = await fetch(FB_DB_URL + FB_NODE + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          thesis: sanitizeFirebaseKeys(thesisData),
+          sectorThesis: sanitizeFirebaseKeys(sectorThesis),
+          etfNotes: sanitizeFirebaseKeys(etfNotes)
+        })
+      });
+      if (res.ok) console.log('✅ Migration to Firebase done!');
+      else { const err = await res.text(); console.warn('Migration failed:', res.status, err); }
+    } catch(e) { console.warn('Migration error:', e.message); }
+  }
 }
 
 let fbSaveTimer=null, fbSavePending=false, fbSaving=false, fbLastSaveOk=false;
