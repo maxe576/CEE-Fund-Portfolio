@@ -1835,7 +1835,7 @@ async function loadThesisFromStorage() {
         thesisData = restoreKeysFromFirebase(d.thesis || {});
         sectorThesis = d.sectorThesis || {};
         etfNotes = restoreKeysFromFirebase(d.etfNotes || {});
-        console.log('Firebase loaded');
+        console.log('✅ Firebase loaded');
         return;
       }
     }
@@ -1879,9 +1879,20 @@ async function flushToFirebase() {
         etfNotes: sanitizeFirebaseKeys(etfNotes)
       })
     });
-    if (res.ok) { fbLastSaveOk = true; console.log('Firebase saved'); }
-    else { const err = await res.text(); console.warn('Firebase save failed:', res.status, err); }
-  } catch(e) { console.warn('Firebase error:', e.message); }
+    if (res.ok) {
+      fbLastSaveOk = true;
+      console.log('✅ Firebase saved');
+    } else {
+      const err = await res.text();
+      console.warn('Firebase save failed:', res.status, err);
+      const el = document.getElementById('equityThesisSaved');
+      if (el) { el.textContent = '❌ Save error: ' + res.status; el.style.color='#dc2626'; }
+    }
+  } catch(e) {
+    console.warn('Firebase error:', e.message);
+    const el = document.getElementById('equityThesisSaved');
+    if (el) { el.textContent = '❌ Network error'; el.style.color='#dc2626'; }
+  }
   fbSaving = false;
 }
 
