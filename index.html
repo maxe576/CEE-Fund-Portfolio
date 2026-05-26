@@ -154,7 +154,6 @@ tr:last-child td{border-bottom:none}
   <button class="nav-tab" onclick="showTab('thesis',this)">📋 Investment Thesis</button>
   <button class="nav-tab" onclick="showTab('movers',this)">📊 Movers</button>
   <button class="nav-tab" onclick="showTab('whatif',this)">🔮 What-If</button>
-  <button class="nav-tab" onclick="showTab('ai',this)">🤖 AI Assistant</button>
 </nav>
 <div class="main">
 <!-- OVERVIEW -->
@@ -259,7 +258,8 @@ tr:last-child td{border-bottom:none}
     <div class="tbl-wrap"><table id="calTable"></table></div>
   </div>
 </div>
-<!-- PRICE TARGETS -->
+
+<!-- INVESTMENT THESIS -->
 <div id="tab-thesis" class="tab-panel">
   <!-- Sector Cards Row -->
   <div class="card" style="margin-bottom:16px">
@@ -493,23 +493,7 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 <!-- AI -->
-<div id="tab-ai" class="tab-panel">
-  <div class="card">
-    <div class="card-title">AI Portfolio Assistant</div>
-    <p style="font-size:12px;color:var(--gray);margin-bottom:12px">Ask questions about your portfolio, sector analysis, trade ideas, or S&P 500 comparisons.</p>
-    <div class="chat-box" id="chatBox"><div class="msg ai">👋 Hi! I'm your CEE Fund assistant. Ask me anything about your portfolio!</div></div>
-    <div class="chat-input-row">
-      <input type="text" class="chat-input" id="chatInput" placeholder="Ask about your portfolio..." onkeydown="if(event.key==='Enter')sendChat()">
-      <button class="chat-send" onclick="sendChat()">Send →</button>
-    </div>
-    <div style="margin-top:8px;font-size:11px;color:var(--muted)">
-      Claude API key: <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;width:240px;margin-left:4px" onchange="saveApiKey(this.value)">
-      <button onclick="clearApiKey()" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:white;cursor:pointer;margin-left:4px;color:var(--gray)">Clear</button>
-      <span id="apiKeyStatus" style="font-size:10px;color:var(--green);margin-left:6px"></span>
-      <span style="display:block;font-size:10px;color:var(--muted);margin-top:4px;margin-left:130px">Saved in your browser — auto-loads next time.</span>
-    </div>
-  </div>
-</div>
+
 </div>
 <!-- ADMIN -->
 <div class="admin-overlay" id="adminOverlay">
@@ -1419,35 +1403,12 @@ async function buildPerfChartPeriod(fund,period){
 }
 
 // ── AI ASSISTANT ──────────────────────────────────────────────────────────────
-async function sendChat(){
-  const input=document.getElementById('chatInput');const msg=input.value.trim();if(!msg)return;input.value='';
-  const chatBox=document.getElementById('chatBox');
-  chatBox.innerHTML+=`<div class="msg user">${msg}</div>`;
-  chatBox.innerHTML+=`<div class="msg ai" id="aiTyping">Thinking...</div>`;
-  chatBox.scrollTop=chatBox.scrollHeight;
-  const HARDCODED_KEY='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';
-  const apiKey=HARDCODED_KEY.startsWith('sk-ant')?HARDCODED_KEY:(document.getElementById('apiKeyInput').value.trim()||localStorage.getItem('cee_claude_key')||'');
-  if(!apiKey||apiKey.length<20){document.getElementById('aiTyping').textContent='Please paste your Claude API key below the chat box. It saves automatically.';return;}
-  const sectors=calcSectors(S.holdings,S.total);
-  const context=`You are an investment analyst for the CNU Captains Educational Enrichment Fund.
-Active fund: ${S.fundName} | Total: $${fmt(S.total)} | Beta: ${S.beta.toFixed(4)}
-YTD Return: ${calcFundYTDReturn(S.fund).toFixed(2)}%
-Positions: ${S.holdings.length} (${S.equities.length} equities + ${S.etfs.length} ETFs)
-Top sectors: ${sectors.slice(0,5).map(s=>`${s.name} ${(s.pct*100).toFixed(1)}% (β${s.beta.toFixed(2)})` ).join(', ')}
-Transactions 2026: ${TRANSACTIONS.length} | S&P 500 sector weights available for comparison.
-Answer concisely and professionally.`;
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:context,messages:[{role:'user',content:msg}]})});
-    const data=await res.json();
-    document.getElementById('aiTyping').textContent=data.content?.[0]?.text||'Check your API key and try again.';
-  }catch(e){document.getElementById('aiTyping').textContent='Connection error. Check your API key.';}
-  chatBox.scrollTop=chatBox.scrollHeight;
-}
+
 
 // ── API KEY PERSISTENCE ───────────────────────────────────────────────────────
-function saveApiKey(val){const k=val.trim();if(k&&k.startsWith('sk-ant')){localStorage.setItem('cee_claude_key',k);const el=document.getElementById('apiKeyStatus');if(el){el.textContent='✅ Saved';setTimeout(()=>el.textContent='',3000);}}}
-function clearApiKey(){localStorage.removeItem('cee_claude_key');document.getElementById('apiKeyInput').value='';const el=document.getElementById('apiKeyStatus');if(el){el.textContent='Cleared';setTimeout(()=>el.textContent='',2000);}}
-function loadSavedApiKey(){const s=localStorage.getItem('cee_claude_key');if(s)document.getElementById('apiKeyInput').value=s;}
+
+
+
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 function logoClick(){logoClickCount++;clearTimeout(logoClickTimer);logoClickTimer=setTimeout(()=>{logoClickCount=0;},2000);if(logoClickCount>=3){logoClickCount=0;openAdmin();}}
@@ -2302,7 +2263,7 @@ async function loadMoverNews(ticker, company) {
   }
 }
 
-window.addEventListener('load', () => { init(); loadSavedApiKey(); });
+window.addEventListener('load', () => { init(); });
 
 </script>
 </body>
