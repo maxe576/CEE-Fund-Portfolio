@@ -1570,9 +1570,17 @@ async function renderSCChart(sectorName, view, period) {
       returns[benchmark]=bq&&bq.c&&bq.pc&&bq.c>0?parseFloat(((bq.c-bq.pc)/bq.pc*100).toFixed(2)):null;
     }catch(e){returns[benchmark]=null;}
   } else if(period==='YTD'){
-    sec.holdings.forEach(h=>{returns[h.ticker]=calcReturn([h],S.fund);});
-    // Fetch benchmark YTD via Yahoo Finance through Cloudflare proxy (same as other periods)
-    returns[benchmark] = await fetchCandleReturn(benchmark, 'YTD');
+    // Fetch ALL tickers YTD from Yahoo Finance via proxy - avoids wrong Jan1 prices
+    if(loadEl)loadEl.textContent='⏳ Fetching YTD data...';
+    const ytdTickers=[...sec.holdings.map(h=>h.ticker), benchmark];
+    for(let i=0;i<ytdTickers.length;i+=8){
+      await Promise.all(ytdTickers.slice(i,i+8).map(async tk=>{
+        returns[tk] = await fetchCandleReturn(tk,'YTD');
+      }));
+      if(i+8<ytdTickers.length)await new Promise(r=>setTimeout(r,300));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+8,ytdTickers.length)}/${ytdTickers.length} loaded...`;
+    }
+    if(loadEl)loadEl.textContent='';
     } else {
     // Use Finnhub candle data for reliable period returns
     if(loadEl)loadEl.textContent=`⏳ Fetching ${period} data...`;
