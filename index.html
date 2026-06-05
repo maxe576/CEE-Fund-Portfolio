@@ -144,8 +144,8 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 <nav class="nav">
-  <button class="nav-tab active" onclick="showTab('overview',this)">📊 Overview</button>
   <button class="nav-tab" onclick="showTab('aum',this)">🏛 Total AUM</button>
+  <button class="nav-tab active" onclick="showTab('overview',this)">📊 Overview</button>
   <button class="nav-tab" onclick="showTab('holdings',this)">💼 Holdings</button>
   <button class="nav-tab" onclick="showTab('sectors',this)">🏗 Sectors</button>
   <button class="nav-tab" onclick="showTab('sectorcompare',this)">🔬 Sector Analysis</button>
@@ -190,7 +190,29 @@ tr:last-child td{border-bottom:none}
 <!-- SECTOR COMPARE -->
 <div id="tab-sectorcompare" class="tab-panel">
   <div class="card" style="margin-bottom:16px"><div class="card-title">Click a Sector to Analyze</div><div id="sectorCards"></div></div>
-  <div id="sectorCompareDetail" style="display:none">
+  <!-- Ticker chart overlay -->
+<div id="tickerChartModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;box-sizing:border-box" onclick="if(event.target===this)closeTickerChart()">
+  <div style="background:white;border-radius:12px;padding:24px;max-width:900px;margin:40px auto;position:relative;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <span id="tcTicker" style="font-size:22px;font-weight:800;color:var(--navy)"></span>
+        <span id="tcCompany" style="font-size:14px;color:var(--gray);margin-left:10px"></span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="tcReturn" style="font-weight:700;font-size:16px"></span>
+        <div style="display:flex;gap:4px">
+          ${['1W','1M','3M','6M','YTD','1Y'].map(p=>`<button class="period-btn" onclick="loadTickerChart('${p}',this)" style="padding:4px 8px;font-size:11px">${p}</button>`).join('')}
+        </div>
+        <button onclick="closeTickerChart()" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:white;cursor:pointer;font-weight:600">✕ Close</button>
+      </div>
+    </div>
+    <div id="tcNewsRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div style="height:300px;position:relative"><canvas id="tickerChart"></canvas></div>
+    <div id="tcStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px"></div>
+    <div id="tcNews" style="margin-top:16px"></div>
+  </div>
+</div>
+<div id="sectorCompareDetail" style="display:none">
     <div class="perf-grid" id="scKpis"></div>
     <div class="card" style="margin-bottom:16px">
       <div class="card-title" id="scChartTitle">Sector Performance vs Benchmark</div>
@@ -221,11 +243,6 @@ tr:last-child td{border-bottom:none}
   <div class="grid-2" style="margin-bottom:16px">
     <div class="card"><div class="card-title">S&P 500 (SPY) Live <span id="spxPrice" style="font-size:13px;font-weight:700">—</span></div><div id="spxStats" style="font-size:12px;color:var(--gray)">Loading...</div></div>
     <div class="card"><div class="card-title">Risk Comparison</div><div id="riskComparison"></div></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Sector Beta vs Portfolio Beta</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">How each sector's beta compares to the overall portfolio beta</div>
-    <div id="sectorBetaBreakdown"></div>
   </div>
   <div class="card"><div class="card-title">Sector Weights vs S&P 500</div>
     <div style="display:grid;grid-template-columns:160px 70px 1fr 70px 1fr 70px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding:4px 0 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
@@ -270,7 +287,7 @@ tr:last-child td{border-bottom:none}
   <div class="card" style="margin-bottom:16px">
     <div class="card-title">
       Investment Thesis
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div id="thesisFilterRow" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="filter-btn active" onclick="filterThesisEquities('all',this)">All</button>
         <button class="filter-btn" onclick="filterThesisEquities('Growth',this)">🌱 Growth</button>
         <button class="filter-btn" onclick="filterThesisEquities('Aggressive',this)">⚡ Aggressive</button>
@@ -458,12 +475,20 @@ tr:last-child td{border-bottom:none}
 <!-- AUM -->
 <div id="tab-aum" class="tab-panel">
   <div class="kpi-grid" id="aumKpis"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+  <div class="grid-2" style="margin-top:16px">
     <div class="card"><div class="card-title">Combined Sector Weights</div><div id="aumSectors"></div></div>
-    <div class="card"><div class="card-title">Fund Breakdown</div><div id="aumFunds"></div></div>
+    <div class="card"><div class="card-title">Asset Class Breakdown</div><div id="aumComposition"></div></div>
   </div>
   <div class="card" style="margin-top:16px">
-    <div class="card-title">All Holdings — Combined Portfolio</div>
+    <div class="card-title">Market Cap Breakdown</div>
+    <div id="aumMcap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px"></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Top 15 Holdings by Combined Weight</div>
+    <div class="tbl-wrap"><table id="aumTop15"></table></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">All Holdings — Combined Portfolio <span id="aumHoldingsCount" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
     <div class="tbl-wrap"><table id="aumTable"></table></div>
   </div>
 </div>
@@ -585,8 +610,10 @@ function buildState() {
   const all = [...fund.equities, ...fund.etfs];
   const bondVal = activeFund === 'endowment' ? (RAW.endowment.bond?.marketValue || 0) : 0;
   const total = all.reduce((s,h) => s+(h.marketValue||0), 0) + (fund.cash||0) + bondVal;
+  const EXCL_EQ=['Broad Market','Fixed Income'];
+  const equityTotal = all.filter(h=>!EXCL_EQ.includes(h.sector)).reduce((s,h)=>s+(h.marketValue||0),0)||1;
   S = { holdings:all, equities:fund.equities, etfs:fund.etfs, cash:fund.cash,
-    bond: activeFund==='endowment'?fund.bond:null, total, fund:activeFund,
+    bond: activeFund==='endowment'?fund.bond:null, total, equityTotal, fund:activeFund,
     fundName: activeFund==='endowment'?'Endowment':'CEE Fund',
     beta: all.reduce((s,h)=>s+(h.beta||1)*(h.marketValue||0),0)/(total||1) };
 }
@@ -1028,8 +1055,11 @@ function renderWiRows() {
           oninput="updateWiTrade(${t.id},'price',this.value)">
       </div>
       <div class="fg"><label>Sector</label>
-        <input type="text" value="${t.sector}" placeholder="auto-fill"
-          oninput="updateWiTrade(${t.id},'sector',this.value)" style="font-size:11px">
+        <select onchange="updateWiTrade(${t.id},'sector',this.value)" style="font-size:11px;padding:7px 4px">
+          <option value="">-- Select --</option>
+          ${t.sector?'<option value="'+t.sector+'" selected>'+t.sector+'</option>':''}
+          ${[...new Set(S.holdings.map(h=>h.sector).filter(s=>s&&s!=='Broad Market'&&s!=='Fixed Income'))].sort().map(s=>s===t.sector?'':'<option value="'+s+'">'+s+'</option>').join('')}
+        </select>
       </div>
       <button class="wi-remove" onclick="removeWiTrade(${t.id})" title="Remove">×</button>
     </div>
@@ -1059,7 +1089,10 @@ function calcWhatIf() {
   if(validTrades.length===0){alert('Please fill in at least one trade with ticker, shares, and price.');return;}
 
   const allH = ALL_HOLDINGS();
-  const sectors = calcSectors(S.holdings, S.total);
+  const EXCL_WI_OLD=['Broad Market','Fixed Income'];
+  const filtOldH=S.holdings.filter(h=>!EXCL_WI_OLD.includes(h.sector));
+  const filtOldT=filtOldH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const sectors = calcSectors(filtOldH, filtOldT);
   let newHoldings = [...S.holdings];
   let newTotal = S.total;
   let tradesSummary = [];
@@ -1245,10 +1278,10 @@ async function loadNews(type){
         await new Promise(r=>setTimeout(r,500));
       }
       allNews.sort((a,b)=>b.datetime-a.datetime);
-      newsCache[ck]=allNews.slice(0,25);renderNews(newsCache[ck]);if(loadEl)loadEl.style.display='none';return;
+      newsCache[ck]=[...allNews].sort((a,b)=>(b.datetime||0)-(a.datetime||0)).slice(0,25);renderNews(newsCache[ck]);if(loadEl)loadEl.style.display='none';return;
     }
     if(url){data=await fetchYF(url,8000);}
-    if(data&&Array.isArray(data)){newsCache[ck]=data.slice(0,25);renderNews(newsCache[ck]);}
+    if(data&&Array.isArray(data)){newsCache[ck]=[...data].sort((a,b)=>(b.datetime||0)-(a.datetime||0)).slice(0,25);renderNews(newsCache[ck]);}
     else if(listEl)listEl.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px">No news found. Try again in 30 seconds.</div>';
   }catch(e){if(listEl)listEl.innerHTML='<div style="color:var(--muted);text-align:center;padding:20px">Could not load news. Try again in 30 seconds.</div>';}
   if(loadEl)loadEl.style.display='none';
@@ -1644,17 +1677,26 @@ async function renderSCChart(sectorName, view, period) {
     const ytdTickers=[...sec.holdings.map(h=>h.ticker), benchmark];
     for(let i=0;i<ytdTickers.length;i+=8){
       await Promise.all(ytdTickers.slice(i,i+8).map(async tk=>{
-        returns[tk] = await fetchCandleReturn(tk,'YTD');
+        const v = await fetchCandleReturn(tk,'YTD');
+        returns[tk] = v;
+        if(v!==null) ytdCache[tk]=v; // populate ytdCache for table display
       }));
       if(i+8<ytdTickers.length)await new Promise(r=>setTimeout(r,300));
       if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+8,ytdTickers.length)}/${ytdTickers.length} loaded...`;
     }
     if(loadEl)loadEl.textContent='';
     } else {
-    // Use Finnhub candle data for reliable period returns
+    // Use Yahoo Finance for period returns
     if(loadEl)loadEl.textContent=`⏳ Fetching ${period} data...`;
     const benchRet = await fetchCandleReturn(benchmark, period);
     returns[benchmark] = benchRet;
+    // Fetch YTD in background for table display if not already cached
+    sec.holdings.forEach(async h=>{
+      if(ytdCache[h.ticker]===undefined){
+        const v=await fetchCandleReturn(h.ticker,'YTD');
+        if(v!==null) ytdCache[h.ticker]=v;
+      }
+    });
     const tks=sec.holdings.map(h=>h.ticker);
     // Yahoo Finance via proxy - can batch more aggressively
     for(let i=0;i<tks.length;i+=8){
@@ -1690,8 +1732,9 @@ async function renderSCChart(sectorName, view, period) {
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${view==='top'?`"renderSCChart('${sectorName}','equities','${period}')"`:``}"><div class="perf-label">Equities (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(eqReturn)}</div><div class="perf-sub">${equities.length} stocks</div></div>
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${view==='top'?`"renderSCChart('${sectorName}','etfs','${period}')"`:``}"><div class="perf-label">ETFs (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(etfReturn)}</div><div class="perf-sub">${etfs.length} ETFs</div></div>
     <div class="perf-card"><div class="perf-label">${benchmark} (${period})</div><div class="perf-value">${fr(benchReturn)}</div><div class="perf-sub">Sector benchmark</div></div>
-    <div class="perf-card"><div class="perf-label">Alpha vs ${benchmark}</div><div class="perf-value">${sectorTotalReturn!==null&&benchReturn!==null?fr(sectorTotalReturn-benchReturn):'<span style="color:var(--muted)">—</span>'}</div><div class="perf-sub">Sector vs benchmark</div></div>
-    <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of ${S.fundName} · β${sec.beta.toFixed(2)}</div></div>`;
+    <div class="perf-card"><div class="perf-label">Alpha vs ${benchmark}</div><div class="perf-value">${sectorTotalReturn!==null&&benchReturn!==null?fr(sectorTotalReturn-benchReturn):'<span style="color:var(--muted)">—</span>'}</div><div class="perf-sub">Sector return − benchmark</div></div>
+    <div class="perf-card"><div class="perf-label">Sector β vs ${benchmark}</div><div class="perf-value"><span class="${sec.beta>S.beta?'neg':'pos'}">β${sec.beta.toFixed(2)}</span></div><div class="perf-sub">Fund β${S.beta.toFixed(2)} · ${sec.beta>S.beta?'Higher ↑':'Lower ↓'} beta</div></div>
+    <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of eq. portfolio · β${sec.beta.toFixed(2)}</div></div>`;
 
   document.getElementById('scChartTitle').textContent=`${sectorName} — ${period} vs ${benchmark}`;
   document.getElementById('sectorCompareDetail').style.display='block';
@@ -1710,13 +1753,19 @@ async function renderSCChart(sectorName, view, period) {
     borderColors=[...sorted.map(h=>(returns[h.ticker]??0)>=0?'#001F5B':'#dc2626'),'#f97316'];
     const makeRow=h=>{
       const rv=returns[h.ticker]!==null&&returns[h.ticker]!==undefined?returns[h.ticker]:null;
-      const tr=h.glPct?h.glPct*100:0;
-      return `<tr><td class="ticker-cell">${h.ticker}</td><td>${h.company}</td>
+      // YTD from Yahoo Finance via ytdCache (accurate Jan 1 based)
+      const ytd=ytdCache[h.ticker]!==undefined?ytdCache[h.ticker]:null;
+      // Total return = unrealized G/L from cost basis (fixed, never changes)
+      const costReturn=h.glPct?h.glPct*100:0;
+      return `<tr style="cursor:pointer" onclick="showTickerChart('${h.ticker}','${h.company}','${sectorName}')" title="Click for price chart">
+      <td class="ticker-cell">${h.ticker} <span style="font-size:9px;color:var(--blue)">📈</span></td>
+      <td>${h.company}</td>
       <td><strong>$${fmt(h.marketValue||0)}</strong></td>
       <td class="${rv!==null?(rv>=0?'pos':'neg'):''}">${rv!==null?frp(rv):'—'} <span style="font-size:9px;color:var(--muted)">(${period})</span></td>
-      <td class="${tr>=0?'pos':'neg'}">${tr>=0?'+':''}${(tr||0).toFixed(1)}% <span style="font-size:9px;color:var(--muted)">(YTD)</span></td>
+      <td class="${ytd!==null?(ytd>=0?'pos':'neg'):''}">${ytd!==null?(ytd>=0?'+':'')+ytd.toFixed(1)+'%':'—'} <span style="font-size:9px;color:var(--muted)">(YTD)</span></td>
+      <td class="${costReturn>=0?'pos':'neg'}">${costReturn>=0?'+':''}${costReturn.toFixed(1)}% <span style="font-size:9px;color:var(--muted)"></span></td>
       <td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;};
-    const hdr='<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>Return</th><th>YTD Return</th><th>Beta</th></tr>';
+    const hdr='<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>Period Return</th><th>YTD Return</th><th>Return</th><th>Beta</th></tr>';
     document.getElementById('scEqTable').innerHTML=hdr+equities.map(makeRow).join('');
     document.getElementById('scEtfTable').innerHTML=hdr+etfs.map(makeRow).join('');
   }
@@ -1771,9 +1820,14 @@ async function fetchMcap(ticker) {
 async function fetchMcapsForThesis() {
   Object.entries(MCAP_EMBEDDED).forEach(([tk,mcap]) => { mcapCache[tk]=mcap; });
   renderMcapBreakdown();
-  const equities=[...new Set([...RAW.endowment.equities,...RAW.ceeFund.equities].map(h=>h.ticker))];
-  const missing=equities.filter(tk=>!mcapCache[tk]);
-  for (let i=0;i<missing.length;i++) { await fetchMcap(missing[i]); await new Promise(r=>setTimeout(r,2000)); }
+  // Fetch PE for all equities in batches (Finnhub rate limit: 60/min)
+  const fundData = activeFund === 'endowment' ? RAW.endowment : RAW.ceeFund;
+  const equities=[...new Set(fundData.equities.map(h=>h.ticker))];
+  for (let i=0;i<equities.length;i+=3) {
+    await Promise.all(equities.slice(i,i+3).map(tk=>fetchMcap(tk)));
+    if(i+3<equities.length) await new Promise(r=>setTimeout(r,1500));
+  }
+  renderThesisMasterTable(thesisFilter); // refresh table with P/E data
 }
 setTimeout(fetchMcapsForThesis, 2000);
 
@@ -1962,7 +2016,10 @@ function openSectorThesis(sectorName) {
   document.getElementById('thesisDetailPanel').style.display = 'none';
 
   // Build holdings list
-  const sectors = calcSectors(S.holdings, S.total);
+  const EXCL_WI_OLD=['Broad Market','Fixed Income'];
+  const filtOldH=S.holdings.filter(h=>!EXCL_WI_OLD.includes(h.sector));
+  const filtOldT=filtOldH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const sectors = calcSectors(filtOldH, filtOldT);
   const sec = sectors.find(s => s.name === sectorName);
   if (!sec) return;
 
@@ -2054,7 +2111,7 @@ function openThesisDetail(ticker) {
   document.getElementById('detailCost').textContent = h.avgCost ? '$'+h.avgCost.toFixed(2) : '—';
   document.getElementById('detailReturn').innerHTML = h.glPct ?
     `<span class="${h.glPct>=0?'pos':'neg'}">${h.glPct>=0?'+':''}${(h.glPct*100).toFixed(1)}%</span>` : '—';
-  document.getElementById('detailWeight').textContent = ((h.marketValue||0)/S.total*100).toFixed(2)+'%';
+  document.getElementById('detailWeight').textContent = ((h.marketValue||0)/S.equityTotal*100).toFixed(2)+'%';
 
   // Get purchase date from transactions
   const txs = TRANSACTIONS.filter(t => t.ticker === ticker && t.action.toLowerCase() === 'buy').sort((a,b) => a.date.localeCompare(b.date));
@@ -2219,6 +2276,22 @@ function autoSaveEtfNote() {
 
 
 // ── MASTER TABLE ──────────────────────────────────────────────────────────────
+let thesisSortCol = 'weight';
+let thesisSortAsc = false;
+function sortThesisMasterTable(col, btn) {
+  if (thesisSortCol === col) {
+    thesisSortAsc = !thesisSortAsc;
+  } else {
+    thesisSortCol = col;
+    thesisSortAsc = false;
+  }
+  if (btn) {
+    document.querySelectorAll('#thesisFilterRow .filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  renderThesisMasterTable(thesisFilter);
+}
+
 function filterThesisEquities(filter, el) {
   if (el && el.tagName === 'BUTTON') {
     document.querySelectorAll('#tab-thesis .filter-btn').forEach(b => b.classList.remove('active'));
@@ -2250,11 +2323,13 @@ function renderThesisMasterTable(filter, sort) {
   }
   // Apply sort
   const _sortCol = typeof thesisSortCol !== 'undefined' ? thesisSortCol : 'weight';
-  if (_sortCol === 'weight') holdings = [...holdings].sort((a,b) => (b.marketValue||0)-(a.marketValue||0));
-  else if (_sortCol === 'beta') holdings = [...holdings].sort((a,b) => (b.beta||0)-(a.beta||0));
-  else if (_sortCol === 'pe') holdings = [...holdings].sort((a,b) => (peCache[b.ticker]||999)-(peCache[a.ticker]||999));
-  else if (_sortCol === 'ytd') holdings = [...holdings].sort((a,b) => (ytdCache[b.ticker]||0)-(ytdCache[a.ticker]||0));
-  else if (_sortCol === 'alpha') holdings = [...holdings].sort((a,b) => ((ytdCache[b.ticker]||0)-(ytdCache['SPY']||0))-((ytdCache[a.ticker]||0)-(ytdCache['SPY']||0)));
+  const _asc = typeof thesisSortAsc !== 'undefined' ? thesisSortAsc : false;
+  const _dir = _asc ? 1 : -1;
+  if (_sortCol === 'weight') holdings = [...holdings].sort((a,b) => _dir*((a.marketValue||0)-(b.marketValue||0)));
+  else if (_sortCol === 'beta') holdings = [...holdings].sort((a,b) => _dir*((a.beta||0)-(b.beta||0)));
+  else if (_sortCol === 'pe') holdings = [...holdings].sort((a,b) => _dir*((peCache[a.ticker]||0)-(peCache[b.ticker]||0)));
+  else if (_sortCol === 'ytd') holdings = [...holdings].sort((a,b) => _dir*((ytdCache[a.ticker]||0)-(ytdCache[b.ticker]||0)));
+  else if (_sortCol === 'alpha') holdings = [...holdings].sort((a,b) => _dir*(((ytdCache[a.ticker]||0)-(ytdCache['SPY']||0))-((ytdCache[b.ticker]||0)-(ytdCache['SPY']||0))));
   const capFilter = document.getElementById('mcapFilter')?.value;
   if (capFilter) {
     holdings = holdings.filter(h => mcapCache[h.ticker] && getMcapTier(mcapCache[h.ticker]) === capFilter);
@@ -2279,7 +2354,15 @@ function renderThesisMasterTable(filter, sort) {
 
   document.getElementById('thesisCount').textContent = `(${holdings.length} equities)`;
   document.getElementById('thesisMasterTable').innerHTML = `
-    <tr><th>Ticker</th><th>Company</th><th>Sector</th><th>Market Cap</th><th>Tag</th><th>Beta</th><th>P/E</th><th>YTD</th><th>Alpha</th><th>% Fund</th><th>Price</th><th>Base Target</th><th>Upside</th><th>Thesis</th></tr>
+    <tr>
+  <th>Ticker</th><th>Company</th><th>Sector</th><th>Market Cap</th><th>Tag</th>
+  <th style="cursor:pointer;user-select:none" onclick="sortThesisMasterTable('beta')" title="Sort by Beta">Beta ↕</th>
+  <th style="cursor:pointer;user-select:none" onclick="sortThesisMasterTable('pe')" title="Sort by P/E">P/E ↕</th>
+  <th style="cursor:pointer;user-select:none" onclick="sortThesisMasterTable('ytd')" title="Sort by YTD">YTD ↕</th>
+  <th style="cursor:pointer;user-select:none" onclick="sortThesisMasterTable('alpha')" title="Sort by Alpha">Alpha ↕</th>
+  <th style="cursor:pointer;user-select:none" onclick="sortThesisMasterTable('weight')" title="Sort by Weight">% Fund ↕</th>
+  <th>Price</th><th>Base Target</th><th>Upside</th><th>Thesis</th>
+</tr>
     ${holdings.map(h => {
       const td = thesisData[h.ticker] || {};
       const mcap = mcapCache[h.ticker];
@@ -2297,7 +2380,7 @@ function renderThesisMasterTable(filter, sort) {
         <td style="font-size:12px">${peCache[h.ticker]?peCache[h.ticker]+'x':'—'}</td>
         <td class="${(ytdCache[h.ticker]||0)>=0?'pos':'neg'}">${ytdCache[h.ticker]!==undefined?((ytdCache[h.ticker]>=0?'+':'')+ytdCache[h.ticker].toFixed(1)+'%'):'—'}</td>
         <td class="${ytdCache[h.ticker]!==undefined&&ytdCache['SPY']!==undefined?(ytdCache[h.ticker]-ytdCache['SPY'])>=0?'pos':'neg':''}" style="font-weight:700">${ytdCache[h.ticker]!==undefined&&ytdCache['SPY']!==undefined?((ytdCache[h.ticker]-ytdCache['SPY']>=0?'+':'')+(ytdCache[h.ticker]-ytdCache['SPY']).toFixed(1)+'%'):'—'}</td>
-        <td style="font-size:11px">${(h.marketValue/S.total*100).toFixed(1)}%</td>
+        <td style="font-size:11px">${(h.marketValue/S.equityTotal*100).toFixed(1)}%</td>
         <td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
         <td style="font-weight:600">${td.base?'$'+td.base.toFixed(2):'—'}</td>
         <td class="${upside===null?'':upside>=0?'pos':'neg'}" style="font-weight:700">${upside!==null?(upside>=0?'+':'')+upside.toFixed(1)+'%':'—'}</td>
@@ -2448,7 +2531,7 @@ async function loadMoverNews(ticker, company) {
       listEl.innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px">No recent news found for ' + ticker + '</div>';
       return;
     }
-    const articles = data.slice(0, 10);
+    const articles = [...data].sort((a,b)=>(b.datetime||0)-(a.datetime||0)).slice(0, 10);
     listEl.innerHTML = articles.map(a => {
       const date = new Date(a.datetime * 1000);
       const dateStr = date.toLocaleDateString('en-US', {month:'short',day:'numeric'}) + ' · ' + date.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'});
@@ -2471,76 +2554,138 @@ function renderAUM() {
   const cee = RAW.ceeFund;
   const allEndow = [...endow.equities, ...endow.etfs];
   const allCee = [...cee.equities, ...cee.etfs];
-  const allHoldings = [...allEndow, ...allCee];
 
-  const endowMV = allEndow.reduce((s,h)=>s+(h.marketValue||0),0) + (endow.cash||0) + (endow.bond?.marketValue||0);
-  const ceeMV = allCee.reduce((s,h)=>s+(h.marketValue||0),0) + (cee.cash||0);
+  const endowEqMV = endow.equities.reduce((s,h)=>s+(h.marketValue||0),0);
+  const endowEtfMV = endow.etfs.reduce((s,h)=>s+(h.marketValue||0),0);
+  const endowCash = endow.cash||0;
+  const endowBond = endow.bond?.marketValue||0;
+  const endowMV = endowEqMV + endowEtfMV + endowCash + endowBond;
+
+  const ceeEqMV = cee.equities.reduce((s,h)=>s+(h.marketValue||0),0);
+  const ceeEtfMV = cee.etfs.reduce((s,h)=>s+(h.marketValue||0),0);
+  const ceeCash = cee.cash||0;
+  const ceeMV = ceeEqMV + ceeEtfMV + ceeCash;
+
   const totalAUM = endowMV + ceeMV;
 
-  // Combined beta weighted
+  // Combined holdings for sector/beta calcs
+  const allHoldings = [...allEndow, ...allCee];
   const allMV = allHoldings.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const combinedBeta = allHoldings.reduce((s,h)=>s+(h.beta||1)*(h.marketValue||0),0)/allMV;
 
-  // KPIs
+  // Combined totals by type
+  const combinedEqMV = endowEqMV + ceeEqMV;
+  const combinedEtfMV = endowEtfMV + ceeEtfMV;
+  const combinedCash = endowCash + ceeCash;
+  const combinedBond = endowBond;
+
+  // ── KPI cards (like Overview) ──────────────────────────────────────────────
   document.getElementById('aumKpis').innerHTML = `
-    <div class="kpi accent"><div class="kpi-label">Total AUM</div><div class="kpi-value">$${fmt(totalAUM)}</div><div class="kpi-sub">Endowment + CEE Fund</div></div>
-    <div class="kpi"><div class="kpi-label">Endowment</div><div class="kpi-value">$${fmt(endowMV)}</div><div class="kpi-sub">${(endowMV/totalAUM*100).toFixed(1)}% of AUM</div></div>
-    <div class="kpi"><div class="kpi-label">CEE Fund</div><div class="kpi-value">$${fmt(ceeMV)}</div><div class="kpi-sub">${(ceeMV/totalAUM*100).toFixed(1)}% of AUM</div></div>
-    <div class="kpi"><div class="kpi-label">Combined Beta</div><div class="kpi-value">${combinedBeta.toFixed(3)}</div><div class="kpi-sub">${combinedBeta>1?'More':'Less'} volatile than S&P</div></div>
-    <div class="kpi"><div class="kpi-label">Total Holdings</div><div class="kpi-value">${new Set(allHoldings.map(h=>h.ticker)).size}</div><div class="kpi-sub">Unique tickers across both funds</div></div>
-    <div class="kpi"><div class="kpi-label">Total Equities</div><div class="kpi-value">${new Set([...endow.equities,...cee.equities].map(h=>h.ticker)).size}</div><div class="kpi-sub">Unique equity positions</div></div>
+    <div class="kpi accent">
+      <div class="kpi-label">Total AUM</div>
+      <div class="kpi-value">$${fmt(totalAUM)}</div>
+      <div class="kpi-sub">Endowment + CEE Fund</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Endowment Fund</div>
+      <div class="kpi-value">$${fmt(endowMV)}</div>
+      <div class="kpi-sub">${(endowMV/totalAUM*100).toFixed(1)}% of AUM</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">CEE Fund</div>
+      <div class="kpi-value">$${fmt(ceeMV)}</div>
+      <div class="kpi-sub">${(ceeMV/totalAUM*100).toFixed(1)}% of AUM</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Combined Beta</div>
+      <div class="kpi-value">${combinedBeta.toFixed(3)}</div>
+      <div class="kpi-sub">${combinedBeta>1?'More':'Less'} volatile than S&P</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Unique Tickers</div>
+      <div class="kpi-value">${new Set(allHoldings.map(h=>h.ticker)).size}</div>
+      <div class="kpi-sub">Across both funds</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Equities</div>
+      <div class="kpi-value">$${fmt(combinedEqMV)}</div>
+      <div class="kpi-sub">${(combinedEqMV/totalAUM*100).toFixed(1)}% of AUM</div>
+    </div>
   `;
 
-  // Combined sector weights (excluding Broad Market / Fixed Income)
+  // ── Sector weights (Overview-style bars) ───────────────────────────────────
   const EXCL = ['Broad Market','Fixed Income'];
   const filtAll = allHoldings.filter(h=>!EXCL.includes(h.sector));
   const filtT = filtAll.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const sectors = calcSectors(filtAll, filtT);
-  const colors = ['#001F5B','#1e40af','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#93c5fd','#bfdbfe','#dbeafe','#eff6ff'];
+  const sectors = calcSectors(filtAll, filtT).slice(0,8);
+  const colors = ['#001F5B','#1e40af','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#93c5fd','#bfdbfe'];
   const maxPct = Math.max(...sectors.map(s=>s.pct));
-  document.getElementById('aumSectors').innerHTML = sectors.map((s,i) => `
+  document.getElementById('aumSectors').innerHTML = sectors.map((s,i)=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div style="min-width:130px;font-size:12px;font-weight:600">${s.name}</div>
+      <div style="min-width:130px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</div>
       <div class="st" style="flex:1"><div class="sf" style="width:${(s.pct/maxPct*100).toFixed(1)}%;background:${colors[i%colors.length]}"></div></div>
-      <div class="sp_" style="min-width:40px">${(s.pct*100).toFixed(1)}%</div>
+      <div class="sp_">${(s.pct*100).toFixed(1)}%</div>
       <div style="font-size:11px;color:var(--muted);min-width:30px">β${s.beta.toFixed(2)}</div>
     </div>`).join('');
 
-  // Fund breakdown
-  document.getElementById('aumFunds').innerHTML = `
-    <div style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-        <span style="font-weight:700">Endowment Fund</span>
-        <span style="font-weight:700">$${fmt(endowMV)}</span>
-      </div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">Equities: $${fmt(allEndow.filter(h=>h.type==='equity').reduce((s,h)=>s+(h.marketValue||0),0))}</div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">ETFs: $${fmt(allEndow.filter(h=>h.type==='etf').reduce((s,h)=>s+(h.marketValue||0),0))}</div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">Cash: $${fmt(endow.cash||0)}</div>
-      ${endow.bond?'<div style="font-size:12px;color:var(--muted);padding:4px 0">Bond: $'+fmt(endow.bond.marketValue||0)+'</div>':''}
-    </div>
-    <div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-        <span style="font-weight:700">CEE Fund</span>
-        <span style="font-weight:700">$${fmt(ceeMV)}</span>
-      </div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">Equities: $${fmt(allCee.filter(h=>h.type==='equity').reduce((s,h)=>s+(h.marketValue||0),0))}</div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">ETFs: $${fmt(allCee.filter(h=>h.type==='etf').reduce((s,h)=>s+(h.marketValue||0),0))}</div>
-      <div style="font-size:12px;color:var(--muted);padding:4px 0">Cash: $${fmt(cee.cash||0)}</div>
-    </div>`;
+  // ── Asset class composition (Equities / ETFs / Cash / Bonds) ──────────────
+  const assetClasses = [
+    {name:'Equities', value:combinedEqMV, color:'#001F5B'},
+    {name:'ETFs', value:combinedEtfMV, color:'#1e40af'},
+    {name:'Cash', value:combinedCash, color:'#16a34a'},
+    {name:'Bonds', value:combinedBond, color:'#f59e0b'},
+  ].filter(a=>a.value>0);
+  const assetTotal = assetClasses.reduce((s,a)=>s+a.value,0)||1;
+  const maxAsset = Math.max(...assetClasses.map(a=>a.value));
+  document.getElementById('aumComposition').innerHTML = assetClasses.map(a=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div style="min-width:70px;font-size:12px;font-weight:600">${a.name}</div>
+      <div class="st" style="flex:1"><div class="sf" style="width:${(a.value/maxAsset*100).toFixed(1)}%;background:${a.color}"></div></div>
+      <div class="sp_">${(a.value/assetTotal*100).toFixed(1)}%</div>
+      <div style="font-size:11px;color:var(--muted);min-width:80px;text-align:right">$${fmt(a.value)}</div>
+    </div>`).join('');
 
-  // Combined holdings table - merge duplicate tickers
-  const merged = {};
-  allHoldings.forEach(h => {
-    if (!merged[h.ticker]) merged[h.ticker] = {...h, funds:[]};
-    else { merged[h.ticker].marketValue = (merged[h.ticker].marketValue||0)+(h.marketValue||0); merged[h.ticker].shares = (merged[h.ticker].shares||0)+(h.shares||0); }
-    merged[h.ticker].funds.push(activeFund==='endowment'?'E':'C');
+  // ── Market Cap Breakdown ───────────────────────────────────────────────────
+  const tiers = {'Mega Cap':{color:'#7c3aed',bg:'#f5f3ff',holdings:[],value:0},'Large Cap':{color:'#1e40af',bg:'#eff6ff',holdings:[],value:0},'Mid Cap':{color:'#047857',bg:'#ecfdf5',holdings:[],value:0},'Small Cap':{color:'#b45309',bg:'#fffbeb',holdings:[],value:0}};
+  allHoldings.filter(h=>h.type==='equity').forEach(h=>{
+    const mcap=mcapCache[h.ticker];
+    if(mcap){const tier=getMcapTier(mcap);if(tiers[tier]){tiers[tier].holdings.push(h.ticker);tiers[tier].value+=(h.marketValue||0);}}
   });
-  // Actually track which fund each holding is in
+  const tierTotal=Object.values(tiers).reduce((s,t)=>s+t.value,0)||1;
+  document.getElementById('aumMcap').innerHTML=Object.entries(tiers).map(([name,t])=>`
+    <div style="background:${t.bg};border:1px solid ${t.color}33;border-radius:8px;padding:14px;border-left:3px solid ${t.color}">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:${t.color};margin-bottom:4px">${name}</div>
+      <div style="font-size:20px;font-weight:700;color:${t.color}">${(t.value/tierTotal*100).toFixed(1)}%</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">$${fmt(t.value)} · ${[...new Set(t.holdings)].length} positions</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">${[...new Set(t.holdings)].slice(0,4).join(', ')}${[...new Set(t.holdings)].length>4?' +more':''}</div>
+    </div>`).join('');
+
+  // ── Merge holdings across funds ────────────────────────────────────────────
   const mergedMap = {};
-  allEndow.forEach(h => { if(!mergedMap[h.ticker]) mergedMap[h.ticker]={...h,endowMV:h.marketValue||0,ceeMV:0}; else mergedMap[h.ticker].endowMV=(mergedMap[h.ticker].endowMV||0)+(h.marketValue||0); });
-  allCee.forEach(h => { if(!mergedMap[h.ticker]) mergedMap[h.ticker]={...h,endowMV:0,ceeMV:h.marketValue||0}; else mergedMap[h.ticker].ceeMV=(mergedMap[h.ticker].ceeMV||0)+(h.marketValue||0); });
+  allEndow.forEach(h=>{
+    if(!mergedMap[h.ticker]) mergedMap[h.ticker]={...h,endowMV:0,ceeMV:0};
+    mergedMap[h.ticker].endowMV=(mergedMap[h.ticker].endowMV||0)+(h.marketValue||0);
+  });
+  allCee.forEach(h=>{
+    if(!mergedMap[h.ticker]) mergedMap[h.ticker]={...h,endowMV:0,ceeMV:0};
+    mergedMap[h.ticker].ceeMV=(mergedMap[h.ticker].ceeMV||0)+(h.marketValue||0);
+  });
   const rows = Object.values(mergedMap).map(h=>({...h,totalMV:(h.endowMV||0)+(h.ceeMV||0)})).sort((a,b)=>b.totalMV-a.totalMV);
 
+  // ── Top 15 ─────────────────────────────────────────────────────────────────
+  document.getElementById('aumTop15').innerHTML = `
+    <tr><th>Ticker</th><th>Company</th><th>Sector</th><th>Combined MV</th><th>% of AUM</th><th>Beta</th></tr>
+    ${rows.slice(0,15).map(h=>`<tr>
+      <td class="ticker-cell">${h.ticker}</td>
+      <td>${h.company}</td>
+      <td style="font-size:11px">${h.sector||'—'}</td>
+      <td><strong>$${fmt(h.totalMV)}</strong></td>
+      <td>${(h.totalMV/totalAUM*100).toFixed(2)}%</td>
+      <td>${h.beta?h.beta.toFixed(2):'—'}</td>
+    </tr>`).join('')}`;
+
+  // ── All Holdings ───────────────────────────────────────────────────────────
+  document.getElementById('aumHoldingsCount').textContent = rows.length+' holdings';
   document.getElementById('aumTable').innerHTML = `
     <tr><th>Ticker</th><th>Company</th><th>Sector</th><th>Type</th><th>Endowment</th><th>CEE Fund</th><th>Combined MV</th><th>% of AUM</th><th>Beta</th></tr>
     ${rows.map(h=>`<tr>
@@ -2554,6 +2699,118 @@ function renderAUM() {
       <td>${(h.totalMV/totalAUM*100).toFixed(2)}%</td>
       <td>${h.beta?h.beta.toFixed(2):'—'}</td>
     </tr>`).join('')}`;
+}
+
+// ── TICKER CHART OVERLAY ──────────────────────────────────────────────────────
+let tickerChartRef = null;
+let currentChartTicker = null;
+let currentChartSector = null;
+
+function closeTickerChart() {
+  document.getElementById('tickerChartModal').style.display = 'none';
+  if (tickerChartRef) { tickerChartRef.destroy(); tickerChartRef = null; }
+}
+
+async function showTickerChart(ticker, company, sector) {
+  currentChartTicker = ticker;
+  currentChartSector = sector;
+  document.getElementById('tickerChartModal').style.display = 'block';
+  document.getElementById('tcTicker').textContent = ticker;
+  document.getElementById('tcCompany').textContent = company;
+  document.getElementById('tcReturn').textContent = '';
+  document.getElementById('tcStats').innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px">Loading...</div>';
+  document.getElementById('tcNews').innerHTML = '';
+
+  // Find holding data
+  const h = S.holdings.find(x=>x.ticker===ticker) || ALL_HOLDINGS().find(x=>x.ticker===ticker);
+
+  // Show stats
+  const ytd = ytdCache[ticker];
+  const cost = h?.glPct ? (h.glPct*100).toFixed(1)+'%' : '—';
+  document.getElementById('tcStats').innerHTML = `
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border-left:3px solid var(--navy)">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">YTD Return</div>
+      <div style="font-size:18px;font-weight:800" class="${ytd!=null?(ytd>=0?'pos':'neg'):''}">${ytd!=null?(ytd>=0?'+':'')+ytd.toFixed(1)+'%':'—'}</div>
+    </div>
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border-left:3px solid var(--gold)">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Total Return (cost)</div>
+      <div style="font-size:18px;font-weight:800" class="${h?.glPct>=0?'pos':'neg'}">${h?.glPct!=null?(h.glPct>=0?'+':'')+cost:'—'}</div>
+    </div>
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border-left:3px solid var(--blue)">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Market Value</div>
+      <div style="font-size:18px;font-weight:800">$${h?fmt(h.marketValue):'—'}</div>
+    </div>
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;border-left:3px solid ${(h?.beta||1)>1.2?'#dc2626':'#16a34a'}">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700">Beta</div>
+      <div style="font-size:18px;font-weight:800">β${h?.beta?h.beta.toFixed(2):'—'}</div>
+    </div>`;
+
+  // Default to 3M chart
+  await loadTickerChart('3M', document.querySelector('#tickerChartModal .period-btn'));
+
+  // Load news
+  loadTickerNews(ticker);
+}
+
+async function loadTickerChart(period, btn) {
+  if (!currentChartTicker) return;
+  // Update active period button
+  document.querySelectorAll('#tickerChartModal .period-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${currentChartTicker}?interval=${period==='YTD'||period==='1Y'?'1wk':'1d'}&range=${period==='YTD'?'ytd':period==='1W'?'5d':period==='1M'?'1mo':period==='3M'?'3mo':period==='6M'?'6mo':'1y'}`;
+  const data = await fetchYF(url, 8000);
+  if (!data) { document.getElementById('tcReturn').textContent = 'Load failed'; return; }
+
+  const result = data.chart?.result?.[0];
+  if (!result) return;
+
+  const timestamps = result.timestamp || [];
+  const closes = result.indicators?.quote?.[0]?.close || [];
+  const valid = timestamps.map((t,i)=>({t,c:closes[i]})).filter(x=>x.c!==null&&x.c!==undefined);
+  if (valid.length < 2) return;
+
+  const labels = valid.map(x=>new Date(x.t*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+  const prices = valid.map(x=>x.c);
+  const pctReturn = (prices[prices.length-1]-prices[0])/prices[0]*100;
+  const retEl = document.getElementById('tcReturn');
+  retEl.textContent = (pctReturn>=0?'+':'')+pctReturn.toFixed(2)+'% ('+period+')';
+  retEl.className = pctReturn>=0?'pos':'neg';
+  retEl.style.fontSize='16px';retEl.style.fontWeight='700';
+
+  if (tickerChartRef) tickerChartRef.destroy();
+  const ctx = document.getElementById('tickerChart').getContext('2d');
+  const color = pctReturn>=0?'#16a34a':'#dc2626';
+  tickerChartRef = new Chart(ctx, {
+    type:'line',
+    data:{labels,datasets:[{label:currentChartTicker,data:prices,borderColor:color,backgroundColor:color+'18',borderWidth:2,pointRadius:0,fill:true,tension:0.3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'$'+c.parsed.y.toFixed(2)}}},scales:{y:{ticks:{callback:v=>'$'+v.toFixed(0)},grid:{color:'#f1f5f9'}},x:{ticks:{maxTicksLimit:8,font:{size:10}},grid:{display:false}}}}
+  });
+}
+
+async function loadTickerNews(ticker) {
+  const newsEl = document.getElementById('tcNews');
+  newsEl.innerHTML = '<div style="font-size:12px;color:var(--muted)">Loading news...</div>';
+  try {
+    const today = new Date();
+    const from = new Date(today); from.setDate(from.getDate()-30);
+    const fromStr = from.toISOString().split('T')[0];
+    const toStr = today.toISOString().split('T')[0];
+    const data = await fetchYF(`https://finnhub.io/api/v1/company-news?symbol=${ticker}&from=${fromStr}&to=${toStr}&token=${FINNHUB}`, 8000);
+    if (!data?.length) { newsEl.innerHTML = '<div style="font-size:12px;color:var(--muted)">No recent news found.</div>'; return; }
+    const articles = [...data].sort((a,b)=>(b.datetime||0)-(a.datetime||0)).slice(0,8);
+    newsEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">Recent News (last 30 days)</div>'
+      + articles.map(a=>{
+          const dt = new Date(a.datetime*1000).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+          return `<div class="news-item" style="margin-bottom:8px">
+            <div class="news-headline"><a href="${a.url}" target="_blank" rel="noopener">${a.headline}</a></div>
+            <div class="news-meta">${a.source} · ${dt}</div>
+            ${a.summary?'<div style="font-size:11px;color:var(--gray);margin-top:3px">'+a.summary.slice(0,150)+'...</div>':''}
+          </div>`;
+        }).join('');
+  } catch(e) {
+    newsEl.innerHTML = '<div style="font-size:12px;color:var(--muted)">Could not load news.</div>';
+  }
 }
 
 window.addEventListener('load', () => { init(); });
