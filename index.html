@@ -253,6 +253,7 @@ tr:last-child td{border-bottom:none}
         <button class="filter-btn" onclick="filterCalendar('recent',this)">📣 Recent Earnings</button>
         <button class="filter-btn" onclick="filterCalendar('dividends',this)">💰 Dividends</button>
         <button class="filter-btn" onclick="filterCalendar('economic',this)">📊 Economic Events</button>
+        <button class="filter-btn" onclick="filterCalendar('splits',this)">✂️ Stock Splits</button>
       </div>
     </div>
     <div id="calLoading" style="color:var(--muted);font-size:12px;padding:20px 0;text-align:center">Loading...</div>
@@ -1227,84 +1228,216 @@ function renderNews(articles){
 function filterCalendar(type,btn){document.querySelectorAll('#tab-calendar .filter-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');loadCalendar(type);}
 async function loadCalendar(type){
   const loadEl=document.getElementById('calLoading'),tableEl=document.getElementById('calTable');
-  if(loadEl)loadEl.style.display='block';
+  if(loadEl){loadEl.style.display='block';loadEl.textContent='Loading...';}
   if(tableEl)tableEl.innerHTML='';
-  await new Promise(r=>setTimeout(r,500));
+
   const nowDate=new Date();
   const from=nowDate.toISOString().split('T')[0];
   const futEnd=new Date(nowDate);futEnd.setDate(futEnd.getDate()+90);
   const to=futEnd.toISOString().split('T')[0];
 
-  if(type==='economic'){
-    try{
-      const fut90=new Date(nowDate);fut90.setDate(fut90.getDate()+90);
-      const to90=fut90.toISOString().split('T')[0];
-      const data=await fetchYF(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to90}&token=${FINNHUB}`,10000);
-      const KEY_EVENTS=['fomc','federal reserve','fed rate','interest rate','cpi','consumer price','core cpi','pce','personal consumption','gdp','nonfarm','non-farm','payroll','jobs report','employment situation','unemployment','jobless claims','initial claims','retail sales','ism manufacturing','ism services','ism non-manufacturing','powell','fed governor','ppi','producer price','consumer confidence','michigan sentiment','housing starts','building permits','durable goods','trade balance'];
-      const filtered=(data?.economicCalendar||[]).filter(e=>{
-        const c=(e.country||'').toUpperCase();
-        if(c!=='US'&&c!=='UNITED STATES')return false;
-        const isHigh=e.impact==='high';
-        const isKey=KEY_EVENTS.some(k=>(e.event||'').toLowerCase().includes(k));
-        return isHigh||isKey;
-      }).sort((a,b)=>(a.time||'').localeCompare(b.time||'')).slice(0,50);
-      tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Time (ET)</th><th>Event</th><th>Impact</th></tr>
-        ${filtered.map(e=>{const ic=e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';const ds=(e.time||'—').split(' ')[0];const ts=(e.time||'').split(' ')[1]||'TBD';const isKey=KEY_EVENTS.some(k=>(e.event||'').toLowerCase().includes(k));return `<tr style="${e.impact==='high'?'background:#fff5f5;':''}"><td><strong>${ds}</strong></td><td style="color:var(--gray)">${ts}</td><td><strong>${e.event||'—'}</strong>${isKey?' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">KEY</span>':''}</td><td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:${ic}22;color:${ic}">${e.impact==='high'?'High':e.impact==='medium'?'Medium':'Low'}</span></td></tr>`;}).join('')}`
-        :'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No upcoming major US events found.</td></tr>';
-    }catch(e){tableEl.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Could not load. Try again in 30 seconds.</td></tr>';}
-    if(loadEl)loadEl.style.display='none';return;
-  }
-
-  // Recent earnings - last 30 days from portfolio
-  if (type === 'recent') {
-    try {
-      const pastDate = new Date(nowDate); pastDate.setDate(pastDate.getDate()-30);
-      const pastFrom = pastDate.toISOString().split('T')[0];
-      const portTickers = new Set([...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs].map(h=>h.ticker));
-      const r = await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`, 10000);
-      const recentData = (r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
-      tableEl.innerHTML = recentData.length ? `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Report</th></tr>
-        ${recentData.map(e=>{const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';const rUrl=IR_URLS[e.symbol]||ETF_IR_URLS[e.symbol]||`https://finance.yahoo.com/quote/${e.symbol}`;return `<tr style="background:#eff6ff"><td><strong>${e.date}</strong></td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td class="${e.epsActual!=null?(e.epsActual>=(e.epsEstimate||0)?'pos':'neg'):''}">${e.epsActual!=null?'$'+parseFloat(e.epsActual).toFixed(2):'—'}</td><td><a href="${rUrl}" target="_blank" style="color:var(--blue);font-size:11px;font-weight:600">🔗 Investor Relations</a></td></tr>`;}).join('')}`
-        : '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio in the last 30 days.</td></tr>';
-    } catch(e) { tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load recent earnings.</td></tr>'; }
-    if(loadEl)loadEl.style.display='none'; return;
-  }
-
-  // Dividends
-  if (type === 'dividends') {
-    try {
-      const topH=[...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,20).map(h=>h.ticker);
-      const allDivs=[];
-      for(let i=0;i<topH.length;i+=5){
-        await Promise.all(topH.slice(i,i+5).map(async tk=>{
-          try{
-            // Use Yahoo Finance for dividend data (Finnhub dividend2 is paid tier)
-            const dy=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${tk}?interval=3mo&range=1y&events=dividends`,5000);
-            const divs=dy?.chart?.result?.[0]?.events?.dividends;
-            if(divs){Object.values(divs).filter(d=>{const dt=new Date(d.date*1000).toISOString().split('T')[0];return dt>=from;}).forEach(d=>{const dt=new Date(d.date*1000).toISOString().split('T')[0];allDivs.push({ticker:tk,payDate:dt,amount:d.amount,exDate:dt});});}
-          }catch(e){}
-        }));
-        if(i+5<topH.length)await new Promise(r=>setTimeout(r,500));
-      }
-      allDivs.sort((a,b)=>(a.payDate||'').localeCompare(b.payDate||''));
-      tableEl.innerHTML=allDivs.length?`<tr><th>Ticker</th><th>Ex-Dividend Date</th><th>Pay Date</th><th>Amount</th><th>Frequency</th><th>Est. Annual Yield</th></tr>
-        ${allDivs.map(d=>{const h=S.holdings.find(x=>x.ticker===d.ticker);const y=d.amount&&h?.price?(d.amount*(d.frequency||4)/h.price*100).toFixed(2)+'%':'—';return `<tr><td class="ticker-cell">${d.ticker}</td><td>${d.exDividendDate||'—'}</td><td><strong>${d.payDate||'—'}</strong></td><td style="font-weight:700;color:#16a34a">$${parseFloat(d.amount||0).toFixed(4)}</td><td style="font-size:11px">${{1:'Annual',2:'Semi-Annual',4:'Quarterly',12:'Monthly'}[d.frequency]||'—'}</td><td style="font-weight:600">${y}</td></tr>`;}).join('')}`
-        :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found.</td></tr>';
-    }catch(e){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load dividend data.</td></tr>';}
-    if(loadEl)loadEl.style.display='none'; return;
-  }
-
+  // Get all portfolio tickers across both funds
+  const allEquities=[...RAW.endowment.equities,...RAW.ceeFund.equities];
+  const allHoldings=[...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs];
+  const portTickers=new Set(allHoldings.map(h=>h.ticker));
 
   try{
-    if(!calCache){const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,10000);if(r?.earningsCalendar)calCache=r.earningsCalendar;}
-    if(!calCache){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load. Try again in 30 seconds.</td></tr>';if(loadEl)loadEl.style.display='none';return;}
-    const portTickers=new Set([...S.holdings.map(h=>h.ticker)]);
-    let filtered=type==='portfolio'?calCache.filter(e=>portTickers.has(e.symbol)):calCache;
-    filtered=filtered.sort((a,b)=>a.date.localeCompare(b.date)).slice(0,60);
-    tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>In Portfolio</th></tr>
-      ${filtered.map(e=>{const inP=portTickers.has(e.symbol);const when=e.hour==='bmo'?'<span class="cal-bmo">Before Open</span>':e.hour==='amc'?'<span class="cal-amc">After Close</span>':'<span class="cal-tbd">TBD</span>';return `<tr style="${inP?'background:#eff6ff;':''}"><td>${e.date}</td><td class="ticker-cell">${e.symbol}</td><td>${e.company||'—'}</td><td>${when}</td><td>${e.epsEstimate!=null?'$'+parseFloat(e.epsEstimate).toFixed(2):'—'}</td><td>${inP?'✅ Yes':'—'}</td></tr>`;}).join('')}`
-      :`<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings.':'No earnings data found.'}</td></tr>`;
-  }catch(e){tableEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar.</td></tr>';}
+
+  // ── ECONOMIC EVENTS ─────────────────────────────────────────────────────────
+  if(type==='economic'){
+    const fut90=new Date(nowDate);fut90.setDate(fut90.getDate()+90);
+    const data=await fetchYF(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${fut90.toISOString().split('T')[0]}&token=${FINNHUB}`,10000);
+    const KEY=['fomc','federal reserve','fed rate','interest rate','cpi','consumer price','core cpi','pce','gdp','nonfarm','non-farm','payroll','jobs report','employment','unemployment','retail sales','ism','powell','ppi','producer price','consumer confidence','housing starts','durable goods'];
+    const filtered=(data?.economicCalendar||[]).filter(e=>{
+      if((e.country||'').toUpperCase()!=='US')return false;
+      return e.impact==='high'||KEY.some(k=>(e.event||'').toLowerCase().includes(k));
+    }).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,40);
+    const ic=e=>e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';
+    tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Event</th><th>Impact</th><th>Estimate</th><th>Previous</th></tr>
+      ${filtered.map(e=>`<tr><td style="font-size:12px">${e.date}</td><td style="font-weight:600">${e.event}</td>
+        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${ic(e)}22;color:${ic(e)}">${(e.impact||'').toUpperCase()}</span></td>
+        <td style="font-size:12px">${e.estimate||'—'}</td><td style="font-size:12px">${e.prev||'—'}</td></tr>`).join('')}`
+      :'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No upcoming major US events found.</td></tr>';
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
+  // ── RECENT EARNINGS (with IR links) ─────────────────────────────────────────
+  if(type==='recent'){
+    const pastDate=new Date(nowDate);pastDate.setDate(pastDate.getDate()-30);
+    const pastFrom=pastDate.toISOString().split('T')[0];
+    const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`,10000);
+    const recentData=(r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+    const bmoSpan='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af">Before Open</span>';
+    const amcSpan='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#fef9c3;color:#854d0e">After Close</span>';
+    tableEl.innerHTML=recentData.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Surprise</th><th>IR Page</th></tr>
+      ${recentData.map(e=>{
+        const when=e.hour==='bmo'?bmoSpan:e.hour==='amc'?amcSpan:'—';
+        const surprise=e.epsEstimate&&e.epsActual?((e.epsActual-e.epsEstimate)/Math.abs(e.epsEstimate)*100):null;
+        const h=allHoldings.find(x=>x.ticker===e.symbol);
+        const irLink=`https://finance.yahoo.com/quote/${e.symbol}/financials/`;
+        return `<tr>
+          <td style="font-size:12px">${e.date}</td>
+          <td class="ticker-cell">${e.symbol}</td>
+          <td>${e.name||h?.company||e.symbol}</td>
+          <td>${when}</td>
+          <td style="font-size:12px">${e.epsEstimate!=null?'$'+e.epsEstimate.toFixed(2):'—'}</td>
+          <td style="font-size:12px;font-weight:600">${e.epsActual!=null?'$'+e.epsActual.toFixed(2):'—'}</td>
+          <td class="${surprise>0?'pos':surprise<0?'neg':''}" style="font-size:12px;font-weight:700">${surprise!=null?(surprise>=0?'+':'')+surprise.toFixed(1)+'%':'—'}</td>
+          <td><a href="${irLink}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
+        </tr>`;
+      }).join('')}`
+      :'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio found.</td></tr>';
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
+  // ── DIVIDENDS (Yahoo Finance) ────────────────────────────────────────────────
+  if(type==='dividends'){
+    if(loadEl)loadEl.textContent='⏳ Loading dividends...';
+    const allDivs=[];
+    const divTickers=allHoldings.map(h=>h.ticker);
+    for(let i=0;i<divTickers.length;i+=5){
+      await Promise.all(divTickers.slice(i,i+5).map(async tk=>{
+        try{
+          const yfTk=tk.replace('.','-');
+          const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTk}?interval=3mo&range=1y&events=dividends`,5000);
+          const divs=d?.chart?.result?.[0]?.events?.dividends;
+          if(divs){
+            Object.values(divs).filter(d=>{
+              const dt=new Date(d.date*1000).toISOString().split('T')[0];
+              return dt>=from;
+            }).forEach(d=>{
+              const dt=new Date(d.date*1000).toISOString().split('T')[0];
+              allDivs.push({ticker:tk,exDate:dt,payDate:dt,amount:d.amount});
+            });
+          }
+        }catch(e){}
+      }));
+      if(i+5<divTickers.length)await new Promise(r=>setTimeout(r,300));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+5,divTickers.length)}/${divTickers.length} checked...`;
+    }
+    allDivs.sort((a,b)=>(a.exDate||'').localeCompare(b.exDate||''));
+    tableEl.innerHTML=allDivs.length?`<tr><th>Ticker</th><th>Ex-Date</th><th>Amount</th><th>Est. Annual Yield</th><th>IR Page</th></tr>
+      ${allDivs.map(d=>{
+        const h=allHoldings.find(x=>x.ticker===d.ticker);
+        const yld=d.amount&&h?.price?(d.amount*4/h.price*100).toFixed(2):null;
+        return `<tr>
+          <td class="ticker-cell">${d.ticker}</td>
+          <td style="font-size:12px">${d.exDate}</td>
+          <td style="font-weight:600">$${d.amount?d.amount.toFixed(4):'—'}</td>
+          <td class="${yld>4?'pos':''}" style="font-size:12px">${yld?yld+'%':'—'}</td>
+          <td><a href="https://finance.yahoo.com/quote/${d.ticker}/financials/" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
+        </tr>`;
+      }).join('')}`
+      :'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found for your holdings.</td></tr>';
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
+  // ── STOCK SPLITS ─────────────────────────────────────────────────────────────
+  if(type==='splits'){
+    if(loadEl)loadEl.textContent='⏳ Checking for stock splits...';
+    const splitResults=[];
+    const splitTickers=allEquities.map(h=>h.ticker);
+    for(let i=0;i<splitTickers.length;i+=5){
+      await Promise.all(splitTickers.slice(i,i+5).map(async tk=>{
+        try{
+          const yfTk=tk.replace('.','-');
+          // Yahoo Finance includes split events in chart data
+          const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTk}?interval=3mo&range=2y&events=splits`,5000);
+          const splits=d?.chart?.result?.[0]?.events?.splits;
+          if(splits){
+            Object.values(splits).forEach(s=>{
+              const dt=new Date(s.date*1000).toISOString().split('T')[0];
+              // Include upcoming splits (future dates) and recent past (last 30 days)
+              const pastCutoff=new Date(nowDate);pastCutoff.setDate(pastCutoff.getDate()-30);
+              const pastFrom2=pastCutoff.toISOString().split('T')[0];
+              if(dt>=pastFrom2){
+                const h=allEquities.find(x=>x.ticker===tk);
+                splitResults.push({ticker:tk,company:h?.company||tk,date:dt,ratio:`${s.numerator}:${s.denominator}`,upcoming:dt>=from});
+              }
+            });
+          }
+        }catch(e){}
+      }));
+      if(i+5<splitTickers.length)await new Promise(r=>setTimeout(r,300));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+5,splitTickers.length)}/${splitTickers.length} checked...`;
+    }
+    splitResults.sort((a,b)=>a.date.localeCompare(b.date));
+    tableEl.innerHTML=splitResults.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>Split Ratio</th><th>Status</th><th>IR Page</th></tr>
+      ${splitResults.map(s=>`<tr>
+        <td style="font-size:12px">${s.date}</td>
+        <td class="ticker-cell">${s.ticker}</td>
+        <td>${s.company}</td>
+        <td style="font-weight:700;color:var(--navy)">${s.ratio}</td>
+        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${s.upcoming?'#dcfce7':'#f1f5f9'};color:${s.upcoming?'#16a34a':'#64748b'}">${s.upcoming?'Upcoming':'Recent'}</span></td>
+        <td><a href="https://finance.yahoo.com/quote/${s.ticker}/history/" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 History</a></td>
+      </tr>`).join('')}`
+      :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No stock splits found in the last 30 days or upcoming for your holdings.</td></tr>';
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+
+  // ── UPCOMING EARNINGS (My Portfolio + All) ──────────────────────────────────
+  if(!calCache){
+    if(loadEl)loadEl.textContent='⏳ Fetching earnings dates...';
+    const earningsResults=[];
+    for(let _i=0;_i<allEquities.length;_i+=5){
+      await Promise.all(allEquities.slice(_i,_i+5).map(async h=>{
+        try{
+          const yfTk=h.ticker.replace('.','-');
+          const d=await fetchYF(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${yfTk}?modules=calendarEvents`,6000);
+          const earningsDates=d?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate||[];
+          earningsDates.forEach(ed=>{
+            if(ed?.raw){
+              const dt=new Date(ed.raw*1000).toISOString().split('T')[0];
+              if(dt>=from&&dt<=to){
+                earningsResults.push({symbol:h.ticker,name:h.company,date:dt,hour:'',epsEstimate:null,epsActual:null,irLink:`https://finance.yahoo.com/quote/${yfTk}/financials/`});
+              }
+            }
+          });
+        }catch(e){}
+      }));
+      if(_i+5<allEquities.length)await new Promise(r=>setTimeout(r,350));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(_i+5,allEquities.length)}/${allEquities.length} tickers...`;
+    }
+    // Supplement with Finnhub for any we missed
+    try{
+      const fhR=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,8000);
+      if(fhR?.earningsCalendar){
+        fhR.earningsCalendar.filter(e=>portTickers.has(e.symbol)).forEach(e=>{
+          if(!earningsResults.some(x=>x.symbol===e.symbol&&x.date===e.date)){
+            const h=allHoldings.find(x=>x.ticker===e.symbol);
+            earningsResults.push({...e,name:e.name||h?.company||e.symbol,irLink:`https://finance.yahoo.com/quote/${e.symbol}/financials/`});
+          }
+        });
+      }
+    }catch(e){}
+    calCache=[...new Map(earningsResults.map(e=>[e.symbol+e.date,e])).values()].sort((a,b)=>a.date.localeCompare(b.date));
+    if(loadEl)loadEl.textContent='';
+  }
+  if(!calCache||!calCache.length){
+    tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No upcoming earnings found. Try refreshing.</td></tr>';
+    if(loadEl)loadEl.style.display='none'; return;
+  }
+  const bmoS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af">Before Open</span>';
+  const amcS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#fef9c3;color:#854d0e">After Close</span>';
+  let filtered=type==='portfolio'?calCache.filter(e=>portTickers.has(e.symbol)):calCache;
+  filtered=filtered.sort((a,b)=>a.date.localeCompare(b.date)).slice(0,60);
+  tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>In Portfolio</th><th>IR Page</th></tr>
+    ${filtered.map(e=>{
+      const inP=portTickers.has(e.symbol);
+      const when=e.hour==='bmo'?bmoS:e.hour==='amc'?amcS:'—';
+      const h=allHoldings.find(x=>x.ticker===e.symbol);
+      return `<tr style="${inP?'background:#f0fdf4;':''}" >
+        <td style="font-size:12px;font-weight:${inP?'700':'400'}">${e.date}</td>
+        <td class="ticker-cell">${e.symbol}</td>
+        <td>${e.name||h?.company||e.symbol}</td>
+        <td>${when}</td>
+        <td style="font-size:12px">${e.epsEstimate!=null?'$'+e.epsEstimate.toFixed(2):'—'}</td>
+        <td>${inP?'<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#dcfce7;color:#16a34a">✓ Owned</span>':'—'}</td>
+        <td><a href="${e.irLink||'https://finance.yahoo.com/quote/'+e.symbol+'/financials/'}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
+      </tr>`;
+    }).join('')}`
+    :`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings in the next 90 days.':'No earnings found.'}</td></tr>`;
+  }catch(e){if(tableEl)tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar data.</td></tr>';}
   if(loadEl)loadEl.style.display='none';
 }
 
