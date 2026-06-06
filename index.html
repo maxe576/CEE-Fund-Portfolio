@@ -743,7 +743,10 @@ function renderHoldings(filter) {
 
 // ── SECTORS ───────────────────────────────────────────────────────────────────
 function renderSectorDetail() {
-  const sectors=calcSectors(S.holdings,S.total);
+  const _exSD=['Broad Market','Fixed Income'];
+  const _fhSD=S.holdings.filter(h=>!_exSD.includes(h.sector));
+  const _ftSD=_fhSD.reduce((s,h)=>s+(h.marketValue||0),0)||1;
+  const sectors=calcSectors(_fhSD,_ftSD);
   const maxPct=Math.max(...sectors.map(s=>s.pct));
   const colors=['#001F5B','#1e40af','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#93c5fd','#bfdbfe','#dbeafe','#eff6ff','#f0f9ff','#f8fafc','#f1f5f9','#e2e8f0'];
   document.getElementById('sectorDetail').innerHTML=sectors.map((s,i)=>`
@@ -1229,7 +1232,7 @@ async function loadCalendar(type){
   await new Promise(r=>setTimeout(r,500));
   const nowDate=new Date();
   const from=nowDate.toISOString().split('T')[0];
-  const futEnd=new Date(nowDate);futEnd.setDate(futEnd.getDate()+60);
+  const futEnd=new Date(nowDate);futEnd.setDate(futEnd.getDate()+90);
   const to=futEnd.toISOString().split('T')[0];
 
   if(type==='economic'){
@@ -1257,7 +1260,7 @@ async function loadCalendar(type){
     try {
       const pastDate = new Date(nowDate); pastDate.setDate(pastDate.getDate()-30);
       const pastFrom = pastDate.toISOString().split('T')[0];
-      const portTickers = new Set([...S.holdings.map(h=>h.ticker)]);
+      const portTickers = new Set([...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs].map(h=>h.ticker));
       const r = await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`, 10000);
       const recentData = (r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
       tableEl.innerHTML = recentData.length ? `<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Report</th></tr>
@@ -1274,7 +1277,12 @@ async function loadCalendar(type){
       const allDivs=[];
       for(let i=0;i<topH.length;i+=5){
         await Promise.all(topH.slice(i,i+5).map(async tk=>{
-          try{const d=await fetchYF(`https://finnhub.io/api/v1/stock/dividend2?symbol=${tk}&token=${FINNHUB}`,5000);if(d&&d.data&&d.data.length){const upcoming=d.data.filter(div=>div.payDate>=from).slice(0,2);upcoming.forEach(div=>allDivs.push({...div,ticker:tk}));}}catch(e){}
+          try{
+            // Use Yahoo Finance for dividend data (Finnhub dividend2 is paid tier)
+            const dy=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${tk}?interval=3mo&range=1y&events=dividends`,5000);
+            const divs=dy?.chart?.result?.[0]?.events?.dividends;
+            if(divs){Object.values(divs).filter(d=>{const dt=new Date(d.date*1000).toISOString().split('T')[0];return dt>=from;}).forEach(d=>{const dt=new Date(d.date*1000).toISOString().split('T')[0];allDivs.push({ticker:tk,payDate:dt,amount:d.amount,exDate:dt});});}
+          }catch(e){}
         }));
         if(i+5<topH.length)await new Promise(r=>setTimeout(r,500));
       }
@@ -1380,7 +1388,8 @@ async function fetchCandleReturn(ticker, period) {
 
   const range = YF_RANGES[period] || '1mo';
   const interval = YF_INTERVALS[period] || '1d';
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&range=${range}`;
+  const yfTicker = ticker.replace('.', '-'); // Yahoo uses BRK-B not BRK.B
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=${interval}&range=${range}`;
 
   try {
     const r = await fetchYF(url, 8000); // fetchYF routes through CF_PROXY for yahoo.com
@@ -1585,17 +1594,19 @@ async function renderSCChart(sectorName, view, period) {
 
   if(period==='1D'){
     sec.holdings.forEach(h=>{returns[h.ticker]=h.dayPct!==undefined&&h.dayPct!==null?h.dayPct*100:null;});
-    // Fetch benchmark 1D from Finnhub quote
+    // Use Yahoo Finance for benchmark 1D (Finnhub candle is paid tier)
     try{
-      const bq=await fetchYF(`https://finnhub.io/api/v1/quote?symbol=${benchmark}&token=${FINNHUB}`,5000);
-      returns[benchmark]=bq&&bq.c&&bq.pc&&bq.c>0?parseFloat(((bq.c-bq.pc)/bq.pc*100).toFixed(2)):null;
+      const _bUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${benchmark}?interval=1d&range=5d`;
+      const _bData=await fetchYF(_bUrl,5000);
+      const _bCl=(_bData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close||[]).filter(x=>x!=null);
+      returns[benchmark]=_bCl.length>=2?parseFloat(((_bCl[_bCl.length-1]-_bCl[_bCl.length-2])/_bCl[_bCl.length-2]*100).toFixed(2)):null;
     }catch(e){returns[benchmark]=null;}
   } else if(period==='YTD'){
     sec.holdings.forEach(h=>{returns[h.ticker]=calcReturn([h],S.fund);});
     // Fetch benchmark YTD using candle from Jan 1 2026
     const ytdFrom=Math.floor(new Date('2026-01-01').getTime()/1000);
     const ytdTo=Math.floor(Date.now()/1000);
-    try{const yr=await fetchYF(`https://finnhub.io/api/v1/stock/candle?symbol=${benchmark}&resolution=D&from=${ytdFrom}&to=${ytdTo}&token=${FINNHUB}`,8000);if(yr&&yr.s!=='no_data'&&yr.c&&yr.c.length>=2){returns[benchmark]=parseFloat(((yr.c[yr.c.length-1]-yr.c[0])/yr.c[0]*100).toFixed(2));}else{returns[benchmark]=null;}}catch(e){returns[benchmark]=null;}
+    const bv2=await fetchCandleReturn(benchmark,'YTD'); returns[benchmark]=bv2;
   } else {
     // Use Finnhub candle data for reliable period returns
     if(loadEl)loadEl.textContent=`⏳ Fetching ${period} data...`;
