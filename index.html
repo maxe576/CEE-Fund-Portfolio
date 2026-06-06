@@ -282,13 +282,7 @@ tr:last-child td{border-bottom:none}
           <option value="Mid Cap">Mid Cap ($2B-$10B)</option>
           <option value="Small Cap">Small Cap (&lt;$2B)</option>
         </select>
-        <select id="upsideSort" onchange="sortThesisTable(this.value)" style="font-size:11px;padding:4px 8px;border:1px solid var(--border);border-radius:4px">
-          <option value="">Sort by...</option>
-          <option value="upside">Highest Upside</option>
-          <option value="return">Best Return</option>
-          <option value="weight">Highest Weight</option>
-          <option value="alpha">Alphabetical</option>
-        </select>
+        
       </div>
     </div>
     <!-- Sector Cards -->
@@ -1705,19 +1699,35 @@ function formatMcap(mcapM) {
 async function fetchMcap(ticker) {
   try {
     const d = await fetchYF(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${FINNHUB}`, 5000);
-    if (d?.metric?.marketCapitalization) {
-      mcapCache[ticker] = d.metric.marketCapitalization;
-      if (currentThesisTicker===ticker) document.getElementById('detailMcap').textContent = getMcapTier(mcapCache[ticker])+' ($'+formatMcap(mcapCache[ticker])+')';
-      if (document.getElementById('mcapBreakdown')) renderMcapBreakdown();
+    if (d && d.metric) {
+      if (d.metric.marketCapitalization) {
+        mcapCache[ticker] = d.metric.marketCapitalization;
+        if (currentThesisTicker===ticker) document.getElementById('detailMcap').textContent = getMcapTier(mcapCache[ticker])+' ($'+formatMcap(mcapCache[ticker])+')';
+        if (document.getElementById('mcapBreakdown')) renderMcapBreakdown();
+      }
+      const pe = d.metric['peNormalizedAnnual'] || d.metric['peBasicExclExtraTTM'] || d.metric['peTTM'];
+      if (pe && !isNaN(pe) && pe > 0 && pe < 1000) {
+        peCache[ticker] = parseFloat(pe.toFixed(1));
+        if (currentThesisTicker===ticker) {
+          const el = document.getElementById('detailPE');
+          if (el) el.textContent = peCache[ticker] + 'x';
+        }
+      }
+      renderThesisMasterTable(thesisFilter);
     }
   } catch(e) {}
 }
 async function fetchMcapsForThesis() {
   Object.entries(MCAP_EMBEDDED).forEach(([tk,mcap]) => { mcapCache[tk]=mcap; });
   renderMcapBreakdown();
-  const equities=[...new Set([...RAW.endowment.equities,...RAW.ceeFund.equities].map(h=>h.ticker))];
-  const missing=equities.filter(tk=>!mcapCache[tk]);
-  for (let i=0;i<missing.length;i++) { await fetchMcap(missing[i]); await new Promise(r=>setTimeout(r,2000)); }
+  // Fetch P/E for ALL equities in current fund (not just missing mcap)
+  const fd = activeFund==='endowment' ? RAW.endowment : RAW.ceeFund;
+  const tickers = [...new Set(fd.equities.map(h=>h.ticker))];
+  for (let i=0; i<tickers.length; i+=3) {
+    await Promise.all(tickers.slice(i,i+3).map(tk => fetchMcap(tk)));
+    if (i+3 < tickers.length) await new Promise(r=>setTimeout(r,1200));
+  }
+  renderThesisMasterTable(thesisFilter);
 }
 setTimeout(fetchMcapsForThesis, 2000);
 
@@ -2195,7 +2205,15 @@ function renderThesisMasterTable(filter, sort) {
   else if (thesisSortCol === 'pe') holdings = [...holdings].sort((a,b) => _dir*((peCache[a.ticker]||0)-(peCache[b.ticker]||0)));
   else if (thesisSortCol === 'ytd') holdings = [...holdings].sort((a,b) => _dir*((ytdCache[a.ticker]||0)-(ytdCache[b.ticker]||0)));
   else if (thesisSortCol === 'alpha') holdings = [...holdings].sort((a,b) => _dir*(((ytdCache[a.ticker]||0)-(ytdCache['SPY']||0))-((ytdCache[b.ticker]||0)-(ytdCache['SPY']||0))));
-  else holdings = [...holdings].sort((a,b) => _dir*((b.marketValue||0)-(a.marketValue||0)));
+  else if (thesisSortCol === 'upside') holdings = [...holdings].sort((a,b) => { const au=thesisData[a.ticker]?.base&&a.price?(thesisData[a.ticker].base-a.price)/a.price:-999; const bu=thesisData[b.ticker]?.base&&b.price?(thesisData[b.ticker].base-b.price)/b.price:-999; return _dir*(au-bu); });
+  else if (thesisSortCol === 'return') holdings = [...holdings].sort((a,b) => _dir*((a.glPct||0)-(b.glPct||0)));
+  else if (thesisSortCol==='upside') holdings=[...holdings].sort((a,b)=>{
+    const au=thesisData[a.ticker]?.base&&a.price?(thesisData[a.ticker].base-a.price)/a.price:-999;
+    const bu=thesisData[b.ticker]?.base&&b.price?(thesisData[b.ticker].base-b.price)/b.price:-999;
+    return _dir*(au-bu);
+  });
+  else if (thesisSortCol==='return') holdings=[...holdings].sort((a,b)=>_dir*((a.glPct||0)-(b.glPct||0)));
+  else holdings=[...holdings].sort((a,b)=>_dir*((b.marketValue||0)-(a.marketValue||0)));
 
   document.getElementById('thesisCount').textContent = `(${holdings.length} equities)`;
   document.getElementById('thesisMasterTable').innerHTML = `
@@ -2206,7 +2224,7 @@ function renderThesisMasterTable(filter, sort) {
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('ytd')">YTD ↕</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('alpha')">Alpha ↕</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('weight')">% Fund ↕</th>
-  <th>Price</th><th>Base Target</th><th>Upside</th><th>Thesis</th>
+  <th>Price</th><th>Base Target</th><th style="cursor:pointer;user-select:none" onclick="thesisSortBy('upside')">Upside ↕</th><th style="cursor:pointer;user-select:none" onclick="thesisSortBy('return')">Return ↕</th><th>Thesis</th>
 </tr>
     ${holdings.map(h => {
       const td = thesisData[h.ticker] || {};
@@ -2232,6 +2250,7 @@ function renderThesisMasterTable(filter, sort) {
         <td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
         <td style="font-weight:600">${td.base?'$'+td.base.toFixed(2):'—'}</td>
         <td class="${upside===null?'':upside>=0?'pos':'neg'}" style="font-weight:700">${upside!==null?(upside>=0?'+':'')+upside.toFixed(1)+'%':'—'}</td>
+        <td class="${(h.glPct||0)>=0?'pos':'neg'}">${h.glPct!=null?((h.glPct>=0?'+':'')+(h.glPct*100).toFixed(1)+'%'):'—'}</td>
         <td style="font-size:11px;color:${hasThesis?'#16a34a':'var(--muted)'}">${hasThesis?'✅ Written':'✏️ Empty'}</td>
       </tr>`;
     }).join('')}`;
