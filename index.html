@@ -124,6 +124,35 @@ tr:last-child td{border-bottom:none}
 .admin-err{font-size:11px;color:#dc2626;margin-bottom:10px;display:none}.admin-err.show{display:block}
 .admin-ok{font-size:11px;color:#16a34a;margin-bottom:10px;display:none}.admin-ok.show{display:block}
 </style>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--navy:#0c2a5e;--gold:#c9a84c;--blue:#2057c9;--green:#159a51;--red:#d6453d;--gray:#5b6b7f;--bg:#f4f5f7;--card:#ffffff;--border:#e6e9ee;--text:#16202e;--muted:#8a96a6;--shadow:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.06)}
+body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:
+  radial-gradient(1200px 400px at 80% -10%,rgba(201,168,76,.07),transparent 60%),var(--bg);letter-spacing:.005em}
+.header{background:linear-gradient(135deg,#081d44 0%,#0c2a5e 70%,#123a7e 100%);border-bottom:2px solid var(--gold);height:60px;box-shadow:0 4px 20px rgba(8,29,68,.25)}
+.header *{letter-spacing:.01em}
+.kpi-value,.perf-value,td,.sp_{font-variant-numeric:tabular-nums}
+.card{border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow)}
+.card-title{font-family:'Fraunces',Georgia,serif;font-weight:600;letter-spacing:0;font-size:15px;color:var(--navy)}
+.kpi{border-radius:14px;border:1px solid var(--border);box-shadow:var(--shadow);transition:transform .15s ease,box-shadow .15s ease}
+.kpi:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(16,24,40,.10)}
+.kpi.accent{border-top:3px solid var(--gold)}
+.kpi-label{letter-spacing:.08em;font-size:10px}
+.kpi-value{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:24px}
+.nav-tab{border-radius:999px;font-weight:600;transition:background .15s ease,color .15s ease}
+.nav-tab:hover{background:rgba(12,42,94,.07)}
+.nav-tab.active{background:var(--navy);color:#fff;box-shadow:inset 0 -2px 0 var(--gold)}
+table th{letter-spacing:.07em;font-size:10px;color:var(--muted)}
+table tr:hover td{background:rgba(12,42,94,.03)}
+.filter-btn{border-radius:999px;transition:all .12s ease}
+.filter-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.sc-card{border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow);transition:transform .15s ease}
+.sc-card:hover{transform:translateY(-2px);border-color:var(--gold)}
+.pos{color:var(--green)} .neg{color:var(--red)}
+::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#cbd3dd;border-radius:8px}
+button{font-family:inherit}
+</style>
 </head>
 <body>
 
@@ -519,6 +548,7 @@ tr:last-child td{border-bottom:none}
 </div>
 
 <script>
+console.log('%cCEE Dashboard build v9 — YTD hard-anchored at Jan 1 (no 1Y fallback)','color:#c9a84c;font-weight:bold;font-size:13px');
 
 // ── CONSTANTS (defined exactly once) ─────────────────────────────────────────
 const RAW = {"endowment": {"equities": [{"ticker": "GOOG", "company": "Alphabet Inc.", "shares": 84.689, "costBasis": 8698.92, "avgCost": 102.7160552137822, "price": 397.94, "marketValue": 33701.14066, "dayPct": 0.011746000000000001, "dayDollar": 391.26318, "glDollar": 25002.22066, "glPct": 2.8741752608369775, "sector": "Communication Services", "beta": 1.2638, "type": "equity", "fund": "Endowment"}, {"ticker": "META", "company": "Meta Platforms", "shares": 16.0723, "costBasis": 9906.5, "avgCost": 616.3710234378403, "price": 607.62, "marketValue": 9765.850926, "dayPct": -0.010761, "dayDollar": -106.23790299999999, "glDollar": -140.64907400000084, "glPct": -0.014197655478726173, "sector": "Communication Services", "beta": 1.2376, "type": "equity", "fund": "Endowment"}, {"ticker": "NFLX", "company": "Netflix", "shares": 43.0, "costBasis": 3967.12, "avgCost": 92.25860465116278, "price": 88.955, "marketValue": 3825.065, "dayPct": 0.022236, "dayDollar": 83.205, "glDollar": -142.05499999999984, "glPct": -0.03580809252051862, "sector": "Communication Services", "beta": 1.5302, "type": "equity", "fund": "Endowment"}, {"ticker": "TKO", "company": "TKO Group", "shares": 23.0, "costBasis": 4669.58, "avgCost": 203.02521739130435, "price": 193.97, "marketValue": 4461.31, "dayPct": 0.020519, "dayDollar": 89.7, "glDollar": -208.26999999999953, "glPct": -0.044601441671413604, "sector": "Communication Services", "beta": 0.5809, "type": "equity", "fund": "Endowment"}, {"ticker": "AMZN", "company": "Amazon", "shares": 47.0, "costBasis": 9998.66, "avgCost": 212.73744680851064, "price": 265.675, "marketValue": 12486.725, "dayPct": 0.005810999999999999, "dayDollar": 72.145, "glDollar": 2488.0650000000005, "glPct": 0.2488398445391683, "sector": "Consumer Discretionary", "beta": 1.459, "type": "equity", "fund": "Endowment"}, {"ticker": "HD", "company": "Home Depot", "shares": 10.071, "costBasis": 3810.45, "avgCost": 378.35865355972595, "price": 300.4101, "marketValue": 3025.4301170999997, "dayPct": 0.009748, "dayDollar": 29.2069071, "glDollar": -785.0198829000001, "glPct": -0.20601763122465855, "sector": "Consumer Discretionary", "beta": 0.9823, "type": "equity", "fund": "Endowment"}, {"ticker": "COST", "company": "Costco", "shares": 4.2409, "costBasis": 1773.96, "avgCost": 418.2980027824283, "price": 1063.995, "marketValue": 4512.2963955, "dayPct": 0.014343, "dayDollar": 63.804340499999995, "glDollar": 2738.3363954999995, "glPct": 1.5436291661029558, "sector": "Consumer Staples", "beta": 0.9144, "type": "equity", "fund": "Endowment"}, {"ticker": "KO", "company": "Coca-Cola", "shares": 104.2917, "costBasis": 5737.49, "avgCost": 55.013869751859446, "price": 80.839, "marketValue": 8430.8367363, "dayPct": 0.0002351, "dayDollar": 1.9815423, "glDollar": 2693.3467363, "glPct": 0.46942944324085967, "sector": "Consumer Staples", "beta": 0.3591, "type": "equity", "fund": "Endowment"}, {"ticker": "WMT", "company": "Walmart", "shares": 55.4052, "costBasis": 5385.24, "avgCost": 97.19737497563405, "price": 131.93, "marketValue": 7309.6080360000005, "dayPct": 0.0036520000000000003, "dayDollar": 26.594496, "glDollar": 1924.3680360000008, "glPct": 0.35734118367983614, "sector": "Consumer Staples", "beta": 0.6473, "type": "equity", "fund": "Endowment"}, {"ticker": "XOM", "company": "ExxonMobil", "shares": 14.0963, "costBasis": 2103.99, "avgCost": 149.25831601200315, "price": 160.25, "marketValue": 2258.9320749999997, "dayPct": 0.014754, "dayDollar": 32.844378999999996, "glDollar": 154.94207499999993, "glPct": 0.0736420206369802, "sector": "Energy", "beta": 0.1836, "type": "equity", "fund": "Endowment"}, {"ticker": "BRK.B", "company": "Berkshire Hathaway", "shares": 10.0, "costBasis": 3898.55, "avgCost": 389.855, "price": 483.15, "marketValue": 4831.5, "dayPct": 0.0009323, "dayDollar": 4.5, "glDollar": 932.9499999999998, "glPct": 0.2393069218042605, "sector": "Financials", "beta": 0.6236, "type": "equity", "fund": "Endowment"}, {"ticker": "BX", "company": "Blackstone", "shares": 48.2607, "costBasis": 4645.44, "avgCost": 96.2572030658486, "price": 117.415, "marketValue": 5666.5300905, "dayPct": -0.004029, "dayDollar": -22.9238325, "glDollar": 1021.0900905000008, "glPct": 0.2198048173047119, "sector": "Financials", "beta": 1.621, "type": "equity", "fund": "Endowment"}, {"ticker": "MA", "company": "Mastercard", "shares": 11.0, "costBasis": 5800.91, "avgCost": 527.3554545454546, "price": 498.995, "marketValue": 5488.945, "dayPct": 0.009703, "dayDollar": 52.745, "glDollar": -311.96500000000015, "glPct": -0.05377863128371241, "sector": "Financials", "beta": 0.7509, "type": "equity", "fund": "Endowment"}, {"ticker": "SPGI", "company": "S&P Global", "shares": 14.0, "costBasis": 6163.78, "avgCost": 440.27, "price": 417.18, "marketValue": 5840.52, "dayPct": 0.034801, "dayDollar": 196.42, "glDollar": -323.2599999999993, "glPct": -0.05244509051263986, "sector": "Financials", "beta": 1.0911, "type": "equity", "fund": "Endowment"}, {"ticker": "V", "company": "Visa", "shares": 33.0142, "costBasis": 8318.79, "avgCost": 251.97611936681793, "price": 329.65, "marketValue": 10883.13103, "dayPct": 0.011972, "dayDollar": 128.75538, "glDollar": 2564.3410299999996, "glPct": 0.3082588970270916, "sector": "Financials", "beta": 0.7779, "type": "equity", "fund": "Endowment"}, {"ticker": "TMUS", "company": "T-Mobile", "shares": 20.0, "costBasis": 3963.594, "avgCost": 198.1797, "price": 189.7, "marketValue": 3794.0, "dayPct": 0.024187, "dayDollar": 89.60000000000001, "glDollar": -169.59400000000005, "glPct": -0.0427879343848033, "sector": "Financials", "beta": 0.3133, "type": "equity", "fund": "Endowment"}, {"ticker": "HCA", "company": "HCA Healthcare", "shares": 11.1442, "costBasis": 3693.79, "avgCost": 331.4540298989609, "price": 425.35, "marketValue": 4740.18547, "dayPct": 0.005556, "dayDollar": 26.18887, "glDollar": 1046.3954700000004, "glPct": 0.2832850459825817, "sector": "Health Care", "beta": 1.1834, "type": "equity", "fund": "Endowment"}, {"ticker": "LLY", "company": "Eli Lilly", "shares": 7.0227, "costBasis": 5917.01, "avgCost": 842.554857818218, "price": 981.845, "marketValue": 6895.2028815, "dayPct": -0.022961999999999996, "dayDollar": -162.0488025, "glDollar": 978.1928815000001, "glPct": 0.16531878119185198, "sector": "Health Care", "beta": 0.4888, "type": "equity", "fund": "Endowment"}, {"ticker": "PFE", "company": "Pfizer", "shares": 199.4118, "costBasis": 4909.36, "avgCost": 24.619205082146593, "price": 25.31, "marketValue": 5047.112658, "dayPct": -0.0007896, "dayDollar": -3.988236, "glDollar": 137.75265800000034, "glPct": 0.028059188570404358, "sector": "Health Care", "beta": 0.2983, "type": "equity", "fund": "Endowment"}, {"ticker": "SYK", "company": "Stryker", "shares": 16.0801, "costBasis": 3551.96, "avgCost": 220.89166112151042, "price": 312.14, "marketValue": 5019.242414, "dayPct": 0.017538, "dayDollar": 86.51093800000001, "glDollar": 1467.2824140000002, "glPct": 0.41309091712744517, "sector": "Health Care", "beta": 0.8022, "type": "equity", "fund": "Endowment"}, {"ticker": "CAT", "company": "Caterpillar", "shares": 23.8216, "costBasis": 4812.54, "avgCost": 202.0242133190046, "price": 864.79, "marketValue": 20600.681463999998, "dayPct": -0.026477, "dayDollar": -560.284032, "glDollar": 15788.141463999997, "glPct": 3.2806255042036008, "sector": "Industrials", "beta": 1.6177, "type": "equity", "fund": "Endowment"}, {"ticker": "HWM", "company": "Howmet Aerospace", "shares": 8.0, "costBasis": 2035.44, "avgCost": 254.43, "price": 258.455, "marketValue": 2067.64, "dayPct": -0.007279, "dayDollar": -15.16, "glDollar": 32.19999999999982, "glPct": 0.015819675352749193, "sector": "Industrials", "beta": 1.1954, "type": "equity", "fund": "Endowment"}, {"ticker": "SBGSF", "company": "Safran SA", "shares": 18.0, "costBasis": 5184.26, "avgCost": 288.01444444444445, "price": 304.256, "marketValue": 5476.607999999999, "dayPct": -0.026618, "dayDollar": -149.76, "glDollar": 292.34799999999905, "glPct": 0.056391461847978115, "sector": "Industrials", "beta": 1.4198, "type": "equity", "fund": "Endowment"}, {"ticker": "WM", "company": "Waste Management", "shares": 20.3298, "costBasis": 3125.74, "avgCost": 153.7516355301085, "price": 220.7901, "marketValue": 4488.61857498, "dayPct": 0.004413, "dayDollar": 19.721938979999997, "glDollar": 1362.87857498, "glPct": 0.4360178949560744, "sector": "Industrials", "beta": 0.4852, "type": "equity", "fund": "Endowment"}, {"ticker": "AAPL", "company": "Apple", "shares": 63.7006, "costBasis": 8131.38, "avgCost": 127.64997503948157, "price": 296.09, "marketValue": 18861.110654, "dayPct": -0.013789000000000001, "dayDollar": -263.720484, "glDollar": 10729.730653999999, "glPct": 1.3195460861501982, "sector": "Information Technology", "beta": 1.0724, "type": "equity", "fund": "Endowment"}, {"ticker": "CRWD", "company": "CrowdStrike", "shares": 10.0, "costBasis": 3002.3, "avgCost": 300.23, "price": 607.86, "marketValue": 6078.6, "dayPct": 0.023195999999999998, "dayDollar": 137.79999999999998, "glDollar": 3076.3, "glPct": 1.024647770042967, "sector": "Information Technology", "beta": 1.1036, "type": "equity", "fund": "Endowment"}, {"ticker": "MSFT", "company": "Microsoft", "shares": 36.4308, "costBasis": 9905.75, "avgCost": 271.9059147754098, "price": 418.55, "marketValue": 15248.11134, "dayPct": -0.007987, "dayDollar": -122.771796, "glDollar": 5342.3613399999995, "glPct": 0.5393192176261262, "sector": "Information Technology", "beta": 1.0932, "type": "equity", "fund": "Endowment"}, {"ticker": "NVDA", "company": "NVIDIA", "shares": 35.0, "costBasis": 5970.65, "avgCost": 170.59, "price": 222.8301, "marketValue": 7799.0535, "dayPct": -0.011051, "dayDollar": -87.1465, "glDollar": 1828.4035000000003, "glPct": 0.3062319010492996, "sector": "Information Technology", "beta": 2.2499, "type": "equity", "fund": "Endowment"}, {"ticker": "ORCL", "company": "Oracle", "shares": 18.5284, "costBasis": 2345.38, "avgCost": 126.58297532436691, "price": 185.79, "marketValue": 3442.391436, "dayPct": -0.037108, "dayDollar": -132.66334400000002, "glDollar": 1097.0114359999998, "glPct": 0.4677329200385437, "sector": "Information Technology", "beta": 1.5657, "type": "equity", "fund": "Endowment"}, {"ticker": "TSM", "company": "TSMC", "shares": 14.0, "costBasis": 3801.65, "avgCost": 271.5464285714286, "price": 396.22, "marketValue": 5547.08, "dayPct": -0.020106000000000002, "dayDollar": -113.82000000000001, "glDollar": 1745.4299999999998, "glPct": 0.45912432759459704, "sector": "Information Technology", "beta": 1.3967, "type": "equity", "fund": "Endowment"}, {"ticker": "NUE", "company": "Nucor", "shares": 50.3267, "costBasis": 6488.4, "avgCost": 128.92560012875867, "price": 224.2396, "marketValue": 11285.23907732, "dayPct": -0.012247, "dayDollar": -139.92835668, "glDollar": 4796.839077320001, "glPct": 0.7392945991800753, "sector": "Materials", "beta": 1.8855, "type": "equity", "fund": "Endowment"}, {"ticker": "DLR", "company": "Digital Realty", "shares": 25.9134, "costBasis": 3128.83, "avgCost": 120.74177838492827, "price": 185.98, "marketValue": 4819.374132, "dayPct": -0.013421, "dayDollar": -65.560902, "glDollar": 1690.544132, "glPct": 0.5403119159558045, "sector": "Real Estate", "beta": 1.0666, "type": "equity", "fund": "Endowment"}, {"ticker": "CEG", "company": "Constellation Energy", "shares": 16.0, "costBasis": 5939.04, "avgCost": 371.19, "price": 261.05, "marketValue": 4176.8, "dayPct": -0.023016000000000002, "dayDollar": -98.4, "glDollar": -1762.2399999999998, "glPct": -0.2967213556399687, "sector": "Utilities", "beta": 1.1216, "type": "equity", "fund": "Endowment"}], "etfs": [{"ticker": "FDIS", "company": "Fidelity MSCI Consumer Disc ETF", "shares": 178.8324, "costBasis": 15925.08, "avgCost": 89.05030632033122, "price": 100.01, "marketValue": 17885.028324000003, "dayPct": 0.0014019999999999998, "dayDollar": 25.036536, "glDollar": 1959.9483240000027, "glPct": 0.12307305985276072, "sector": "Consumer Discretionary", "beta": 0.9624, "type": "etf", "fund": "Endowment"}, {"ticker": "FTEC", "company": "Fidelity MSCI Info Tech ETF", "shares": 177.8728, "costBasis": 23654.46, "avgCost": 132.9852568801975, "price": 266.9085, "marketValue": 47475.7622388, "dayPct": -0.013496, "dayDollar": -649.5025292, "glDollar": 23821.302238800003, "glPct": 1.0070533099804435, "sector": "Information Technology", "beta": 0.9793, "type": "etf", "fund": "Endowment"}, {"ticker": "IGV", "company": "iShares Expanded Tech-Software ETF", "shares": 75.0, "costBasis": 5057.55, "avgCost": 67.434, "price": 91.995, "marketValue": 6899.625, "dayPct": 0.002343, "dayDollar": 16.125, "glDollar": 1842.0749999999998, "glPct": 0.3642227956223863, "sector": "Information Technology", "beta": 1.0154, "type": "etf", "fund": "Endowment"}, {"ticker": "NLR", "company": "VanEck Uranium+Nuclear Energy ETF", "shares": 21.2056, "costBasis": 1232.99, "avgCost": 58.144546723507, "price": 127.66, "marketValue": 2707.106896, "dayPct": -0.015577, "dayDollar": -42.835312, "glDollar": 1474.1168959999998, "glPct": 1.1955627344909527, "sector": "Energy", "beta": 0.9375, "type": "etf", "fund": "Endowment"}, {"ticker": "PSCT", "company": "Invesco S&P SmallCap IT ETF", "shares": 123.0801, "costBasis": 4958.44, "avgCost": 40.28628511026559, "price": 77.75, "marketValue": 9569.477775, "dayPct": -0.011443000000000002, "dayDollar": -110.77209, "glDollar": 4611.037775, "glPct": 0.929937192947782, "sector": "Information Technology", "beta": 0.5955, "type": "etf", "fund": "Endowment"}, {"ticker": "QQQ", "company": "Invesco QQQ (Nasdaq-100)", "shares": 24.0244, "costBasis": 15090.45, "avgCost": 628.1301510131367, "price": 703.95, "marketValue": 16911.97638, "dayPct": -0.007025, "dayDollar": -119.641512, "glDollar": 1821.5263799999993, "glPct": 0.1207072274186654, "sector": "Information Technology", "beta": 0.9525, "type": "etf", "fund": "Endowment"}, {"ticker": "RSPN", "company": "Invesco S&P 500 Equal Wt Industrials", "shares": 60.3228, "costBasis": 2217.94, "avgCost": 36.76785560351973, "price": 59.6, "marketValue": 3595.2388800000003, "dayPct": -0.0008382000000000001, "dayDollar": -3.01614, "glDollar": 1377.2988800000003, "glPct": 0.6209811266310181, "sector": "Industrials", "beta": 1.0296, "type": "etf", "fund": "Endowment"}, {"ticker": "SMH", "company": "VanEck Semiconductor ETF", "shares": 8.0, "costBasis": 3261.76, "avgCost": 407.72, "price": 546.51, "marketValue": 4372.08, "dayPct": -0.017669, "dayDollar": -78.64, "glDollar": 1110.3199999999997, "glPct": 0.34040518002550757, "sector": "Information Technology", "beta": 1.5004, "type": "etf", "fund": "Endowment"}, {"ticker": "VCSH", "company": "Vanguard Short-Term Corp Bond ETF", "shares": 83.1991, "costBasis": 6621.11, "avgCost": 79.5815098961407, "price": 78.805, "marketValue": 6556.505075500001, "dayPct": 0.00019040000000000002, "dayDollar": 1.2479864999999999, "glDollar": -64.60492449999856, "glPct": -0.009757415977079156, "sector": "Fixed Income", "beta": 0.6346, "type": "etf", "fund": "Endowment"}, {"ticker": "VFH", "company": "Vanguard Financials ETF", "shares": 99.9242, "costBasis": 7933.64, "avgCost": 79.3965826096181, "price": 126.41, "marketValue": 12631.418122, "dayPct": 0.008939, "dayDollar": 111.91510400000001, "glDollar": 4697.778121999999, "glPct": 0.5921340169203542, "sector": "Financials", "beta": 1.0567, "type": "etf", "fund": "Endowment"}, {"ticker": "VHT", "company": "Vanguard Health Care ETF", "shares": 46.7782, "costBasis": 12260.04, "avgCost": 262.08875074286743, "price": 270.28, "marketValue": 12643.211895999999, "dayPct": -0.001256, "dayDollar": -15.904588, "glDollar": 383.171895999998, "glPct": 0.03125372315261598, "sector": "Health Care", "beta": 1.0063, "type": "etf", "fund": "Endowment"}, {"ticker": "VIS", "company": "Vanguard Industrials ETF", "shares": 18.9417, "costBasis": 3637.2, "avgCost": 192.02077954988198, "price": 332.13, "marketValue": 6291.106821, "dayPct": -0.007026, "dayDollar": -44.512995000000004, "glDollar": 2653.9068210000005, "glPct": 0.7296565547674037, "sector": "Industrials", "beta": 1.0457, "type": "etf", "fund": "Endowment"}, {"ticker": "VOO", "company": "Vanguard S&P 500 ETF", "shares": 61.1032, "costBasis": 38557.1, "avgCost": 631.0160515324893, "price": 677.31, "marketValue": 41385.808392, "dayPct": -0.003135, "dayDollar": -130.149816, "glDollar": 2828.7083920000005, "glPct": 0.07336413765558096, "sector": "Broad Market", "beta": 1.0001, "type": "etf", "fund": "Endowment"}, {"ticker": "VTI", "company": "Vanguard Total Stock Market ETF", "shares": 33.0926, "costBasis": 11085.29, "avgCost": 334.9779104694101, "price": 361.65, "marketValue": 11967.938789999998, "dayPct": -0.003005, "dayDollar": -36.070934, "glDollar": 882.6487899999975, "glPct": 0.07962342798429246, "sector": "Broad Market", "beta": 1.0016, "type": "etf", "fund": "Endowment"}, {"ticker": "VUG", "company": "Vanguard Growth ETF", "shares": 24.0243, "costBasis": 12035.86, "avgCost": 500.9869174127862, "price": 86.87, "marketValue": 2086.990941, "dayPct": -0.006404999999999999, "dayDollar": -13.453608000000001, "glDollar": -9948.869059, "glPct": -0.8266022585008467, "sector": "Broad Market", "beta": 1.0208, "type": "etf", "fund": "Endowment"}, {"ticker": "XLB", "company": "Materials Select Sector SPDR", "shares": 68.9625, "costBasis": 2600.6, "avgCost": 37.71034982780496, "price": 50.285, "marketValue": 3467.7793125, "dayPct": -0.0002982, "dayDollar": -1.0344375000000001, "glDollar": 867.1793124999999, "glPct": 0.33345355398754134, "sector": "Materials", "beta": 0.9859, "type": "etf", "fund": "Endowment"}, {"ticker": "XLC", "company": "Communication Services SPDR", "shares": 12.7714, "costBasis": 1071.77, "avgCost": 83.91953896988583, "price": 117.185, "marketValue": 1496.616509, "dayPct": 0.009519, "dayDollar": 14.112397, "glDollar": 424.84650899999997, "glPct": 0.3963970898606977, "sector": "Communication Services", "beta": 0.9451, "type": "etf", "fund": "Endowment"}, {"ticker": "XLE", "company": "Energy Select Sector SPDR", "shares": 65.4117, "costBasis": 3498.32, "avgCost": 53.48156369579143, "price": 60.42, "marketValue": 3952.1749139999997, "dayPct": 0.016487, "dayDollar": 64.103466, "glDollar": 453.85491399999955, "glPct": 0.129735105422031, "sector": "Energy", "beta": 1.1061, "type": "etf", "fund": "Endowment"}, {"ticker": "XLF", "company": "Financial Select Sector SPDR", "shares": 131.1574, "costBasis": 4767.96, "avgCost": 36.35296216606917, "price": 51.53, "marketValue": 6758.540822, "dayPct": 0.008415, "dayDollar": 56.397681999999996, "glDollar": 1990.580822, "glPct": 0.41749109094874953, "sector": "Financials", "beta": 0.9984, "type": "etf", "fund": "Endowment"}, {"ticker": "XLP", "company": "Consumer Staples SPDR", "shares": 65.871, "costBasis": 4530.39, "avgCost": 68.77669991346724, "price": 85.34, "marketValue": 5621.43114, "dayPct": 0.00827, "dayDollar": 46.1097, "glDollar": 1091.0411399999994, "glPct": 0.24082720030725815, "sector": "Consumer Staples", "beta": 0.9908, "type": "etf", "fund": "Endowment"}, {"ticker": "XLU", "company": "Utilities Select Sector SPDR", "shares": 181.891, "costBasis": 6057.89, "avgCost": 33.305056324941866, "price": 43.725, "marketValue": 7953.183975, "dayPct": -0.003305, "dayDollar": -26.374194999999997, "glDollar": 1895.2939749999996, "glPct": 0.3128637157492129, "sector": "Utilities", "beta": 0.9976, "type": "etf", "fund": "Endowment"}], "bond": {"cusip": "91282CLW9", "name": "US Treasury Note 4.25% 11/15/2034", "marketValue": 24758.72}, "cash": 6568.95, "totalValue": 521431.544872, "beta": 1.0644808708794145}, "ceeFund": {"equities": [{"ticker": "AAPL", "company": "Apple", "shares": 10.115, "costBasis": 1821.32, "avgCost": 180.06129510627778, "price": 296.09, "marketValue": 2994.9503499999996, "dayPct": -0.013789000000000001, "dayDollar": -41.8761, "glDollar": 1173.6303499999997, "glPct": 0.6443844848790985, "sector": "Information Technology", "beta": 1.0724, "type": "equity", "fund": "CEE Fund"}, {"ticker": "ABBV", "company": "AbbVie", "shares": 20.0088, "costBasis": 3201.36, "avgCost": 159.99760105553557, "price": 209.16, "marketValue": 4185.040608, "dayPct": -0.0058460000000000005, "dayDollar": -24.610824, "glDollar": 983.6806080000001, "glPct": 0.3072696004198216, "sector": "Health Care", "beta": 0.3019, "type": "equity", "fund": "CEE Fund"}, {"ticker": "ADI", "company": "Analog Devices", "shares": 14.5293, "costBasis": 1914.14, "avgCost": 131.7434425608942, "price": 421.6899, "marketValue": 6126.85906407, "dayPct": 0.01006, "dayDollar": 61.02160707, "glDollar": 4212.71906407, "glPct": 2.2008416647005964, "sector": "Information Technology", "beta": 1.1961, "type": "equity", "fund": "CEE Fund"}, {"ticker": "BRK.B", "company": "Berkshire Hathaway", "shares": 8.0, "costBasis": 3117.44, "avgCost": 389.68, "price": 483.15, "marketValue": 3865.2, "dayPct": 0.0009323, "dayDollar": 3.6, "glDollar": 747.7599999999998, "glPct": 0.239863477725313, "sector": "Financials", "beta": 0.6236, "type": "equity", "fund": "CEE Fund"}, {"ticker": "COF", "company": "Capital One", "shares": 15.4116, "costBasis": 2219.34, "avgCost": 144.0045160787978, "price": 187.335, "marketValue": 2887.132086, "dayPct": 0.0008816000000000001, "dayDollar": 2.542914, "glDollar": 667.7920859999999, "glPct": 0.30089670172213356, "sector": "Financials", "beta": 1.0473, "type": "equity", "fund": "CEE Fund"}, {"ticker": "DAR", "company": "Darling Ingredients", "shares": 20.0, "costBasis": 1170.02, "avgCost": 58.501, "price": 62.503, "marketValue": 1250.06, "dayPct": 0.002132, "dayDollar": 2.66, "glDollar": 80.03999999999996, "glPct": 0.06840908702415341, "sector": "Consumer Staples", "beta": 1.0617, "type": "equity", "fund": "CEE Fund"}, {"ticker": "DIS", "company": "Walt Disney", "shares": 20.0, "costBasis": 2148.6, "avgCost": 107.42999999999999, "price": 103.82, "marketValue": 2076.3999999999996, "dayPct": 0.010709, "dayDollar": 22.0, "glDollar": -72.20000000000027, "glPct": -0.033603276552173635, "sector": "Communication Services", "beta": 1.4109, "type": "equity", "fund": "CEE Fund"}, {"ticker": "DLR", "company": "Digital Realty", "shares": 18.2908, "costBasis": 1858.62, "avgCost": 101.61501957268133, "price": 185.98, "marketValue": 3401.722984, "dayPct": -0.013421, "dayDollar": -46.275724, "glDollar": 1543.102984, "glPct": 0.8302412456553788, "sector": "Real Estate", "beta": 1.0666, "type": "equity", "fund": "CEE Fund"}, {"ticker": "ET", "company": "Energy Transfer", "shares": 95.1438, "costBasis": 1651.21, "avgCost": 17.354888074682744, "price": 20.28, "marketValue": 1929.516264, "dayPct": 0.006452, "dayDollar": 12.368694, "glDollar": 278.30626400000006, "glPct": 0.16854686199817107, "sector": "Energy", "beta": 0.66, "type": "equity", "fund": "CEE Fund"}, {"ticker": "FSLR", "company": "First Solar", "shares": 3.0, "costBasis": 306.66, "avgCost": 102.22000000000001, "price": 229.65, "marketValue": 688.95, "dayPct": -0.01594, "dayDollar": -11.16, "glDollar": 382.29, "glPct": 1.2466249266288396, "sector": "Information Technology", "beta": 1.5774, "type": "equity", "fund": "CEE Fund"}, {"ticker": "GD", "company": "General Dynamics", "shares": 4.0534, "costBasis": 1144.9, "avgCost": 282.4542359500666, "price": 339.0, "marketValue": 1374.1026, "dayPct": 0.013453, "dayDollar": 18.240299999999998, "glDollar": 229.20259999999985, "glPct": 0.20019442746091345, "sector": "Industrials", "beta": 0.3385, "type": "equity", "fund": "CEE Fund"}, {"ticker": "GOOGL", "company": "Alphabet Inc.", "shares": 34.2745, "costBasis": 4677.4, "avgCost": 136.46880333775837, "price": 401.61, "marketValue": 13764.981945000001, "dayPct": 0.012173, "dayDollar": 165.545835, "glDollar": 9087.581945000002, "glPct": 1.942870386325737, "sector": "Information Technology", "beta": 1.2638, "type": "equity", "fund": "CEE Fund"}, {"ticker": "GRMN", "company": "Garmin", "shares": 7.2015, "costBasis": 1069.84, "avgCost": 148.55793931819758, "price": 226.72, "marketValue": 1632.72408, "dayPct": 0.0042970000000000005, "dayDollar": 6.985455, "glDollar": 562.88408, "glPct": 0.5261385627757422, "sector": "Consumer Discretionary", "beta": 0.939, "type": "equity", "fund": "CEE Fund"}, {"ticker": "HD", "company": "Home Depot", "shares": 7.7683, "costBasis": 1685.91, "avgCost": 217.0243167745839, "price": 300.4101, "marketValue": 2333.67577983, "dayPct": 0.009748, "dayDollar": 22.528846830000003, "glDollar": 647.7657798299999, "glPct": 0.3842232265245475, "sector": "Consumer Discretionary", "beta": 0.9823, "type": "equity", "fund": "CEE Fund"}, {"ticker": "HOOD", "company": "Robinhood", "shares": 14.0, "costBasis": 979.37, "avgCost": 69.955, "price": 76.715, "marketValue": 1074.01, "dayPct": -0.005508999999999999, "dayDollar": -5.95, "glDollar": 94.63999999999999, "glPct": 0.0966335501393753, "sector": "Financials", "beta": 2.2909, "type": "equity", "fund": "CEE Fund"}, {"ticker": "HWM", "company": "Howmet Aerospace", "shares": 16.0, "costBasis": 4123.36, "avgCost": 257.71, "price": 258.455, "marketValue": 4135.28, "dayPct": -0.007279, "dayDollar": -30.32, "glDollar": 11.920000000000073, "glPct": 0.002890846300104787, "sector": "Industrials", "beta": 1.1954, "type": "equity", "fund": "CEE Fund"}, {"ticker": "IREN", "company": "Iris Energy", "shares": 18.0, "costBasis": 1184.85, "avgCost": 65.82499999999999, "price": 49.74, "marketValue": 895.32, "dayPct": -0.060446, "dayDollar": -57.6, "glDollar": -289.52999999999986, "glPct": -0.24436004557538918, "sector": "Information Technology", "beta": 4.18, "type": "equity", "fund": "CEE Fund"}, {"ticker": "ISRG", "company": "Intuitive Surgical", "shares": 5.0, "costBasis": 935.04, "avgCost": 187.00799999999998, "price": 431.878, "marketValue": 2159.39, "dayPct": 0.025546000000000003, "dayDollar": 53.78999999999999, "glDollar": 1224.35, "glPct": 1.309409223134839, "sector": "Health Care", "beta": 1.4908, "type": "equity", "fund": "CEE Fund"}, {"ticker": "LLY", "company": "Eli Lilly", "shares": 3.0215, "costBasis": 2711.95, "avgCost": 897.5508853218599, "price": 981.845, "marketValue": 2966.6446675, "dayPct": -0.022961999999999996, "dayDollar": -69.7211125, "glDollar": 254.69466750000038, "glPct": 0.09391569442651981, "sector": "Health Care", "beta": 0.4888, "type": "equity", "fund": "CEE Fund"}, {"ticker": "MSFT", "company": "Microsoft", "shares": 22.6723, "costBasis": 7501.0, "avgCost": 330.8442460623757, "price": 418.55, "marketValue": 9489.491165, "dayPct": -0.007987, "dayDollar": -76.405651, "glDollar": 1988.4911649999995, "glPct": 0.26509680909212097, "sector": "Information Technology", "beta": 1.0932, "type": "equity", "fund": "CEE Fund"}, {"ticker": "NFLX", "company": "Netflix", "shares": 21.0, "costBasis": 1936.31, "avgCost": 92.20523809523809, "price": 88.955, "marketValue": 1868.055, "dayPct": 0.022236, "dayDollar": 40.635, "glDollar": -68.25499999999988, "glPct": -0.03525003744235163, "sector": "Communication Services", "beta": 1.5302, "type": "equity", "fund": "CEE Fund"}, {"ticker": "PANW", "company": "Palo Alto Networks", "shares": 22.0, "costBasis": 2824.06, "avgCost": 128.36636363636364, "price": 246.53, "marketValue": 5423.66, "dayPct": 0.015237, "dayDollar": 81.4, "glDollar": 2599.6, "glPct": 0.9205186858636147, "sector": "Information Technology", "beta": 0.8149, "type": "equity", "fund": "CEE Fund"}, {"ticker": "PLTR", "company": "Palantir", "shares": 36.0, "costBasis": 3721.42, "avgCost": 103.37277777777778, "price": 132.9, "marketValue": 4784.400000000001, "dayPct": -0.008135, "dayDollar": -39.24, "glDollar": 1062.9800000000005, "glPct": 0.28563827786167656, "sector": "Information Technology", "beta": 1.5026, "type": "equity", "fund": "CEE Fund"}, {"ticker": "SOFI", "company": "SoFi Technologies", "shares": 100.0, "costBasis": 756.69, "avgCost": 7.5669, "price": 15.575, "marketValue": 1557.5, "dayPct": -0.002242, "dayDollar": -3.5000000000000004, "glDollar": 800.81, "glPct": 1.0583065720440337, "sector": "Information Technology", "beta": 2.1215, "type": "equity", "fund": "CEE Fund"}, {"ticker": "SOUN", "company": "SoundHound AI", "shares": 50.0, "costBasis": 97.9, "avgCost": 1.9580000000000002, "price": 8.155, "marketValue": 407.74999999999994, "dayPct": -0.030320999999999997, "dayDollar": -12.75, "glDollar": 309.8499999999999, "glPct": 3.164964249233911, "sector": "Information Technology", "beta": 2.7507, "type": "equity", "fund": "CEE Fund"}, {"ticker": "SPGI", "company": "S&P Global", "shares": 4.0, "costBasis": 1760.16, "avgCost": 440.04, "price": 417.18, "marketValue": 1668.72, "dayPct": 0.034801, "dayDollar": 56.12, "glDollar": -91.44000000000005, "glPct": -0.05194982274338699, "sector": "Financials", "beta": 1.0911, "type": "equity", "fund": "CEE Fund"}, {"ticker": "TSM", "company": "TSMC", "shares": 36.0, "costBasis": 6718.86, "avgCost": 186.635, "price": 396.22, "marketValue": 14263.920000000002, "dayPct": -0.020106000000000002, "dayDollar": -292.68, "glDollar": 7545.060000000002, "glPct": 1.122967289093686, "sector": "Information Technology", "beta": 1.3967, "type": "equity", "fund": "CEE Fund"}, {"ticker": "TTWO", "company": "Take-Two Interactive", "shares": 5.0, "costBasis": 1021.06, "avgCost": 204.212, "price": 240.91, "marketValue": 1204.55, "dayPct": -0.006311, "dayDollar": -7.65, "glDollar": 183.49, "glPct": 0.17970540418780484, "sector": "Communication Services", "beta": 0.9911, "type": "equity", "fund": "CEE Fund"}, {"ticker": "V", "company": "Visa", "shares": 6.0126, "costBasis": 1955.25, "avgCost": 325.192096597146, "price": 329.65, "marketValue": 1982.0535899999998, "dayPct": 0.011972, "dayDollar": 23.44914, "glDollar": 26.803589999999758, "glPct": 0.01370852320675093, "sector": "Financials", "beta": 0.7779, "type": "equity", "fund": "CEE Fund"}, {"ticker": "VMC", "company": "Vulcan Materials", "shares": 3.0492, "costBasis": 790.89, "avgCost": 259.3762298307753, "price": 268.47, "marketValue": 818.618724, "dayPct": 0.0023899999999999998, "dayDollar": 1.951488, "glDollar": 27.728724000000057, "glPct": 0.0350601524864394, "sector": "Materials", "beta": 1.0717, "type": "equity", "fund": "CEE Fund"}, {"ticker": "WM", "company": "Waste Management", "shares": 34.5561, "costBasis": 5248.02, "avgCost": 151.8695686145138, "price": 220.7901, "marketValue": 7629.64477461, "dayPct": 0.004413, "dayDollar": 33.52287261, "glDollar": 2381.62477461, "glPct": 0.45381396690751935, "sector": "Industrials", "beta": 0.4852, "type": "equity", "fund": "CEE Fund"}, {"ticker": "WMT", "company": "Walmart", "shares": 25.1126, "costBasis": 2437.35, "avgCost": 97.05685592093212, "price": 131.93, "marketValue": 3313.1053180000004, "dayPct": 0.0036520000000000003, "dayDollar": 12.054048, "glDollar": 875.7553180000004, "glPct": 0.3593063441852834, "sector": "Consumer Staples", "beta": 0.6473, "type": "equity", "fund": "CEE Fund"}, {"ticker": "XOM", "company": "ExxonMobil", "shares": 17.2707, "costBasis": 1779.93, "avgCost": 103.06067501606768, "price": 160.25, "marketValue": 2767.629675, "dayPct": 0.014754, "dayDollar": 40.240731000000004, "glDollar": 987.6996750000001, "glPct": 0.5549092801402302, "sector": "Energy", "beta": 0.1836, "type": "equity", "fund": "CEE Fund"}], "etfs": [{"ticker": "BILS", "company": "SPDR Bloomberg 3-6 Mo T-Bill ETF", "shares": 106.0918, "costBasis": 10538.75, "avgCost": 99.33614096471169, "price": 99.3051, "marketValue": 10535.45680818, "dayPct": 5.1359999999999996e-05, "dayDollar": 0.5410681800000001, "glDollar": -3.293191819999265, "glPct": -0.0003124841010555583, "sector": "Fixed Income", "beta": 1.5414, "type": "etf", "fund": "CEE Fund"}, {"ticker": "IGV", "company": "iShares Expanded Tech-Software ETF", "shares": 56.0, "costBasis": 3787.51, "avgCost": 67.63410714285715, "price": 91.995, "marketValue": 5151.72, "dayPct": 0.002343, "dayDollar": 12.04, "glDollar": 1364.21, "glPct": 0.36018650775839534, "sector": "Information Technology", "beta": 1.0154, "type": "etf", "fund": "CEE Fund"}, {"ticker": "IYG", "company": "iShares U.S. Financial Services ETF", "shares": 71.2866, "costBasis": 3611.95, "avgCost": 50.66800773216845, "price": 86.78, "marketValue": 6186.251148, "dayPct": 0.006612, "dayDollar": 40.633362, "glDollar": 2574.3011480000005, "glPct": 0.7127178249975776, "sector": "Financials", "beta": 1.0856, "type": "etf", "fund": "CEE Fund"}, {"ticker": "IYJ", "company": "iShares U.S. Industrials ETF", "shares": 12.5978, "costBasis": 1268.63, "avgCost": 100.70250361174175, "price": 154.54, "marketValue": 1946.8640119999998, "dayPct": -0.002002, "dayDollar": -3.905318, "glDollar": 678.2340119999997, "glPct": 0.5346192443817344, "sector": "Industrials", "beta": 0.9427, "type": "etf", "fund": "CEE Fund"}, {"ticker": "RSPN", "company": "Invesco S&P 500 Equal Wt Industrials", "shares": 165.4633, "costBasis": 8290.01, "avgCost": 50.101805052842536, "price": 59.6, "marketValue": 9861.61268, "dayPct": -0.0008382000000000001, "dayDollar": -8.273165, "glDollar": 1571.60268, "glPct": 0.18957789918226878, "sector": "Industrials", "beta": 1.0296, "type": "etf", "fund": "CEE Fund"}, {"ticker": "VGLT", "company": "Vanguard Long-Term Treasury ETF", "shares": 37.4775, "costBasis": 3165.74, "avgCost": 84.47041558268293, "price": 53.59, "marketValue": 2008.419225, "dayPct": 0.00018659999999999998, "dayDollar": 0.374775, "glDollar": -1157.3207749999997, "glPct": -0.36557669770732903, "sector": "Fixed Income", "beta": 0.9988, "type": "etf", "fund": "CEE Fund"}, {"ticker": "VGT", "company": "Vanguard Information Technology ETF", "shares": 12.0728, "costBasis": 5290.13, "avgCost": 438.18583924193223, "price": 111.76, "marketValue": 1349.2561280000002, "dayPct": -0.013678999999999998, "dayDollar": -18.712840000000003, "glDollar": -3940.873872, "glPct": -0.744948398621584, "sector": "Information Technology", "beta": 0.9815, "type": "etf", "fund": "CEE Fund"}, {"ticker": "VNQ", "company": "Vanguard Real Estate ETF", "shares": 30.0, "costBasis": 2765.7, "avgCost": 92.19, "price": 94.66, "marketValue": 2839.7999999999997, "dayPct": 0.007986, "dayDollar": 22.5, "glDollar": 74.09999999999991, "glPct": 0.026792493762880974, "sector": "Real Estate", "beta": 1.0147, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLB", "company": "Materials Select Sector SPDR", "shares": 174.9214, "costBasis": 7536.45, "avgCost": 43.08477979252395, "price": 50.285, "marketValue": 8795.922599, "dayPct": -0.0002982, "dayDollar": -2.623821, "glDollar": 1259.4725989999997, "glPct": 0.16711748887075475, "sector": "Materials", "beta": 0.9859, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLC", "company": "Communication Services SPDR", "shares": 88.3678, "costBasis": 6826.38, "avgCost": 77.24963165315873, "price": 117.185, "marketValue": 10355.380643, "dayPct": 0.009519, "dayDollar": 97.646419, "glDollar": 3529.0006430000003, "glPct": 0.5169651620624695, "sector": "Communication Services", "beta": 0.9451, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLE", "company": "Energy Select Sector SPDR", "shares": 26.6437, "costBasis": 1162.21, "avgCost": 43.620443106625586, "price": 60.42, "marketValue": 1609.812354, "dayPct": 0.016487, "dayDollar": 26.110826, "glDollar": 447.6023539999999, "glPct": 0.38513035854105526, "sector": "Energy", "beta": 1.1061, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLP", "company": "Consumer Staples SPDR", "shares": 132.0767, "costBasis": 9487.95, "avgCost": 71.83666763327673, "price": 85.34, "marketValue": 11271.425578, "dayPct": 0.00827, "dayDollar": 92.45368999999998, "glDollar": 1783.4755779999996, "glPct": 0.187972699898292, "sector": "Consumer Staples", "beta": 0.9908, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLU", "company": "Utilities Select Sector SPDR", "shares": 42.5755, "costBasis": 1258.36, "avgCost": 29.555965285199232, "price": 43.725, "marketValue": 1861.6137375, "dayPct": -0.003305, "dayDollar": -6.173447499999999, "glDollar": 603.2537375000002, "glPct": 0.4793967843065579, "sector": "Utilities", "beta": 0.9976, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLV", "company": "Health Care Select SPDR", "shares": 63.9413, "costBasis": 9154.43, "avgCost": 143.1692818256745, "price": 144.96, "marketValue": 9268.930848, "dayPct": -0.0009649000000000001, "dayDollar": -8.951782000000001, "glDollar": 114.50084799999968, "glPct": 0.012507698240087003, "sector": "Health Care", "beta": 1.0054, "type": "etf", "fund": "CEE Fund"}, {"ticker": "XLY", "company": "Consumer Discretionary SPDR", "shares": 42.0, "costBasis": 4936.05, "avgCost": 117.525, "price": 116.55, "marketValue": 4895.099999999999, "dayPct": 0.00017160000000000002, "dayDollar": 0.84, "glDollar": -40.95000000000073, "glPct": -0.0082961072112318, "sector": "Consumer Discretionary", "beta": 0.9435, "type": "etf", "fund": "CEE Fund"}], "bond": null, "cash": 1135.07, "totalValue": 205993.69443569, "beta": 1.0717228105149768}};
@@ -670,7 +700,7 @@ function renderKPIs() {
     <div class="kpi"><div class="kpi-label">Equity G/L</div><div class="kpi-value ${egl>=0?'pos':'neg'}">${egl>=0?'+':''}${fmt(Math.abs(egl))}</div><div class="kpi-sub">${eglp>=0?'+':''}${eglp.toFixed(2)}% · ${S.equities.length} stocks</div></div>
     <div class="kpi"><div class="kpi-label">ETF G/L</div><div class="kpi-value ${fgl>=0?'pos':'neg'}">${fgl>=0?'+':''}${fmt(Math.abs(fgl))}</div><div class="kpi-sub">${fglp>=0?'+':''}${fglp.toFixed(2)}% · ${S.etfs.length} ETFs</div></div>
     <div class="kpi accent"><div class="kpi-label">Portfolio Beta</div><div class="kpi-value">${S.beta.toFixed(4)}</div><div class="kpi-sub">vs S&P 500 = 1.00</div></div>
-    <div class="kpi"><div class="kpi-label">Today's Change</div><div class="kpi-value ${dd>=0?'pos':'neg'}">${dd>=0?'+':''}${dd>=0?'':'−'}${fmt(Math.abs(dd))}</div><div class="kpi-sub">Day P&L</div></div>
+    <div class="kpi"><div class="kpi-label">Today's Change</div><div class="kpi-value ${dd>=0?'pos':'neg'}">${dd>=0?'+':'−'}${fmt(Math.abs(dd))} <span style="font-size:13px">(${dd>=0?'+':''}${(dd/((S.total-dd)||1)*100).toFixed(2)}%)</span></div><div class="kpi-sub">Day P&L vs yesterday</div></div>
     <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value">${S.holdings.length}</div><div class="kpi-sub">${S.equities.length} eq + ${S.etfs.length} ETFs</div></div>
     <div class="kpi"><div class="kpi-label">Cash</div><div class="kpi-value">${fmt(S.cash)}</div><div class="kpi-sub">${(S.cash/S.total*100).toFixed(1)}% of fund</div></div>
   `;
@@ -722,11 +752,44 @@ function renderTop10() {
 
 // ── HOLDINGS ──────────────────────────────────────────────────────────────────
 function filterHoldings(type,btn){document.querySelectorAll('#tab-holdings .filter-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderHoldings(type);}
+let holdSortCol='marketValue';
+let holdSortAsc=false;
+let holdLastFilter='all';
+function holdingsSortBy(col){
+  if(holdSortCol===col){holdSortAsc=!holdSortAsc;}
+  else{holdSortCol=col;holdSortAsc=false;}
+  renderHoldings(holdLastFilter);
+}
 function renderHoldings(filter) {
+  holdLastFilter=filter||'all';
   let h=filter==='equity'?S.equities:filter==='etf'?S.etfs:S.holdings;
-  const sorted=[...h].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
+  const _hd=holdSortAsc?1:-1;
+  let sorted;
+  if(holdSortCol==='ticker') sorted=[...h].sort((a,b)=>_hd*b.ticker.localeCompare(a.ticker));
+  else if(holdSortCol==='glPct') sorted=[...h].sort((a,b)=>_hd*((b.glPct||0)-(a.glPct||0)));
+  else if(holdSortCol==='dayPct') sorted=[...h].sort((a,b)=>_hd*((b.dayPct||0)-(a.dayPct||0)));
+  else if(holdSortCol==='beta') sorted=[...h].sort((a,b)=>_hd*((b.beta||0)-(a.beta||0)));
+  else if(holdSortCol==='glDollar') sorted=[...h].sort((a,b)=>_hd*((b.glDollar||0)-(a.glDollar||0)));
+  else if(holdSortCol==='costBasis') sorted=[...h].sort((a,b)=>_hd*((b.costBasis||0)-(a.costBasis||0)));
+  else if(holdSortCol==='price') sorted=[...h].sort((a,b)=>_hd*((b.price||0)-(a.price||0)));
+  else if(holdSortCol==='avgCost') sorted=[...h].sort((a,b)=>_hd*((b.avgCost||0)-(a.avgCost||0)));
+  else if(holdSortCol==='shares') sorted=[...h].sort((a,b)=>_hd*((b.shares||0)-(a.shares||0)));
+  else sorted=[...h].sort((a,b)=>_hd*((b.marketValue||0)-(a.marketValue||0)));
   document.getElementById('holdingsTable').innerHTML=`
-    <tr><th>Ticker</th><th>Company</th><th>Type</th><th>Sector</th><th>Shares</th><th>Avg Cost</th><th>Price</th><th>Market Value</th><th>Weight</th><th>Cost Basis</th><th>G/L $</th><th>Return %</th><th>Day %</th><th>Beta</th></tr>
+    <tr>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('ticker')">Ticker ↕</th>
+    <th>Company</th><th>Type</th><th>Sector</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('shares')">Shares ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('avgCost')">Avg Cost ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('price')">Price ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('marketValue')">Market Value ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('marketValue')">Weight ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('costBasis')">Cost Basis ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('glDollar')">G/L $ ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('glPct')">Return % ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('dayPct')">Day % ↕</th>
+    <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('beta')">Beta ↕</th>
+    </tr>
     ${sorted.map(h=>`<tr>
     <td class="ticker-cell">${h.ticker}</td><td>${h.company}</td>
     <td><span class="badge type-${h.type}">${h.type.toUpperCase()}</span></td>
@@ -808,7 +871,8 @@ function renderSectorCards() {
       return `<div class="sc-card" onclick="showSectorComparePeriod('${s.name}',this)">
         <div class="sc-name">${s.name}</div>
         <div class="perf-value ${secReturn>=0?'pos':'neg'}" style="font-size:16px">${secReturn>=0?'+':''}${secReturn.toFixed(1)}%</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${(s.pct*100).toFixed(1)}% of fund · β${s.beta.toFixed(2)}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:1px">return since purchase</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${(s.pct*100).toFixed(1)}% of eq. portfolio · β${s.beta.toFixed(2)}</div>
       </div>`;
     }).join('')}</div>`;
 }
@@ -997,8 +1061,10 @@ function renderWiRows() {
           oninput="updateWiTrade(${t.id},'price',this.value)">
       </div>
       <div class="fg"><label>Sector</label>
-        <input type="text" value="${t.sector}" placeholder="auto-fill"
-          oninput="updateWiTrade(${t.id},'sector',this.value)" style="font-size:11px">
+        <select onchange="updateWiTrade(${t.id},'sector',this.value)" style="font-size:11px;padding:7px 4px;width:100%">
+          <option value="">${t.sector?'':'-- Select Sector --'}</option>
+          ${[...new Set(ALL_HOLDINGS().map(h=>h.sector).filter(s=>s&&s!=='Broad Market'&&s!=='Fixed Income'))].sort().map(s=>'<option value="'+s+'"'+(s===t.sector?' selected':'')+'>'+s+'</option>').join('')}
+        </select>
       </div>
       <button class="wi-remove" onclick="removeWiTrade(${t.id})" title="Remove">×</button>
     </div>
@@ -1108,6 +1174,18 @@ function calcWhatIf() {
       <div style="text-align:right;font-size:11px;color:var(--gray)">${(spPct*100).toFixed(1)}%</div>
       <div style="text-align:right;font-size:11px;font-weight:600;color:${vssp>0.01?'#1e40af':vssp<-0.01?'#dc2626':'var(--gray)'} ">${vssp>=0?'+':''}${(vssp*100).toFixed(1)}%</div></div>`;
     }).join('')}`;
+  // Sector beta before → after (only sectors your trades touched)
+  (function(){
+    const _rows=newSectors.map(ns=>{
+      const os=typeof oldSectors!=='undefined'?oldSectors.find(s=>s.name===ns.name):null;
+      if(!os)return '';
+      const _d=(ns.beta||0)-(os.beta||0);
+      if(Math.abs(_d)<0.005)return '';
+      const _col=_d>0?'#dc2626':'#16a34a';
+      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="font-weight:600">'+ns.name+'</span><span>β'+os.beta.toFixed(2)+' → <strong style="color:'+_col+'">β'+ns.beta.toFixed(2)+'</strong> <span style="font-size:10px;color:'+_col+'">('+(_d>=0?'+':'')+_d.toFixed(2)+')</span></span></div>';
+    }).filter(Boolean).join('');
+    if(_rows)document.getElementById('wiSectorImpact').innerHTML+='<div style="margin-top:14px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Sector Beta Changes</div>'+_rows+'</div>';
+  })();
 
   document.getElementById('wiResults').classList.add('show');
 }
@@ -1236,28 +1314,59 @@ async function loadCalendar(type){
   const futEnd=new Date(nowDate);futEnd.setDate(futEnd.getDate()+90);
   const to=futEnd.toISOString().split('T')[0];
 
-  // Get all portfolio tickers across both funds
   const allEquities=[...RAW.endowment.equities,...RAW.ceeFund.equities];
   const allHoldings=[...RAW.endowment.equities,...RAW.endowment.etfs,...RAW.ceeFund.equities,...RAW.ceeFund.etfs];
   const portTickers=new Set(allHoldings.map(h=>h.ticker));
+  const IR_PAGES={AAPL:'https://investor.apple.com',ABBV:'https://investors.abbvie.com',ADI:'https://investor.analog.com',AMZN:'https://ir.aboutamazon.com','BRK.B':'https://www.berkshirehathaway.com',BX:'https://ir.blackstone.com',CAT:'https://investors.caterpillar.com',CEG:'https://investors.constellationenergy.com',COF:'https://investor.capitalone.com',COST:'https://investor.costco.com',CRWD:'https://ir.crowdstrike.com',DAR:'https://ir.darlingii.com',DIS:'https://thewaltdisneycompany.com/investor-relations/',DLR:'https://investor.digitalrealty.com',ET:'https://ir.energytransfer.com',FSLR:'https://investor.firstsolar.com',GD:'https://investorrelations.gd.com',GOOG:'https://abc.xyz/investor/',GOOGL:'https://abc.xyz/investor/',GRMN:'https://www.garmin.com/en-US/company/investors/',HCA:'https://investor.hcahealthcare.com',HD:'https://ir.homedepot.com',HOOD:'https://investors.robinhood.com',HWM:'https://ir.howmet.com',IREN:'https://investors.iren.com',ISRG:'https://isrg.intuitive.com',KO:'https://investors.coca-colacompany.com',LLY:'https://investor.lilly.com',MA:'https://investor.mastercard.com',META:'https://investor.atmeta.com',MSFT:'https://www.microsoft.com/en-us/investor',NFLX:'https://ir.netflix.net',NUE:'https://www.nucor.com/investors',NVDA:'https://investor.nvidia.com',ORCL:'https://investor.oracle.com',PANW:'https://investors.paloaltonetworks.com',PFE:'https://investors.pfizer.com',PLTR:'https://investors.palantir.com',SBGSF:'https://www.se.com/ww/en/about-us/investor-relations/',SOFI:'https://investors.sofi.com',SOUN:'https://investors.soundhound.com',SPGI:'https://investor.spglobal.com',SYK:'https://investors.stryker.com',TKO:'https://investor.tkogrp.com',TMUS:'https://investor.t-mobile.com',TSM:'https://investor.tsmc.com',TTWO:'https://ir.take2games.com',V:'https://investor.visa.com',VMC:'https://ir.vulcanmaterials.com',WM:'https://investors.wm.com',WMT:'https://stock.walmart.com',XOM:'https://investor.exxonmobil.com'};
+  const irLink=(tk,company)=>IR_PAGES[tk]||'https://www.google.com/search?q='+encodeURIComponent((company||tk)+' investor relations');
 
   try{
 
   // ── ECONOMIC EVENTS ─────────────────────────────────────────────────────────
   if(type==='economic'){
-    const fut90=new Date(nowDate);fut90.setDate(fut90.getDate()+90);
-    const data=await fetchYF(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${fut90.toISOString().split('T')[0]}&token=${FINNHUB}`,10000);
-    const KEY=['fomc','federal reserve','fed rate','interest rate','cpi','consumer price','core cpi','pce','gdp','nonfarm','non-farm','payroll','jobs report','employment','unemployment','retail sales','ism','powell','ppi','producer price','consumer confidence','housing starts','durable goods'];
-    const filtered=(data?.economicCalendar||[]).filter(e=>{
-      if((e.country||'').toUpperCase()!=='US')return false;
-      return e.impact==='high'||KEY.some(k=>(e.event||'').toLowerCase().includes(k));
-    }).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,40);
-    const ic=e=>e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';
-    tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Event</th><th>Impact</th><th>Estimate</th><th>Previous</th></tr>
-      ${filtered.map(e=>`<tr><td style="font-size:12px">${e.date}</td><td style="font-weight:600">${e.event}</td>
-        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${ic(e)}22;color:${ic(e)}">${(e.impact||'').toUpperCase()}</span></td>
-        <td style="font-size:12px">${e.estimate||'—'}</td><td style="font-size:12px">${e.prev||'—'}</td></tr>`).join('')}`
-      :'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No upcoming major US events found.</td></tr>';
+    if(!window.econCache){
+      const fut90=new Date(nowDate);fut90.setDate(fut90.getDate()+90);
+      const data=await fetchYF(`https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${fut90.toISOString().split('T')[0]}&token=${FINNHUB}`,10000);
+      window.econCache=(data?.economicCalendar||[]).filter(e=>(e.country||'').toUpperCase()==='US').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+      if(!window.econCache.length&&!(data?.economicCalendar))window.econCache='unavailable';
+    }
+    if(window.econCache==='unavailable'){
+      // Finnhub economic calendar is premium-gated — build a schedule from known public dates.
+      const evts=[];
+      const yr=nowDate.getFullYear();
+      // FOMC 2026 meeting decision days (announced Fed schedule)
+      const fomc={2026:['2026-01-28','2026-03-18','2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-10-28','2026-12-09']};
+      (fomc[yr]||[]).forEach(d=>evts.push({date:d,event:'FOMC Rate Decision (scheduled)',impact:'high',estimate:'',prev:''}));
+      // Jobs report: first Friday of each month
+      for(let m=0;m<12;m++){
+        const d=new Date(yr,m,1);
+        while(d.getDay()!==5)d.setDate(d.getDate()+1);
+        evts.push({date:d.toISOString().split('T')[0],event:'Nonfarm Payrolls / Jobs Report (scheduled)',impact:'high',estimate:'',prev:''});
+      }
+      // CPI: typically released mid-month (~10th-14th) for the prior month
+      for(let m=0;m<12;m++){
+        const d=new Date(yr,m,12);
+        evts.push({date:d.toISOString().split('T')[0],event:'CPI Inflation Report (approx. mid-month)',impact:'high',estimate:'',prev:''});
+      }
+      // GDP advance estimates: late Jan/Apr/Jul/Oct
+      ['01-29','04-29','07-29','10-29'].forEach(md=>evts.push({date:yr+'-'+md,event:'GDP Estimate Release (approx.)',impact:'medium',estimate:'',prev:''}));
+      window.econCache=evts.filter(e=>e.date>=from).sort((a,b)=>a.date.localeCompare(b.date));
+    }
+    window.renderEconTable=function(impact,btn){
+      if(btn){document.querySelectorAll('.econ-f').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+      const rows=(impact==='all'?window.econCache:window.econCache.filter(e=>(e.impact||'low')===impact)).slice(0,80);
+      const ic=e=>e.impact==='high'?'#dc2626':e.impact==='medium'?'#f97316':'#94a3b8';
+      const fbtns='<tr><td colspan="5" style="padding:6px 0;border:none"><span style="font-size:11px;color:var(--muted);margin-right:8px;font-weight:700">PRIORITY:</span>'
+        +'<button class="filter-btn econ-f active" onclick="renderEconTable(\'all\',this)">All</button> '
+        +'<button class="filter-btn econ-f" onclick="renderEconTable(\'high\',this)" style="color:#dc2626">🔴 High</button> '
+        +'<button class="filter-btn econ-f" onclick="renderEconTable(\'medium\',this)" style="color:#f97316">🟠 Medium</button> '
+        +'<button class="filter-btn econ-f" onclick="renderEconTable(\'low\',this)">⚪ Low</button></td></tr>';
+      tableEl.innerHTML=fbtns.replace('colspan="5"','colspan="3"')+(rows.length?`<tr><th>Date</th><th>Event</th><th>Impact</th></tr>
+        ${rows.map(e=>`<tr><td style="font-size:12px;font-weight:600">${e.date||'—'}</td><td style="font-weight:600">${e.event||'—'}</td>
+          <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${ic(e)}22;color:${ic(e)}">${(e.impact||'low').toUpperCase()}</span></td></tr>`).join('')}`
+        :'<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No US events match this priority in the next 90 days.</td></tr>');
+    };
+    renderEconTable('all',null);
     if(loadEl)loadEl.style.display='none'; return;
   }
 
@@ -1274,143 +1383,172 @@ async function loadCalendar(type){
         const when=e.hour==='bmo'?bmoSpan:e.hour==='amc'?amcSpan:'—';
         const surprise=e.epsEstimate&&e.epsActual?((e.epsActual-e.epsEstimate)/Math.abs(e.epsEstimate)*100):null;
         const h=allHoldings.find(x=>x.ticker===e.symbol);
-        const irLink=`https://finance.yahoo.com/quote/${e.symbol}/financials/`;
         return `<tr>
           <td style="font-size:12px">${e.date}</td>
           <td class="ticker-cell">${e.symbol}</td>
-          <td>${e.name||h?.company||e.symbol}</td>
+          <td>${h?.company||e.symbol}</td>
           <td>${when}</td>
           <td style="font-size:12px">${e.epsEstimate!=null?'$'+e.epsEstimate.toFixed(2):'—'}</td>
           <td style="font-size:12px;font-weight:600">${e.epsActual!=null?'$'+e.epsActual.toFixed(2):'—'}</td>
           <td class="${surprise>0?'pos':surprise<0?'neg':''}" style="font-size:12px;font-weight:700">${surprise!=null?(surprise>=0?'+':'')+surprise.toFixed(1)+'%':'—'}</td>
-          <td><a href="${irLink}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
+          <td><a href="${irLink(e.symbol,h?.company)}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td>
         </tr>`;
       }).join('')}`
       :'<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No recent earnings from your portfolio found.</td></tr>';
     if(loadEl)loadEl.style.display='none'; return;
   }
 
-  // ── DIVIDENDS (Yahoo Finance) ────────────────────────────────────────────────
+  // ── DIVIDENDS (projected from Yahoo dividend history) ───────────────────────
   if(type==='dividends'){
-    if(loadEl)loadEl.textContent='⏳ Loading dividends...';
-    const allDivs=[];
+    if(loadEl)loadEl.textContent='⏳ Loading dividend data...';
+    const paid=[],upcoming=[];
     const divTickers=allHoldings.map(h=>h.ticker);
+    const past90=new Date(nowDate);past90.setDate(past90.getDate()-90);
+    const past90Str=past90.toISOString().split('T')[0];
     for(let i=0;i<divTickers.length;i+=5){
       await Promise.all(divTickers.slice(i,i+5).map(async tk=>{
+        const yfTk=tk.replace('.','-');
+        // Recently PAID — real ex-dates from Yahoo dividend history
         try{
-          const yfTk=tk.replace('.','-');
           const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTk}?interval=3mo&range=1y&events=dividends`,5000);
           const divs=d?.chart?.result?.[0]?.events?.dividends;
-          if(divs){
-            Object.values(divs).filter(d=>{
-              const dt=new Date(d.date*1000).toISOString().split('T')[0];
-              return dt>=from;
-            }).forEach(d=>{
-              const dt=new Date(d.date*1000).toISOString().split('T')[0];
-              allDivs.push({ticker:tk,exDate:dt,payDate:dt,amount:d.amount});
-            });
+          if(divs){Object.values(divs).forEach(dv=>{
+            const dt=new Date(dv.date*1000).toISOString().split('T')[0];
+            if(dt>=past90Str&&dt<=from)paid.push({ticker:tk,exDate:dt,amount:dv.amount});
+          });}
+        }catch(e){}
+        // UPCOMING / announced — Yahoo calendarEvents (announced ex-div + pay dates)
+        try{
+          const q=await fetchYF(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${yfTk}?modules=calendarEvents,summaryDetail`,6000);
+          const res=q?.quoteSummary?.result?.[0];
+          const exRaw=res?.calendarEvents?.exDividendDate?.raw||res?.summaryDetail?.exDividendDate?.raw;
+          const payRaw=res?.calendarEvents?.dividendDate?.raw;
+          const rate=res?.summaryDetail?.dividendRate?.raw;
+          if(exRaw){
+            const exDt=new Date(exRaw*1000).toISOString().split('T')[0];
+            if(exDt>=from)upcoming.push({ticker:tk,exDate:exDt,payDate:payRaw?new Date(payRaw*1000).toISOString().split('T')[0]:null,annualRate:rate||null});
+          }else if(payRaw){
+            const payDt=new Date(payRaw*1000).toISOString().split('T')[0];
+            if(payDt>=from)upcoming.push({ticker:tk,exDate:null,payDate:payDt,annualRate:rate||null});
           }
         }catch(e){}
       }));
       if(i+5<divTickers.length)await new Promise(r=>setTimeout(r,300));
       if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+5,divTickers.length)}/${divTickers.length} checked...`;
     }
-    allDivs.sort((a,b)=>(a.exDate||'').localeCompare(b.exDate||''));
-    tableEl.innerHTML=allDivs.length?`<tr><th>Ticker</th><th>Ex-Date</th><th>Amount</th><th>Est. Annual Yield</th><th>IR Page</th></tr>
-      ${allDivs.map(d=>{
-        const h=allHoldings.find(x=>x.ticker===d.ticker);
-        const yld=d.amount&&h?.price?(d.amount*4/h.price*100).toFixed(2):null;
-        return `<tr>
-          <td class="ticker-cell">${d.ticker}</td>
-          <td style="font-size:12px">${d.exDate}</td>
-          <td style="font-weight:600">$${d.amount?d.amount.toFixed(4):'—'}</td>
-          <td class="${yld>4?'pos':''}" style="font-size:12px">${yld?yld+'%':'—'}</td>
-          <td><a href="https://finance.yahoo.com/quote/${d.ticker}/financials/" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
-        </tr>`;
-      }).join('')}`
-      :'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No upcoming dividends found for your holdings.</td></tr>';
+    paid.sort((a,b)=>b.exDate.localeCompare(a.exDate));
+    upcoming.sort((a,b)=>(a.exDate||a.payDate||'z').localeCompare(b.exDate||b.payDate||'z'));
+    const upRows=upcoming.map(d=>{
+      const h=allHoldings.find(x=>x.ticker===d.ticker);
+      return '<tr style="background:#f0fdf4"><td class="ticker-cell">'+d.ticker+'</td>'
+        +'<td style="font-size:12px;font-weight:700">'+(d.exDate||'—')+'</td>'
+        +'<td style="font-size:12px">'+(d.payDate||'—')+'</td>'
+        +'<td style="font-weight:600">'+(d.annualRate?'$'+d.annualRate.toFixed(2)+'/yr':'—')+'</td>'
+        +'<td><a href="'+irLink(d.ticker,h?.company)+'" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td></tr>';
+    }).join('');
+    const paidRows=paid.map(d=>{
+      const h=allHoldings.find(x=>x.ticker===d.ticker);
+      return '<tr><td class="ticker-cell">'+d.ticker+'</td>'
+        +'<td style="font-size:12px">'+d.exDate+'</td>'
+        +'<td style="font-weight:600">$'+d.amount.toFixed(4)+'</td>'
+        +'<td><a href="'+irLink(d.ticker,h?.company)+'" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td></tr>';
+    }).join('');
+    tableEl.innerHTML=
+      '<tr><td colspan="5" style="border:none;padding:8px 0 4px"><span style="font-size:12px;font-weight:800;color:#16a34a">⏳ UPCOMING — ANNOUNCED</span></td></tr>'
+      +(upcoming.length
+        ?'<tr><th>Ticker</th><th>Ex-Date</th><th>Pay Date</th><th>Annual Rate</th><th>IR Page</th></tr>'+upRows
+        :'<tr><td colspan="5" style="color:var(--muted);padding:10px;font-size:12px">No announced upcoming dividend dates were returned by the data source. Recently paid dividends are below.</td></tr>')
+      +'<tr><td colspan="5" style="border:none;padding:16px 0 4px"><span style="font-size:12px;font-weight:800;color:var(--navy)">✅ RECENTLY PAID (last 90 days)</span></td></tr>'
+      +(paid.length
+        ?'<tr><th>Ticker</th><th>Ex-Date</th><th>Amount / Share</th><th>IR Page</th></tr>'+paidRows
+        :'<tr><td colspan="5" style="color:var(--muted);padding:10px;font-size:12px">No dividends paid by your holdings in the last 90 days.</td></tr>');
     if(loadEl)loadEl.style.display='none'; return;
   }
 
-  // ── STOCK SPLITS ─────────────────────────────────────────────────────────────
+  // ── STOCK SPLITS (Finnhub upcoming + Yahoo recent history) ──────────────────
   if(type==='splits'){
     if(loadEl)loadEl.textContent='⏳ Checking for stock splits...';
     const splitResults=[];
+    // Announced future splits — free APIs only return executed splits, so confirmed
+    // corporate actions are kept here. (Source: company 8-K filings.)
+    const KNOWN_SPLITS=[
+      {ticker:'CRWD',date:'2026-07-02',ratio:'4:1',note:'Record date 6/25; split-adjusted trading from 7/2'}
+    ];
+    KNOWN_SPLITS.forEach(k=>{
+      const h=allEquities.find(x=>x.ticker===k.ticker);
+      if(h)splitResults.push({ticker:k.ticker,company:h.company,date:k.date,ratio:k.ratio,upcoming:k.date>=from});
+    });
+    const past30=new Date(nowDate);past30.setDate(past30.getDate()-30);
+    const pastFrom2=past30.toISOString().split('T')[0];
+    const fut180=new Date(nowDate);fut180.setDate(fut180.getDate()+180);
+    const splitTo=fut180.toISOString().split('T')[0];
     const splitTickers=allEquities.map(h=>h.ticker);
-    for(let i=0;i<splitTickers.length;i+=5){
-      await Promise.all(splitTickers.slice(i,i+5).map(async tk=>{
+    for(let i=0;i<splitTickers.length;i+=4){
+      await Promise.all(splitTickers.slice(i,i+4).map(async tk=>{
+        const h=allEquities.find(x=>x.ticker===tk);
+        // Try Finnhub split endpoint first (includes announced/upcoming splits)
+        try{
+          const fhS=await fetchYF(`https://finnhub.io/api/v1/stock/split?symbol=${tk}&from=${pastFrom2}&to=${splitTo}&token=${FINNHUB}`,5000);
+          if(Array.isArray(fhS)&&fhS.length){
+            fhS.forEach(s=>{
+              splitResults.push({ticker:tk,company:h?.company||tk,date:s.date,ratio:s.toFactor+':'+s.fromFactor,upcoming:s.date>=from});
+            });
+            return; // got Finnhub data, skip Yahoo
+          }
+        }catch(e){}
+        // Fallback: Yahoo historical split events (recent only)
         try{
           const yfTk=tk.replace('.','-');
-          // Yahoo Finance includes split events in chart data
-          const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTk}?interval=3mo&range=2y&events=splits`,5000);
+          const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${yfTk}?interval=3mo&range=1y&events=splits`,5000);
           const splits=d?.chart?.result?.[0]?.events?.splits;
           if(splits){
             Object.values(splits).forEach(s=>{
               const dt=new Date(s.date*1000).toISOString().split('T')[0];
-              // Include upcoming splits (future dates) and recent past (last 30 days)
-              const pastCutoff=new Date(nowDate);pastCutoff.setDate(pastCutoff.getDate()-30);
-              const pastFrom2=pastCutoff.toISOString().split('T')[0];
               if(dt>=pastFrom2){
-                const h=allEquities.find(x=>x.ticker===tk);
-                splitResults.push({ticker:tk,company:h?.company||tk,date:dt,ratio:`${s.numerator}:${s.denominator}`,upcoming:dt>=from});
+                splitResults.push({ticker:tk,company:h?.company||tk,date:dt,ratio:s.numerator+':'+s.denominator,upcoming:dt>=from});
               }
             });
           }
         }catch(e){}
       }));
-      if(i+5<splitTickers.length)await new Promise(r=>setTimeout(r,300));
-      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+5,splitTickers.length)}/${splitTickers.length} checked...`;
+      if(i+4<splitTickers.length)await new Promise(r=>setTimeout(r,400));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+4,splitTickers.length)}/${splitTickers.length} checked...`;
     }
-    splitResults.sort((a,b)=>a.date.localeCompare(b.date));
-    tableEl.innerHTML=splitResults.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>Split Ratio</th><th>Status</th><th>IR Page</th></tr>
-      ${splitResults.map(s=>`<tr>
-        <td style="font-size:12px">${s.date}</td>
+    const dedup=[...new Map(splitResults.map(s=>[s.ticker+s.date,s])).values()].sort((a,b)=>a.date.localeCompare(b.date));
+    tableEl.innerHTML=dedup.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>Split Ratio</th><th>Status</th><th>IR Page</th></tr>
+      ${dedup.map(s=>`<tr style="${s.upcoming?'background:#f0fdf4;':''}">
+        <td style="font-size:12px;font-weight:${s.upcoming?'700':'400'}">${s.date}</td>
         <td class="ticker-cell">${s.ticker}</td>
         <td>${s.company}</td>
         <td style="font-weight:700;color:var(--navy)">${s.ratio}</td>
-        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${s.upcoming?'#dcfce7':'#f1f5f9'};color:${s.upcoming?'#16a34a':'#64748b'}">${s.upcoming?'Upcoming':'Recent'}</span></td>
-        <td><a href="https://finance.yahoo.com/quote/${s.ticker}/history/" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 History</a></td>
+        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${s.upcoming?'#dcfce7':'#f1f5f9'};color:${s.upcoming?'#16a34a':'#64748b'}">${s.upcoming?'⏳ Upcoming':'Recent'}</span></td>
+        <td><a href="${irLink(s.ticker,s.company)}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td>
       </tr>`).join('')}`
-      :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No stock splits found in the last 30 days or upcoming for your holdings.</td></tr>';
+      :'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No splits found (last 30 days or announced upcoming) for your holdings.</td></tr>';
     if(loadEl)loadEl.style.display='none'; return;
   }
 
-  // ── UPCOMING EARNINGS (My Portfolio + All) ──────────────────────────────────
+  // ── UPCOMING EARNINGS (Portfolio + All) — Finnhub primary, Yahoo supplement ──
   if(!calCache){
-    if(loadEl)loadEl.textContent='⏳ Fetching earnings dates...';
-    const earningsResults=[];
-    for(let _i=0;_i<allEquities.length;_i+=5){
-      await Promise.all(allEquities.slice(_i,_i+5).map(async h=>{
+    if(loadEl)loadEl.textContent='⏳ Fetching earnings calendar...';
+    let fhList=[];
+    // 1) Per-symbol queries for every portfolio equity — reliable on free tier
+    for(let _i=0;_i<allEquities.length;_i+=4){
+      await Promise.all(allEquities.slice(_i,_i+4).map(async h=>{
         try{
-          const yfTk=h.ticker.replace('.','-');
-          const d=await fetchYF(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${yfTk}?modules=calendarEvents`,6000);
-          const earningsDates=d?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate||[];
-          earningsDates.forEach(ed=>{
-            if(ed?.raw){
-              const dt=new Date(ed.raw*1000).toISOString().split('T')[0];
-              if(dt>=from&&dt<=to){
-                earningsResults.push({symbol:h.ticker,name:h.company,date:dt,hour:'',epsEstimate:null,epsActual:null,irLink:`https://finance.yahoo.com/quote/${yfTk}/financials/`});
-              }
-            }
-          });
+          const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?symbol=${h.ticker}&from=${from}&to=${to}&token=${FINNHUB}`,7000);
+          (r?.earningsCalendar||[]).forEach(e=>fhList.push(e));
         }catch(e){}
       }));
-      if(_i+5<allEquities.length)await new Promise(r=>setTimeout(r,350));
-      if(loadEl)loadEl.textContent=`⏳ ${Math.min(_i+5,allEquities.length)}/${allEquities.length} tickers...`;
+      if(_i+4<allEquities.length)await new Promise(r=>setTimeout(r,350));
+      if(loadEl)loadEl.textContent=`⏳ ${Math.min(_i+4,allEquities.length)}/${allEquities.length} holdings checked...`;
     }
-    // Supplement with Finnhub for any we missed
+    // 2) Broad market query so the "All" view has the full calendar
     try{
-      const fhR=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,8000);
-      if(fhR?.earningsCalendar){
-        fhR.earningsCalendar.filter(e=>portTickers.has(e.symbol)).forEach(e=>{
-          if(!earningsResults.some(x=>x.symbol===e.symbol&&x.date===e.date)){
-            const h=allHoldings.find(x=>x.ticker===e.symbol);
-            earningsResults.push({...e,name:e.name||h?.company||e.symbol,irLink:`https://finance.yahoo.com/quote/${e.symbol}/financials/`});
-          }
-        });
-      }
+      const fhAll=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,12000);
+      if(fhAll?.earningsCalendar)fhList=fhList.concat(fhAll.earningsCalendar);
     }catch(e){}
-    calCache=[...new Map(earningsResults.map(e=>[e.symbol+e.date,e])).values()].sort((a,b)=>a.date.localeCompare(b.date));
+    calCache=[...new Map(fhList.map(e=>[e.symbol+e.date,e])).values()].sort((a,b)=>a.date.localeCompare(b.date));
     if(loadEl)loadEl.textContent='';
   }
   if(!calCache||!calCache.length){
@@ -1420,20 +1558,20 @@ async function loadCalendar(type){
   const bmoS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#dbeafe;color:#1e40af">Before Open</span>';
   const amcS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#fef9c3;color:#854d0e">After Close</span>';
   let filtered=type==='portfolio'?calCache.filter(e=>portTickers.has(e.symbol)):calCache;
-  filtered=filtered.sort((a,b)=>a.date.localeCompare(b.date)).slice(0,60);
+  filtered=[...filtered].sort((a,b)=>a.date.localeCompare(b.date)).slice(0,80);
   tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>In Portfolio</th><th>IR Page</th></tr>
     ${filtered.map(e=>{
       const inP=portTickers.has(e.symbol);
       const when=e.hour==='bmo'?bmoS:e.hour==='amc'?amcS:'—';
       const h=allHoldings.find(x=>x.ticker===e.symbol);
-      return `<tr style="${inP?'background:#f0fdf4;':''}" >
+      return `<tr style="${inP?'background:#f0fdf4;':''}">
         <td style="font-size:12px;font-weight:${inP?'700':'400'}">${e.date}</td>
         <td class="ticker-cell">${e.symbol}</td>
-        <td>${e.name||h?.company||e.symbol}</td>
+        <td>${h?.company||e.name||e.symbol}</td>
         <td>${when}</td>
-        <td style="font-size:12px">${e.epsEstimate!=null?'$'+e.epsEstimate.toFixed(2):'—'}</td>
+        <td style="font-size:12px">${e.epsEstimate!=null?'$'+Number(e.epsEstimate).toFixed(2):'—'}</td>
         <td>${inP?'<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#dcfce7;color:#16a34a">✓ Owned</span>':'—'}</td>
-        <td><a href="${e.irLink||'https://finance.yahoo.com/quote/'+e.symbol+'/financials/'}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">📊 IR Page</a></td>
+        <td><a href="${irLink(e.symbol,h?.company)}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td>
       </tr>`;
     }).join('')}`
     :`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings in the next 90 days.':'No earnings found.'}</td></tr>`;
@@ -1515,17 +1653,51 @@ const YF_INTERVALS = {
 };
 
 async function fetchCandleReturn(ticker, period) {
-  if (period === '1D') return null; // handled via Finnhub quote
+  if (period === '1D') return null; // handled via quote
   const cacheKey = ticker + '_' + period;
   if (candleCache[cacheKey] !== undefined) return candleCache[cacheKey];
 
+  const yfTicker = ticker.replace('.', '-'); // Yahoo uses BRK-B not BRK.B
+  let url;
+  if (period === 'YTD') {
+    // Precise YTD: baseline = last close of PRIOR year. Fetch from mid-Dec to now, daily.
+    const now = new Date();
+    const jan1 = new Date(now.getFullYear(), 0, 1);
+    // Use range=1y (param style proven to work through the proxy; period1/period2 was
+    // being ignored and silently returning a default window) then anchor at Jan 1 via timestamps.
+    url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=1d&range=1y`;
+    try {
+      const r = await fetchYF(url, 8000);
+      if (!r) { candleCache[cacheKey] = null; return null; }
+      const result = r.chart?.result?.[0];
+      if (!result) { candleCache[cacheKey] = null; return null; }
+      const ts = result.timestamp || [];
+      const closes = result.indicators?.quote?.[0]?.close || [];
+      const pts = ts.map((t,i)=>({t,c:closes[i]})).filter(x=>x.c!=null&&!isNaN(x.c));
+      if (pts.length < 2) { candleCache[cacheKey] = null; return null; }
+      const jan1Ts = Math.floor(jan1.getTime()/1000);
+      // Baseline = last close BEFORE Jan 1 (prior year final close)
+      const before = pts.filter(p=>Number(p.t) < jan1Ts);
+      if (!before.length) {
+        // No data before Jan 1 in the window — refusing to compute (would equal a 1Y return).
+        console.warn('YTD '+ticker+': no pre-Jan-1 close in response ('+pts.length+' pts, first '+new Date(Number(pts[0].t)*1000).toISOString().split('T')[0]+') — showing — instead of a wrong number');
+        candleCache[cacheKey] = null; return null;
+      }
+      const baseline = before[before.length-1].c;
+      const baseDt = new Date(Number(before[before.length-1].t)*1000).toISOString().split('T')[0];
+      console.log('YTD '+ticker+': baseline $'+baseline.toFixed(2)+' on '+baseDt+' → $'+pts[pts.length-1].c.toFixed(2));
+      const last = pts[pts.length-1].c;
+      const pct = (last - baseline) / baseline * 100;
+      candleCache[cacheKey] = parseFloat(pct.toFixed(2));
+      return candleCache[cacheKey];
+    } catch(e) { candleCache[cacheKey] = null; return null; }
+  }
+
   const range = YF_RANGES[period] || '1mo';
   const interval = YF_INTERVALS[period] || '1d';
-  const yfTicker = ticker.replace('.', '-'); // Yahoo uses BRK-B not BRK.B
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=${interval}&range=${range}`;
-
+  url = `https://query1.finance.yahoo.com/v8/finance/chart/${yfTicker}?interval=${interval}&range=${range}`;
   try {
-    const r = await fetchYF(url, 8000); // fetchYF routes through CF_PROXY for yahoo.com
+    const r = await fetchYF(url, 8000);
     if (!r) { candleCache[cacheKey] = null; return null; }
     const result = r.chart?.result?.[0];
     if (!result) { candleCache[cacheKey] = null; return null; }
@@ -1534,17 +1706,10 @@ async function fetchCandleReturn(ticker, period) {
     if (valid.length < 2) { candleCache[cacheKey] = null; return null; }
     if (period==='3Y' && valid.length>36) valid=valid.slice(-37);
     const pct = (valid[valid.length-1] - valid[0]) / valid[0] * 100;
-    // Sanity check
-    if (Math.abs(pct) > 500) {
-      console.warn(`Suspicious ${ticker} ${period}: ${pct.toFixed(1)}% - rejecting`);
-      candleCache[cacheKey] = null; return null;
-    }
+    if (Math.abs(pct) > 500) { candleCache[cacheKey] = null; return null; }
     candleCache[cacheKey] = parseFloat(pct.toFixed(2));
     return candleCache[cacheKey];
-  } catch(e) {
-    candleCache[cacheKey] = null;
-    return null;
-  }
+  } catch(e) { candleCache[cacheKey] = null; return null; }
 }
 
 
@@ -2572,7 +2737,8 @@ function renderAUM(){
     <div class="kpi"><div class="kpi-label">CEE Fund</div><div class="kpi-value">$${fmt(cMV)}</div><div class="kpi-sub">${(cMV/tot*100).toFixed(1)}% of AUM</div></div>
     <div class="kpi"><div class="kpi-label">Combined Beta</div><div class="kpi-value">${beta.toFixed(3)}</div><div class="kpi-sub">${beta>1?'Higher':'Lower'} than S&P</div></div>
     <div class="kpi"><div class="kpi-label">Unique Tickers</div><div class="kpi-value">${new Set(all.map(h=>h.ticker)).size}</div><div class="kpi-sub">Across both funds</div></div>
-    <div class="kpi"><div class="kpi-label">Total Equity MV</div><div class="kpi-value">$${fmt([...E.equities,...C.equities].reduce((s,h)=>s+(h.marketValue||0),0))}</div><div class="kpi-sub">Combined equities</div></div>`;
+    <div class="kpi"><div class="kpi-label">Total Equity MV</div><div class="kpi-value">$${fmt([...E.equities,...C.equities].reduce((s,h)=>s+(h.marketValue||0),0))}</div><div class="kpi-sub">Combined equities</div></div>
+    ${(()=>{const _dd=all.reduce((s,h)=>s+(h.dayDollar||0),0);const _pct=_dd/((tot-_dd)||1)*100;return '<div class="kpi"><div class="kpi-label">Today\'s Change</div><div class="kpi-value '+(_dd>=0?'pos':'neg')+'">'+(_dd>=0?'+':'−')+fmt(Math.abs(_dd))+' <span style="font-size:13px">('+(_dd>=0?'+':'')+_pct.toFixed(2)+'%)</span></div><div class="kpi-sub">Combined day P&L</div></div>';})()}`;
   const EXCL=['Broad Market','Fixed Income'],fAll=all.filter(h=>!EXCL.includes(h.sector)),fT=fAll.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const secs=calcSectors(fAll,fT),cols=['#001F5B','#1e40af','#2563eb','#3b82f6','#60a5fa','#93c5fd','#bfdbfe','#dbeafe'],mp=Math.max(...secs.map(s=>s.pct));
   document.getElementById('aumSectors').innerHTML=secs.map((s,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div style="min-width:130px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</div><div class="st" style="flex:1"><div class="sf" style="width:${(s.pct/mp*100).toFixed(1)}%;background:${cols[i%8]}"></div></div><div class="sp_">${(s.pct*100).toFixed(1)}%</div></div>`).join('');
