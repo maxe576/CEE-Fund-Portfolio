@@ -218,8 +218,11 @@
             🔗 Investor Relations
           </a>
         </div>
-        <button onclick="closeThesisDetail()" 
-          style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--gray)">← Back</button>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="thesisCloudStatus" style="font-size:11px;font-weight:600"></span>
+          <button onclick="closeThesisDetail()"
+            style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:white;cursor:pointer;color:var(--gray)">← Back</button>
+        </div>
       </div>
 
       <!-- Quick stats row -->
@@ -292,6 +295,53 @@
           </div>
         </div>
 
+        <!-- Research Framework (shared by both funds) -->
+        <div style="margin-bottom:16px">
+          <div class="thesis-subtitle">Research Framework <span style="font-weight:400;color:var(--muted);text-transform:none">— shared company view, applies to both funds</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+            <div class="fg">
+              <label>Record Status</label>
+              <select id="thesisStatus" onchange="autoSaveEquityThesis()" title="A sold position keeps its research — mark it Sold or Archived instead of deleting">
+                <option>Active</option><option>Watchlist</option><option>Sold</option><option>Archived</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Valuation Method</label>
+              <select id="valuationMethod" onchange="autoSaveEquityThesis()">
+                <option value="">—</option><option>DCF</option><option>P/E Multiple</option><option>EV/EBITDA</option><option>P/S Multiple</option><option>P/B Multiple</option><option>Dividend Discount</option><option>Sum-of-Parts</option><option>Analyst Consensus</option><option>Other</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Target Horizon</label>
+              <select id="targetHorizon" onchange="autoSaveEquityThesis()">
+                <option value="">—</option><option>6 months</option><option>12 months</option><option>18 months</option><option>24 months</option><option>3–5 years</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Technical Status</label>
+              <select id="technicalStatus" onchange="autoSaveEquityThesis()">
+                <option value="">—</option><option>Uptrend</option><option>Neutral / Range</option><option>Downtrend</option><option>Breakout Watch</option>
+              </select>
+            </div>
+            <div class="fg"><label>Original Thesis Date</label><input type="date" id="thesisDate" onchange="autoSaveEquityThesis()"></div>
+            <div class="fg"><label>Price-Target Review Date</label><input type="date" id="targetReviewDate" onchange="autoSaveEquityThesis()"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="fg">
+              <label>🚫 Thesis Invalidation Criteria</label>
+              <textarea id="invalidationText" placeholder="What specific evidence would prove this thesis wrong..."
+                style="height:70px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+                oninput="autoSaveEquityThesis()"></textarea>
+            </div>
+            <div class="fg">
+              <label>📈 Monitoring KPIs (one per line)</label>
+              <textarea id="kpisText" placeholder="e.g. Data-center revenue growth&#10;Gross margin trend&#10;Subscriber net adds"
+                style="height:70px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+                oninput="autoSaveEquityThesis()"></textarea>
+            </div>
+          </div>
+        </div>
+
         <!-- Thesis / Catalysts / Risks -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
           <div class="fg">
@@ -308,9 +358,89 @@
           </div>
           <div class="fg">
             <label>⚠️ Risks</label>
-            <textarea id="risksText" placeholder="Key risks to monitor..." 
+            <textarea id="risksText" placeholder="Key risks to monitor..."
               style="height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
               oninput="autoSaveEquityThesis()"></textarea>
+          </div>
+        </div>
+
+        <!-- Fund Decisions (each fund keeps its own record — never shared) -->
+        <div style="margin-top:16px">
+          <div class="thesis-subtitle">Fund Decisions <span style="font-weight:400;color:var(--muted);text-transform:none">— each fund keeps its own recommendation and notes</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" class="fund-cards-grid">
+
+            <div class="fund-card" id="fundCard_endowment">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+                <span style="font-weight:800;color:var(--navy);font-size:13px">🏛 Endowment</span>
+                <span id="fundPos_endowment" style="font-size:11px;color:var(--muted)"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                <div class="fg">
+                  <label>Recommendation</label>
+                  <select id="rec_endowment" onchange="saveFundField('endowment','recommendation',this.value)">
+                    <option value="">—</option><option>Add</option><option>Hold</option><option>Watch</option><option>Trim</option><option>Exit</option>
+                  </select>
+                </div>
+                <div class="fg">
+                  <label>Conviction (1–5)</label>
+                  <select id="conv_endowment" onchange="saveFundField('endowment','conviction',this.value)">
+                    <option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                  </select>
+                </div>
+                <div class="fg"><label>Analyst Owner</label><input id="analyst_endowment" placeholder="Name" onchange="saveFundField('endowment','analyst',this.value)"></div>
+                <div class="fg">
+                  <label>Portfolio Role</label>
+                  <select id="role_endowment" onchange="saveFundField('endowment','portfolioRole',this.value)">
+                    <option value="">—</option><option>Core Compounder</option><option>Growth</option><option>Income</option><option>Defensive Anchor</option><option>Speculative</option><option>Tactical / Thematic</option><option>Hedge</option>
+                  </select>
+                </div>
+                <div class="fg"><label>Last Reviewed</label><input type="date" id="lastRev_endowment" onchange="saveFundField('endowment','lastReviewed',this.value)"></div>
+                <div class="fg"><label>Next Review</label><input type="date" id="nextRev_endowment" onchange="saveFundField('endowment','nextReview',this.value)"></div>
+              </div>
+              <div class="fg" style="margin-top:10px">
+                <label>Fund-Specific Note</label>
+                <textarea id="note_endowment" placeholder="Position note for the Endowment only..."
+                  style="height:56px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+                  oninput="autoSaveFundNote('endowment',this)"></textarea>
+              </div>
+            </div>
+
+            <div class="fund-card" id="fundCard_cee">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+                <span style="font-weight:800;color:var(--navy);font-size:13px">⚓ CEE Fund</span>
+                <span id="fundPos_cee" style="font-size:11px;color:var(--muted)"></span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                <div class="fg">
+                  <label>Recommendation</label>
+                  <select id="rec_cee" onchange="saveFundField('cee','recommendation',this.value)">
+                    <option value="">—</option><option>Add</option><option>Hold</option><option>Watch</option><option>Trim</option><option>Exit</option>
+                  </select>
+                </div>
+                <div class="fg">
+                  <label>Conviction (1–5)</label>
+                  <select id="conv_cee" onchange="saveFundField('cee','conviction',this.value)">
+                    <option value="">—</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                  </select>
+                </div>
+                <div class="fg"><label>Analyst Owner</label><input id="analyst_cee" placeholder="Name" onchange="saveFundField('cee','analyst',this.value)"></div>
+                <div class="fg">
+                  <label>Portfolio Role</label>
+                  <select id="role_cee" onchange="saveFundField('cee','portfolioRole',this.value)">
+                    <option value="">—</option><option>Core Compounder</option><option>Growth</option><option>Income</option><option>Defensive Anchor</option><option>Speculative</option><option>Tactical / Thematic</option><option>Hedge</option>
+                  </select>
+                </div>
+                <div class="fg"><label>Last Reviewed</label><input type="date" id="lastRev_cee" onchange="saveFundField('cee','lastReviewed',this.value)"></div>
+                <div class="fg"><label>Next Review</label><input type="date" id="nextRev_cee" onchange="saveFundField('cee','nextReview',this.value)"></div>
+              </div>
+              <div class="fg" style="margin-top:10px">
+                <label>Fund-Specific Note</label>
+                <textarea id="note_cee" placeholder="Position note for the CEE Fund only..."
+                  style="height:56px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;resize:vertical;font-family:inherit;width:100%"
+                  oninput="autoSaveFundNote('cee',this)"></textarea>
+              </div>
+            </div>
+
           </div>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px" id="equityThesisSaved"></div>
@@ -324,6 +454,7 @@
   <div class="card">
     <div class="card-title">All Equities <span id="thesisCount" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div>
     <div class="tbl-wrap"><table id="thesisMasterTable"></table></div>
+    <div id="thesisArchiveStrip" style="margin-top:12px"></div>
   </div>
 </div>
 

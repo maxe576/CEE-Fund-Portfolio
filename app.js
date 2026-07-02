@@ -1,6 +1,6 @@
 // CEE Fund Dashboard — application logic. Requires data.js to be loaded first.
 
-console.log('%cCEE Dashboard build v28 — split into styles.css / data.js / app.js; rolling news dates; hashed admin credentials','color:#c9a84c;font-weight:bold;font-size:13px');
+console.log('%cCEE Dashboard build v29 — thesis redesign: merge-based cloud saves, per-fund decisions, research framework fields','color:#c9a84c;font-weight:bold;font-size:13px');
 
 // ── DATE HELPERS ──────────────────────────────────────────────────────────────
 // Rolling YYYY-MM-DD strings so API date windows never go stale.
@@ -115,6 +115,7 @@ function showTab(tab, btn) {
 }
 
 function switchFund(fund, btn) {
+  commitPendingThesisEdits(); // protect any unsaved thesis edit before re-render
   activeFund = fund;
   document.querySelectorAll('.fund-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -127,7 +128,12 @@ function switchFund(fund, btn) {
     const tab = match ? match[1] : '';
     if (tab==='news') { newsCache={}; loadNews('market'); }
     else if (tab==='calendar') { calCache=null; loadCalendar('portfolio'); }
-    else if (tab==='thesis') initThesisTab();
+    else if (tab==='thesis') initThesisTab().then(() => {
+      // Refresh the open detail panel so fund highlights/weights track the new
+      // fund — shared thesis is preserved, each fund card keeps its own values
+      const p = document.getElementById('thesisDetailPanel');
+      if (p && p.style.display !== 'none' && currentThesisTicker) openThesisDetail(currentThesisTicker);
+    });
     else if (tab==='aum') renderAUM();
     else if (tab==='movers') { if(!moversData.week&&!moversData.month) loadMovers(); else renderMovers(activeMoversView); }
     else if (tab==='sectorcompare') renderSectorCards();
@@ -1559,63 +1565,150 @@ async function loadThesisFromStorage() {
   try { const d = localStorage.getItem('cee_etf_notes'); if(d) etfNotes = JSON.parse(d); } catch(e) {}
 }
 
-let fbSaveTimer=null, fbSavePending=false, fbSaving=false, fbLastSaveOk=false;
+// ── CLOUD SAVE ENGINE (merge-based) ──────────────────────────────────────────
+// Saves are PATCH (RTDB update) requests scoped to the record being edited, so
+// writing one field can never delete another user's fields or other records —
+// unlike the old whole-node PUT. Same node, same paths, same key sanitization.
+const fbSafeKey = k => String(k).replace(/[.#$\[\]]/g, '_');
 
-function scheduleSave() {
-  localStorage.setItem('cee_thesis_data', JSON.stringify(thesisData));
-  localStorage.setItem('cee_sector_thesis', JSON.stringify(sectorThesis));
-  localStorage.setItem('cee_etf_notes', JSON.stringify(etfNotes));
-  fbSavePending = true;
-  clearTimeout(fbSaveTimer);
-  fbSaveTimer = setTimeout(flushToFirebase, 2000);
-}
-
-function sanitizeFirebaseKeys(obj) {
-  if (!obj || typeof obj !== 'object') return obj;
-  const clean = {};
-  for (const [k, v] of Object.entries(obj)) {
-    const safe = k.replace(/\./g,'_').replace(/#/g,'_').replace(/\$/g,'_').replace(/\[/g,'_').replace(/\]/g,'_');
-    clean[safe] = typeof v === 'object' && v !== null ? sanitizeFirebaseKeys(v) : v;
-  }
-  return clean;
-}
-
-async function flushToFirebase() {
-  if (fbSaving) { fbSaveTimer = setTimeout(flushToFirebase, 2000); return; }
-  fbSaving = true; fbSavePending = false; fbLastSaveOk = false;
+function mirrorThesisToLocal() {
   try {
-    const res = await fetch(FB_DB_URL + FB_NODE + '.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        thesis: sanitizeFirebaseKeys(thesisData),
-        sectorThesis: sanitizeFirebaseKeys(sectorThesis),
-        etfNotes: sanitizeFirebaseKeys(etfNotes)
-      })
-    });
-    if (res.ok) {
-      fbLastSaveOk = true;
-      console.log('✅ Firebase saved');
-    } else {
-      const err = await res.text();
-      console.warn('Firebase save failed:', res.status, err);
-      const el = document.getElementById('equityThesisSaved');
-      if (el) { el.textContent = '❌ Save error: ' + res.status; el.style.color='#d6453d'; }
-    }
-  } catch(e) {
-    console.warn('Firebase error:', e.message);
-    const el = document.getElementById('equityThesisSaved');
-    if (el) { el.textContent = '❌ Network error'; el.style.color='#d6453d'; }
-  }
-  fbSaving = false;
+    localStorage.setItem('cee_thesis_data', JSON.stringify(thesisData));
+    localStorage.setItem('cee_sector_thesis', JSON.stringify(sectorThesis));
+    localStorage.setItem('cee_etf_notes', JSON.stringify(etfNotes));
+  } catch(e) {}
 }
 
-async function saveThesisToStorage() { scheduleSave(); }
-async function saveSectorThesisToStorage() { scheduleSave(); }
-async function saveEtfNotesToStorage() { scheduleSave(); }
+let fbPatchQueue = {};          // firebase path -> merged fields awaiting write
+let fbPatchStatusEls = new Set();
+let fbPatchTimer = null, fbPatchInFlight = false, fbPatchRetries = 0, fbLastSaveOk = false;
+
+function paintSaveStatus(state) {
+  const msg = {pending:'💾 Saving…', saving:'💾 Saving…', saved:'✅ Saved to cloud', error:'❌ Save failed — retrying'}[state] || '';
+  const color = state==='error' ? '#d6453d' : state==='saved' ? '#159a51' : 'var(--muted)';
+  const els = [...fbPatchStatusEls, 'thesisCloudStatus'];
+  els.forEach(id => { const el = document.getElementById(id); if (el) { el.textContent = msg; el.style.color = color; } });
+  if (state === 'saved') {
+    const toClear = [...els]; fbPatchStatusEls.clear();
+    setTimeout(() => toClear.forEach(id => { const el = document.getElementById(id); if (el && el.textContent.includes('Saved')) el.textContent = ''; }), 2500);
+  }
+}
+
+// Queue a merge-write of `fields` at FB path `path`. Debounced; "Saved" is shown
+// only after Firebase confirms the write.
+function queueThesisPatch(path, fields, statusElId) {
+  fbPatchQueue[path] = Object.assign(fbPatchQueue[path] || {}, fields);
+  if (statusElId) fbPatchStatusEls.add(statusElId);
+  mirrorThesisToLocal();
+  paintSaveStatus('pending');
+  clearTimeout(fbPatchTimer);
+  fbPatchTimer = setTimeout(flushThesisPatches, 600);
+}
+
+async function flushThesisPatches() {
+  if (fbPatchInFlight) { clearTimeout(fbPatchTimer); fbPatchTimer = setTimeout(flushThesisPatches, 700); return; }
+  const batch = fbPatchQueue; fbPatchQueue = {};
+  const paths = Object.keys(batch);
+  if (!paths.length) return;
+  fbPatchInFlight = true;
+  paintSaveStatus('saving');
+  let allOk = true;
+  for (const p of paths) {
+    let ok = false;
+    try {
+      const res = await fetch(FB_DB_URL + p + '.json', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batch[p])
+      });
+      ok = res.ok;
+      if (!ok) console.warn('Thesis save failed:', p, res.status, await res.text());
+    } catch(e) { console.warn('Thesis save error:', p, e.message); }
+    // Re-queue failures; anything typed meanwhile (already in fbPatchQueue) wins
+    if (!ok) { fbPatchQueue[p] = Object.assign({}, batch[p], fbPatchQueue[p] || {}); allOk = false; }
+  }
+  fbPatchInFlight = false;
+  fbLastSaveOk = allOk;
+  if (allOk) {
+    fbPatchRetries = 0;
+    paintSaveStatus('saved');
+    if (Object.keys(fbPatchQueue).length) { clearTimeout(fbPatchTimer); fbPatchTimer = setTimeout(flushThesisPatches, 600); }
+  } else {
+    paintSaveStatus('error');
+    if (fbPatchRetries < 5) { fbPatchRetries++; clearTimeout(fbPatchTimer); fbPatchTimer = setTimeout(flushThesisPatches, 3000 * fbPatchRetries); }
+  }
+}
+
+// ── THESIS RECORD NORMALIZATION ───────────────────────────────────────────────
+// Reads BOTH formats safely: legacy flat records ({thesis, catalysts, risks,
+// floor, base, high, tag}) and expanded records with new fields + a funds
+// subtree. Legacy shared fields keep living flat at the same Firebase paths —
+// no migration is required and old records load unchanged.
+// NOTE: catalysts/risks are plain strings in the production data — kept that way.
+function normalizeThesisRecord(savedData = {}) {
+  const shared = savedData.shared || savedData;
+  const fund = f => {
+    const nested = (savedData.funds || {})[f] || {};
+    return {
+      recommendation: nested.recommendation || savedData[f + 'Recommendation'] || '',
+      conviction:     nested.conviction     ?? savedData[f + 'Conviction']     ?? null,
+      analyst:        nested.analyst        || savedData[f + 'Analyst']        || '',
+      portfolioRole:  nested.portfolioRole  || '',
+      positionNote:   nested.positionNote   || '',
+      lastReviewed:   nested.lastReviewed   || '',
+      nextReview:     nested.nextReview     || ''
+    };
+  };
+  return {
+    shared: {
+      thesis:           shared.thesis || '',
+      catalysts:        shared.catalysts || '',
+      risks:            shared.risks || '',
+      tag:              shared.tag || '',
+      floor:            shared.floor ?? null,
+      base:             shared.base ?? null,
+      high:             shared.high ?? null,
+      invalidation:     shared.invalidation || '',
+      valuationMethod:  shared.valuationMethod || '',
+      targetHorizon:    shared.targetHorizon || '',
+      technicalStatus:  shared.technicalStatus || '',
+      status:           shared.status || 'Active',
+      thesisDate:       shared.thesisDate || '',
+      targetReviewDate: shared.targetReviewDate || '',
+      kpis: Array.isArray(shared.kpis) ? shared.kpis
+          : (typeof shared.kpis === 'string' && shared.kpis ? shared.kpis.split('\n') : [])
+    },
+    funds: { endowment: fund('endowment'), cee: fund('cee') }
+  };
+}
+function getThesisRecord(ticker) { return normalizeThesisRecord(thesisData[ticker] || {}); }
+
+const thesisPathFor = ticker => FB_NODE + '/thesis/' + fbSafeKey(ticker);
+
+// Shared (company-level) fields live flat on the record — the same place the
+// legacy fields already are.
+function saveSharedThesisFields(ticker, fields, statusElId) {
+  if (!ticker) return;
+  if (!thesisData[ticker]) thesisData[ticker] = {};
+  Object.assign(thesisData[ticker], fields);
+  queueThesisPatch(thesisPathFor(ticker), fields, statusElId || 'equityThesisSaved');
+}
+
+// Fund-specific fields live under funds/{endowment|cee} so the two funds can
+// never overwrite each other's decisions.
+function saveFundThesisFields(ticker, fundKey, fields, statusElId) {
+  if (!ticker) return;
+  const td = thesisData[ticker] = thesisData[ticker] || {};
+  td.funds = td.funds || {};
+  td.funds[fundKey] = Object.assign(td.funds[fundKey] || {}, fields);
+  queueThesisPatch(thesisPathFor(ticker) + '/funds/' + fundKey, fields, statusElId || 'equityThesisSaved');
+  mirrorThesisToLocal();
+}
 // ── INIT THESIS TAB ───────────────────────────────────────────────────────────
 async function initThesisTab() {
-  await loadThesisFromStorage();
+  // Skip the cloud re-fetch while a save is pending/in flight so it can't
+  // clobber edits that haven't reached Firebase yet
+  if (!Object.keys(fbPatchQueue).length && !fbPatchInFlight) await loadThesisFromStorage();
   renderThesisSectorCards();
   renderThesisMasterTable('all');
   fetchMcapsForThesis();
@@ -1747,14 +1840,15 @@ function openSectorThesis(sectorName) {
 
 let sectorThesisSaveTimer = null;
 function autoSaveSectorThesis() {
+  // Sector AND text captured at edit time so a sector switch can't misfile the text
+  const sec = currentThesisSector;
+  const text = document.getElementById('sectorThesisText').value;
   clearTimeout(sectorThesisSaveTimer);
-  sectorThesisSaveTimer = setTimeout(async () => {
-    if (!currentThesisSector) return;
-    sectorThesis[currentThesisSector] = document.getElementById('sectorThesisText').value;
-    await saveSectorThesisToStorage();
-    const el = document.getElementById('sectorThesisSaved');
-    el.textContent = '✅ Saved';
-    setTimeout(() => el.textContent = '', 2000);
+  sectorThesisSaveTimer = setTimeout(() => {
+    if (!sec) return;
+    sectorThesis[sec] = text;
+    // Sector theses keep their existing path and exact sector-name keys
+    queueThesisPatch(FB_NODE + '/sectorThesis', { [sec]: text }, 'sectorThesisSaved');
     renderThesisSectorCards();
   }, 800);
 }
@@ -1773,11 +1867,42 @@ async function fetchPEViaYahoo(ticker){
     } else if(currentThesisTicker===ticker){const el=document.getElementById('detailPE');if(el)el.textContent='—';}
   }catch(e){ if(currentThesisTicker===ticker){const el=document.getElementById('detailPE');if(el)el.textContent='—';} }
 }
+// ── FUND DECISION CARDS ───────────────────────────────────────────────────────
+function fundPositionStats(fundKey, ticker) {
+  const fd = fundKey === 'endowment' ? RAW.endowment : RAW.ceeFund;
+  const all = [...fd.equities, ...fd.etfs];
+  const h = all.find(x => x.ticker === ticker);
+  if (!h) return null;
+  const total = all.reduce((s,x) => s + (x.marketValue||0), 0) + (fd.cash||0) + (fundKey==='endowment' ? (fd.bond?.marketValue||0) : 0);
+  return { shares: h.shares||0, costBasis: h.costBasis||0, marketValue: h.marketValue||0, weight: total ? (h.marketValue||0)/total*100 : 0 };
+}
+function populateFundCard(fundKey, ticker, f) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+  set('rec_'+fundKey, f.recommendation);
+  set('conv_'+fundKey, f.conviction != null ? String(f.conviction) : '');
+  set('analyst_'+fundKey, f.analyst);
+  set('role_'+fundKey, f.portfolioRole);
+  set('lastRev_'+fundKey, f.lastReviewed);
+  set('nextRev_'+fundKey, f.nextReview);
+  set('note_'+fundKey, f.positionNote);
+  const stats = fundPositionStats(fundKey, ticker);
+  const posEl = document.getElementById('fundPos_'+fundKey);
+  if (posEl) posEl.textContent = stats
+    ? `${(stats.shares||0).toFixed(2)} sh · $${fmt(stats.marketValue)} · ${stats.weight.toFixed(2)}% of fund`
+    : 'Not currently held';
+  const card = document.getElementById('fundCard_'+fundKey);
+  if (card) card.classList.toggle('activefund', activeFund === fundKey);
+}
+
 function openThesisDetail(ticker) {
-  currentThesisTicker = ticker;
+  commitPendingThesisEdits(); // flush any unsaved edit for the previous ticker FIRST
   const allH = ALL_HOLDINGS();
-  const h = allH.find(x => x.ticker === ticker);
-  if (!h) return;
+  let h = allH.find(x => x.ticker === ticker);
+  const isHeld = !!h;
+  // Research outlives positions: records for sold/watchlist tickers still open,
+  // with position stats simply shown as not held. Never delete the cloud record.
+  if (!h) h = { ticker, company: COMPANY_NAMES[ticker] || ticker, type: 'equity', price: 0, beta: null };
+  currentThesisTicker = ticker;
 
   document.getElementById('thesisDetailPanel').style.display = 'block';
   document.getElementById('thesisSectorPanel').style.display = 'none';
@@ -1793,7 +1918,7 @@ function openThesisDetail(ticker) {
   document.getElementById('detailCost').textContent = h.avgCost ? '$'+h.avgCost.toFixed(2) : '—';
   document.getElementById('detailReturn').innerHTML = h.glPct ?
     `<span class="${h.glPct>=0?'pos':'neg'}">${h.glPct>=0?'+':''}${(h.glPct*100).toFixed(1)}%</span>` : '—';
-  document.getElementById('detailWeight').textContent = ((h.marketValue||0)/S.total*100).toFixed(2)+'% of '+S.fundName;
+  document.getElementById('detailWeight').textContent = isHeld ? ((h.marketValue||0)/S.total*100).toFixed(2)+'% of '+S.fundName : 'Not held';
 
   // P/E — read from cache immediately; fetch via Yahoo proxy if missing (no Finnhub 429)
   const peEl = document.getElementById('detailPE');
@@ -1830,7 +1955,9 @@ function openThesisDetail(ticker) {
   } else {
     document.getElementById('detailEtfView').style.display = 'none';
     document.getElementById('detailEquityView').style.display = 'block';
-    const td = thesisData[ticker] || {};
+    // Normalized view: legacy flat records and expanded records both load safely
+    const rec = getThesisRecord(ticker);
+    const td = rec.shared;
 
     // Price targets
     document.getElementById('ptFloor').value = td.floor || '';
@@ -1860,6 +1987,22 @@ function openThesisDetail(ticker) {
     document.getElementById('thesisText').value = td.thesis || '';
     document.getElementById('catalystsText').value = td.catalysts || '';
     document.getElementById('risksText').value = td.risks || '';
+
+    // Research framework (new shared fields — safe defaults for legacy records)
+    const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+    setV('thesisStatus', td.status);
+    setV('valuationMethod', td.valuationMethod);
+    setV('targetHorizon', td.targetHorizon);
+    setV('technicalStatus', td.technicalStatus);
+    setV('thesisDate', td.thesisDate);
+    setV('targetReviewDate', td.targetReviewDate);
+    setV('invalidationText', td.invalidation);
+    setV('kpisText', (td.kpis || []).join('\n'));
+
+    // Fund decision cards — Endowment and CEE Fund are populated independently
+    populateFundCard('endowment', ticker, rec.funds.endowment);
+    populateFundCard('cee', ticker, rec.funds.cee);
+
     document.getElementById('equityThesisSaved').textContent = '';
   }
 
@@ -1870,6 +2013,7 @@ function openThesisDetail(ticker) {
 }
 
 function closeThesisDetail() {
+  commitPendingThesisEdits(); // don't lose an in-flight edit when the panel closes
   document.getElementById('thesisDetailPanel').style.display = 'none';
   if (currentThesisSector) {
     document.getElementById('thesisSectorPanel').style.display = 'block';
@@ -1915,9 +2059,7 @@ function updatePriceBar() {
 
 // ── TAG ───────────────────────────────────────────────────────────────────────
 function selectTag(tag, btn) {
-  if (!thesisData[currentThesisTicker]) thesisData[currentThesisTicker] = {};
-  thesisData[currentThesisTicker].tag = tag;
-  scheduleSave(); // save tag immediately
+  saveSharedThesisFields(currentThesisTicker, { tag }, 'equityThesisSaved');
   document.querySelectorAll('.tag-btn').forEach(b => {
     const isActive = b.dataset.tag === tag;
     b.style.background = isActive ? TAG_BG[b.dataset.tag] : 'white';
@@ -1929,40 +2071,74 @@ function selectTag(tag, btn) {
   tagEl.textContent = tag;
   tagEl.style.background = TAG_BG[tag];
   tagEl.style.color = TAG_COLORS[tag];
-  autoSaveEquityThesis();
+  renderThesisMasterTable(thesisFilter);
 }
 
-// ── AUTO SAVE ─────────────────────────────────────────────────────────────────
+// ── AUTO SAVE (shared company fields) ─────────────────────────────────────────
+// pendingEditTicker records which ticker the un-flushed DOM edits belong to, so
+// switching tickers or funds mid-debounce commits to the RIGHT record first.
+let pendingEditTicker = null;
 function autoSaveEquityThesis() {
+  pendingEditTicker = currentThesisTicker;
   clearTimeout(thesisAutoSaveTimer);
   thesisAutoSaveTimer = setTimeout(saveThesisNow, 800);
 }
 
-async function saveThesisNow() {
-  if (!currentThesisTicker) return;
-  if (!thesisData[currentThesisTicker]) thesisData[currentThesisTicker] = {};
-  const td = thesisData[currentThesisTicker];
-  td.floor = parseFloat(document.getElementById('ptFloor').value) || null;
-  td.base = parseFloat(document.getElementById('ptBase').value) || null;
-  td.high = parseFloat(document.getElementById('ptHigh').value) || null;
-  td.thesis = document.getElementById('thesisText').value;
-  td.catalysts = document.getElementById('catalystsText').value;
-  td.risks = document.getElementById('risksText').value;
-  await saveThesisToStorage();
-  const el = document.getElementById('equityThesisSaved');
-  if (el) { el.textContent = '✅ Saved for everyone'; setTimeout(() => el.textContent = '', 2000); }
+// Commit any pending debounced edit immediately (called before the detail panel
+// switches ticker, closes, or the fund toggles — while the DOM still shows the
+// edited ticker's values).
+function commitPendingThesisEdits() {
+  if (thesisAutoSaveTimer) { clearTimeout(thesisAutoSaveTimer); thesisAutoSaveTimer = null; }
+  if (pendingEditTicker) saveThesisNowFor(pendingEditTicker);
+}
+
+function saveThesisNow() { saveThesisNowFor(currentThesisTicker); }
+function saveThesisNowFor(ticker) {
+  if (!ticker) return;
+  pendingEditTicker = null;
+  const val = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const num = id => { const v = parseFloat(val(id)); return isNaN(v) || v <= 0 ? null : v; };
+  const fields = {
+    floor: num('ptFloor'), base: num('ptBase'), high: num('ptHigh'),
+    thesis: val('thesisText'), catalysts: val('catalystsText'), risks: val('risksText'),
+    invalidation: val('invalidationText'),
+    valuationMethod: val('valuationMethod'),
+    targetHorizon: val('targetHorizon'),
+    technicalStatus: val('technicalStatus'),
+    status: val('thesisStatus') || 'Active',
+    thesisDate: val('thesisDate'),
+    targetReviewDate: val('targetReviewDate'),
+    kpis: val('kpisText').split('\n').map(s => s.trim()).filter(Boolean)
+  };
+  saveSharedThesisFields(ticker, fields, 'equityThesisSaved');
   renderThesisMasterTable(thesisFilter);
+}
+
+// ── FUND-SPECIFIC FIELDS ──────────────────────────────────────────────────────
+function saveFundField(fundKey, field, value) {
+  const v = field === 'conviction' ? (parseInt(value) || null) : value;
+  saveFundThesisFields(currentThesisTicker, fundKey, { [field]: v }, 'equityThesisSaved');
+}
+let fundNoteTimers = {};
+function autoSaveFundNote(fundKey, el) {
+  const tk = currentThesisTicker; // captured now: a later ticker switch can't misfile this note
+  clearTimeout(fundNoteTimers[fundKey]);
+  fundNoteTimers[fundKey] = setTimeout(() => {
+    saveFundThesisFields(tk, fundKey, { positionNote: el.value }, 'equityThesisSaved');
+  }, 700);
 }
 
 let etfAutoSaveTimer = null;
 function autoSaveEtfNote() {
+  // Ticker AND text are captured at edit time, so switching tickers during the
+  // debounce window can never save one ETF's note under another's key.
+  const tk = currentThesisTicker;
+  const text = document.getElementById('etfNoteText').value;
   clearTimeout(etfAutoSaveTimer);
-  etfAutoSaveTimer = setTimeout(async () => {
-    if (!currentThesisTicker) return;
-    etfNotes[currentThesisTicker] = document.getElementById('etfNoteText').value;
-    await saveEtfNotesToStorage();
-    const el = document.getElementById('etfNoteSaved');
-    if (el) { el.textContent = '✅ Saved'; setTimeout(() => el.textContent = '', 2000); }
+  etfAutoSaveTimer = setTimeout(() => {
+    if (!tk) return;
+    etfNotes[tk] = text;
+    queueThesisPatch(FB_NODE + '/etfNotes', { [fbSafeKey(tk)]: text }, 'etfNoteSaved');
   }, 800);
 }
 
@@ -2034,6 +2210,7 @@ function renderThesisMasterTable(filter, sort) {
   document.getElementById('thesisMasterTable').innerHTML = `
     <tr>
   <th>Ticker</th><th>Company</th><th>Sector</th><th>Market Cap</th><th>Tag</th>
+  <th title="This fund's committee recommendation (set in the Fund Decisions card)">Rec</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('beta')">Beta ↕</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('pe')">P/E ↕</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('ytd')">YTD ↕</th>
@@ -2048,17 +2225,21 @@ function renderThesisMasterTable(filter, sort) {
       const tierColor = {'Mega Cap':'#7c3aed','Large Cap':'#1e40af','Mid Cap':'#047857','Small Cap':'#b45309'}[tier]||'var(--gray)';
       const upside = td.base && h.price ? (td.base - h.price)/h.price*100 : null;
       const hasThesis = td.thesis || td.catalysts || td.risks;
+      const _rec = ((td.funds||{})[activeFund]||{}).recommendation || '';
+      const _recCol = {'Add':'#159a51','Hold':'#2057c9','Watch':'#f59e0b','Trim':'#f97316','Exit':'#d6453d'}[_rec] || 'var(--muted)';
+      const _status = td.status || 'Active';
       const _ytdV = ytdCache[h.ticker];
       const _ytdCls = _ytdV != null ? (_ytdV >= 0 ? 'pos' : 'neg') : '';
       const _ytdTxt = _ytdV != null ? (_ytdV >= 0 ? '+' : '') + _ytdV.toFixed(1) + '%' : '—';
       const _ym = (window.ytdMeta||{})[h.ticker];
       const _ytdTip = _ym ? 'YTD math: $'+_ym.base+' (close '+_ym.baseDt+') → $'+_ym.last+' = '+_ym.pct+'%. Prices are split-adjusted.' : 'YTD vs prior-year close';
       return `<tr onclick="openThesisDetail('${h.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-        <td class="ticker-cell" style="white-space:nowrap">${logoImg(h.ticker)}${h.ticker}</td>
+        <td class="ticker-cell" style="white-space:nowrap">${logoImg(h.ticker)}${h.ticker}${_status!=='Active'?' <span title="Record status" style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;background:#f1f5f9;color:var(--muted)">'+_status+'</span>':''}</td>
         <td>${h.company}</td>
         <td style="font-size:11px">${h.sector||'—'}</td>
         <td><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${tierColor}22;color:${tierColor}">${tier}</span></td>
         <td>${td.tag?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:'+TAG_BG[td.tag]+';color:'+TAG_COLORS[td.tag]+'">'+td.tag+'</span>':'—'}</td>
+        <td>${_rec?'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:'+_recCol+'22;color:'+_recCol+'">'+_rec+'</span>':'—'}</td>
         <td style="font-weight:600;color:${(h.beta||1)>1.2?'#d6453d':(h.beta||1)<0.8?'#159a51':'var(--navy)'}">${h.beta?h.beta.toFixed(2):'—'}</td>
         <td style="font-size:12px">${peCache[h.ticker]?peCache[h.ticker]+'x':'—'}</td>
         <td class="${_ytdCls}" title="${_ytdTip}" style="cursor:help">${_ytdTxt}</td>
@@ -2071,6 +2252,22 @@ function renderThesisMasterTable(filter, sort) {
         <td style="font-size:11px;color:${hasThesis?'#159a51':'var(--muted)'}">${hasThesis?'✅ Written':'✏️ Empty'}</td>
       </tr>`;
     }).join('')}`;
+
+  // Research records for tickers no longer held (sold, watchlist, archived) are
+  // preserved in the cloud and stay reachable here — never deleted.
+  const strip = document.getElementById('thesisArchiveStrip');
+  if (strip) {
+    const heldSet = new Set(ALL_HOLDINGS().map(x => x.ticker));
+    const offBook = Object.keys(thesisData)
+      .filter(tk => !heldSet.has(tk) && thesisData[tk] && typeof thesisData[tk] === 'object')
+      .sort();
+    strip.innerHTML = offBook.length ? `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">🗂 <strong>${offBook.length}</strong> research record${offBook.length>1?'s':''} preserved for tickers not currently held:</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${offBook.map(tk => {
+        const st = (thesisData[tk].status || 'Archived');
+        return `<button class="filter-btn" style="font-size:10px" onclick="openThesisDetail('${tk}')" title="Open preserved research (${st})">${tk} · ${st}</button>`;
+      }).join('')}</div>` : '';
+  }
 }
 
 

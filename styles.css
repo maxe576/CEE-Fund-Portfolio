@@ -139,3 +139,9 @@ table tr:hover td{background:rgba(12,42,94,.03)}
 .pos{color:var(--green)} .neg{color:var(--red)}
 ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#cbd3dd;border-radius:8px}
 button{font-family:inherit}
+
+/* ── INVESTMENT THESIS PANEL ──────────────────────────────────────────────── */
+.thesis-subtitle{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:10px;letter-spacing:.05em}
+.fund-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:#fbfcfe}
+.fund-card.activefund{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+@media(max-width:900px){.fund-cards-grid{grid-template-columns:1fr !important}}
