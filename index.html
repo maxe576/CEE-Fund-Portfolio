@@ -326,7 +326,6 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <div style="display:flex;gap:8px;align-items:center">
         <span id="ltStatus" style="font-size:10px;font-weight:400;color:var(--muted)"></span>
         <button class="filter-btn" onclick="reloadEtfLookThrough()" title="Clear cached ETF holdings and refetch">↻ Reload</button>
-        <button class="filter-btn" id="fmpKeyBtn" onclick="setFmpKey()" title="Add a free FinancialModelingPrep API key to unlock FULL ETF holdings (not just the top 25)">🔑 FMP Key</button>
       </div>
     </div>
     <div id="ltAgg" style="margin-bottom:14px"><div style="color:var(--muted);font-size:12px">Loading ETF holdings…</div></div>
@@ -335,7 +334,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <select id="ltEtfSel" onchange="renderLtEtfDetail(this.value)" style="background:var(--card-bg-alt);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px"></select>
     </div>
     <div class="tbl-wrap"><table id="ltEtfTable"></table></div>
-    <div class="snapshot-note" style="margin-top:10px">Default source (StockAnalysis) covers each ETF's <strong>25 largest holdings</strong>. Click <strong>🔑 FMP Key</strong> and paste a free FinancialModelingPrep API key to switch to <strong>full constituent lists</strong>. Bond ETFs report no equity constituents. Screening data — verify against fund provider disclosures.</div>
+    <div class="snapshot-note" style="margin-top:10px"><strong>Full constituent lists</strong> load directly from Vanguard for its ETFs — no key needed. All other issuers (SPDR, Invesco, VanEck, Fidelity, iShares) show their <strong>25 largest holdings</strong>, which covers most of each fund's weight in these top-heavy ETFs. Bond ETFs have no equity constituents. Screening data — verify against fund provider disclosures.</div>
   </div>
 </div>
 <div id="tab-sectorcompare" class="tab-panel">
@@ -490,9 +489,12 @@ tr:hover td{background:rgba(212,167,44,.06)}
 
       <!-- Quick stats row -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px;padding:12px;background:#0d223b;border-radius:8px">
+        <div><div style="font-size:10px;color:var(--gold-light);font-weight:700;text-transform:uppercase">Shares Held</div><div style="font-size:16px;font-weight:700" id="detailShares">—</div></div>
+        <div><div style="font-size:10px;color:var(--gold-light);font-weight:700;text-transform:uppercase">Market Value</div><div style="font-size:16px;font-weight:700" id="detailMV">—</div></div>
+        <div><div style="font-size:10px;color:var(--gold-light);font-weight:700;text-transform:uppercase">Total Cost</div><div style="font-size:16px;font-weight:700" id="detailTotCost">—</div></div>
+        <div><div style="font-size:10px;color:var(--gold-light);font-weight:700;text-transform:uppercase">Unrealized G/L</div><div style="font-size:16px;font-weight:700" id="detailGL">—</div></div>
         <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Current Price</div><div style="font-size:16px;font-weight:700" id="detailPrice"></div></div>
-        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Cost Basis</div><div style="font-size:16px;font-weight:700" id="detailCost"></div></div>
-        
+        <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Avg Cost / Share</div><div style="font-size:16px;font-weight:700" id="detailCost"></div></div>
         <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Current Return</div><div style="font-size:16px;font-weight:700" id="detailReturn"></div></div>
         <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Market Cap</div><div style="font-size:16px;font-weight:700" id="detailMcap"></div></div>
         <div><div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">P/E Ratio</div><div style="font-size:16px;font-weight:700" id="detailPE">—</div></div>
@@ -701,11 +703,9 @@ const SP500_SECTORS = {"Information Technology": 32.08, "Financials": 13.02, "He
 const SECTOR_BENCHMARKS = {"Information Technology": "XLK", "Financials": "XLF", "Health Care": "XLV", "Consumer Discretionary": "XLY", "Communication Services": "XLC", "Industrials": "XLI", "Consumer Staples": "XLP", "Energy": "XLE", "Real Estate": "XLRE", "Materials": "XLB", "Utilities": "XLU", "Broad Market": "SPY", "Fixed Income": "AGG"};
 const WS_TARGETS_DEFAULT = {"GOOG": 210, "META": 730, "NFLX": 1200, "TKO": 220, "AMZN": 280, "HD": 390, "COST": 1050, "KO": 78, "WMT": 115, "XOM": 135, "BRK.B": 530, "BX": 160, "MA": 600, "SPGI": 510, "V": 380, "TMUS": 240, "HCA": 420, "LLY": 1050, "PFE": 30, "SYK": 390, "CAT": 430, "HWM": 290, "SBGSF": 370, "WM": 245, "AAPL": 240, "CRWD": 480, "MSFT": 500, "NVDA": 175, "ORCL": 210, "TSM": 240, "NUE": 145, "DLR": 180, "CEG": 340, "ABBV": 235, "ADI": 280, "COF": 230, "DAR": 75, "DIS": 120, "ET": 22, "FSLR": 220, "GD": 380, "GOOGL": 210, "GRMN": 290, "HOOD": 65, "IREN": 18, "ISRG": 620, "PANW": 210, "PLTR": 120, "SOFI": 18, "SOUN": 12, "TTWO": 230, "VMC": 310};
 const FINNHUB = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
-// ↓↓↓ PASTE THE CLUB'S FinancialModelingPrep API KEY BETWEEN THE QUOTES ↓↓↓
-// (free key: financialmodelingprep.com → Sign Up → Dashboard → API Key)
-// With a key here, FULL ETF holdings load automatically for every visitor —
-// no one has to enter anything. Leave '' to fall back to top-25 via StockAnalysis.
-const FMP_KEY = '';
+// ETF look-through data comes straight from the fund issuers (Vanguard JSON + SPDR xlsx —
+// full constituent lists, free, no key) with StockAnalysis top-25 as the fallback for
+// other issuers. FMP was dropped: they moved ETF holdings behind a paid plan (402).
 const SPY_JAN1 = 589.36;
 const MASTER_CODE = 'CEEFUND2026';
 
@@ -744,8 +744,6 @@ async function init() {
   setTimeout(fetchSPX, 2000);
   setTimeout(load3YStatsAll, 4000);     // 3Y regression beta/alpha (cached 7 days)
   setTimeout(loadEtfLookThrough, 6000); // ETF look-through auto-loads on every open (cached 30 days)
-  // With a club key embedded in FMP_KEY, the 🔑 button is redundant — hide it for a cleaner UI.
-  if (typeof FMP_KEY !== 'undefined' && FMP_KEY) { const kb = document.getElementById('fmpKeyBtn'); if (kb) kb.style.display = 'none'; }
 }
 
 // ── ACTIVE-FUND HELPERS ─────────────────────────────────────────────────────────
@@ -944,10 +942,11 @@ function renderRiskExposure() {
     const maxW=top.length?(top[0].marketValue||0)/(S.total||1):0;
     cEl.innerHTML=top.map(h=>{
       const w=(h.marketValue||0)/(S.total||1);
-      return `<div class="sbr"><div class="sl">${h.ticker}</div>
+      const clickable=h.type!=='bond';
+      return `<div class="sbr" ${clickable?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}><div class="sl">${h.ticker}${clickable?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</div>
         <div class="st"><div class="sf" style="width:${maxW>0?(w/maxW*100).toFixed(1):0}%;background:${w>0.08?'var(--warning)':'#3b62c9'}"></div></div>
         <div class="sp_">${(w*100).toFixed(1)}%</div><div class="sv">${fmtK(h.marketValue||0)}</div></div>`;
-    }).join('')+`<div style="font-size:10px;color:var(--muted);margin-top:6px">Gold bars exceed an 8% single-position weight.</div>`;
+    }).join('')+`<div style="font-size:10px;color:var(--muted);margin-top:6px">Gold bars exceed an 8% single-position weight. Click a position to open its thesis.</div>`;
   }
   const fEl=document.getElementById('fiTable');
   if(fEl){
@@ -965,25 +964,12 @@ function renderRiskExposure() {
 // ── ETF LOOK-THROUGH (Yahoo topHoldings: each ETF's top-10 constituents + weights) ──────
 let etfHoldings = {};        // etfTicker -> {holdings:[{symbol,name,pct}], src:'fmp'|'sa'} | null | undefined
 let _ltLoading = false;
-(function(){ try{ const c=JSON.parse(localStorage.getItem('cee_etf_hold_v3')||'null');
+(function(){ try{ const c=JSON.parse(localStorage.getItem('cee_etf_hold_v4')||'null');
   if(c && Date.now()-c.ts < 30*86400e3) etfHoldings=c.data||{}; }catch(e){} })();
 
-function getFmpKey(){
-  // Embedded club key first (works for every visitor, zero setup); a locally-saved
-  // key (🔑 button) overrides it — handy for testing a different key.
-  try{ return localStorage.getItem('cee_fmp_key') || (typeof FMP_KEY!=='undefined'?FMP_KEY:'') || ''; }
-  catch(e){ return (typeof FMP_KEY!=='undefined'?FMP_KEY:'') || ''; }
-}
-function setFmpKey(){
-  const cur=getFmpKey();
-  const k=prompt('Paste your FinancialModelingPrep API key for FULL ETF holdings.\n\nFree key: financialmodelingprep.com → Sign Up → Dashboard → API Key (250 requests/day).\n\nLeave empty and press OK to remove the saved key.', cur);
-  if(k===null) return;                       // cancelled
-  try{ if(k.trim()) localStorage.setItem('cee_fmp_key',k.trim()); else localStorage.removeItem('cee_fmp_key'); }catch(e){}
-  reloadEtfLookThrough();
-}
 function reloadEtfLookThrough(){
   etfHoldings={};
-  try{ localStorage.removeItem('cee_etf_hold_v3'); }catch(e){}
+  try{ localStorage.removeItem('cee_etf_hold_v4'); }catch(e){}
   loadEtfLookThrough();
 }
 
@@ -993,27 +979,31 @@ async function _fetchJsonWithProxyFallback(url){
   try{ const r2=await fetch(CF_PROXY+'?url='+encodeURIComponent(url)); if(r2.ok) return await r2.json(); }catch(e){}
   return null;
 }
+// Issuer-direct FULL holdings (free, no key). Vanguard publishes JSON, which survives the
+// CF proxy. (SPDR's daily .xlsx was tried and dropped: the proxy text-decodes bodies, which
+// corrupts binary zip files — verified via replacement-character analysis. If the worker is
+// ever updated to stream bytes, an xlsx parser can be reinstated for full SPDR lists.)
+async function _vanguardHoldings(tk){
+  const d=await _fetchJsonWithProxyFallback('https://investor.vanguard.com/investment-products/etfs/profile/api/'+encodeURIComponent(tk)+'/portfolio-holding/stock');
+  const ent=d?.fund?.entity||[];
+  const rows=ent.map(e=>({
+    symbol:String(e.ticker||'').toUpperCase(),
+    name:e.longName||e.shortName||'',
+    pct:(parseFloat(e.percentWeight)||0)/100
+  })).filter(h=>h.symbol&&h.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,150);
+  return rows.length?{holdings:rows,src:'vanguard'}:null;
+}
+const _VANGUARD_RX=/^V[A-Z]{1,4}$/;                       // VOO, VTI, VGT, VUG, VHT, VFH, …
 
 async function fetchEtfHoldings(ticker){
   if(etfHoldings[ticker]!==undefined) return etfHoldings[ticker];
   const tk=String(ticker).toUpperCase();
-  // Don't spend FMP quota on bond ETFs — they have no equity constituents to look through.
+  // Bond ETFs have no equity constituents to look through — go straight to the FI panel.
   const etfObj=[...RAW.endowment.etfs,...RAW.ceeFund.etfs].find(e=>e.ticker===tk);
-  const isFixedIncome=etfObj&&etfObj.sector==='Fixed Income';
-  // 1) FMP full holdings — every constituent in ONE request per ETF — when a key is saved.
-  const key=getFmpKey();
-  if(key&&!isFixedIncome){
-    const d=await _fetchJsonWithProxyFallback('https://financialmodelingprep.com/api/v3/etf-holder/'+encodeURIComponent(tk)+'?apikey='+encodeURIComponent(key));
-    if(Array.isArray(d)&&d.length){
-      const rows=d.map(h=>({
-        symbol:String(h.asset||'').toUpperCase(),
-        name:h.name||'',
-        pct:(Number(h.weightPercentage)||0)/100
-      })).filter(h=>h.symbol&&h.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,150);
-      if(rows.length) return (etfHoldings[tk]={holdings:rows,src:'fmp'});
-    }
-  }
-  // 2) StockAnalysis — open endpoint, largest 25 constituents per ETF.
+  if(etfObj&&etfObj.sector==='Fixed Income') return (etfHoldings[tk]=null);
+  // 1) Issuer-direct FULL lists (free): Vanguard JSON.
+  if(_VANGUARD_RX.test(tk)){ const v=await _vanguardHoldings(tk); if(v) return (etfHoldings[tk]=v); }
+  // 2) StockAnalysis — open endpoint, largest 25 constituents (Invesco/VanEck/Fidelity/iShares…).
   const d2=await _fetchJsonWithProxyFallback('https://stockanalysis.com/api/symbol/e/'+encodeURIComponent(tk)+'/holdings');
   const rows2=(d2?.data?.holdings||[]).map(h=>({
     symbol:String(h.s||'').replace(/^\$/,'').toUpperCase(),
@@ -1034,7 +1024,7 @@ async function loadEtfLookThrough(){
       await Promise.all(todo.slice(i,i+4).map(t=>fetchEtfHoldings(t)));
       if(i+4<todo.length) await new Promise(r=>setTimeout(r,300));
     }
-    try{ localStorage.setItem('cee_etf_hold_v3',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
+    try{ localStorage.setItem('cee_etf_hold_v4',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
     renderLookThrough();
   } finally { _ltLoading=false; }
 }
@@ -1044,11 +1034,11 @@ function renderLookThrough(){
   const okEtfs=S.etfs.filter(e=>etfHoldings[e.ticker]&&etfHoldings[e.ticker].holdings&&etfHoldings[e.ticker].holdings.length);
   const st=document.getElementById('ltStatus');
   if(st){
-    const fmpN=okEtfs.filter(e=>etfHoldings[e.ticker].src==='fmp').length;
+    const fullN=okEtfs.filter(e=>etfHoldings[e.ticker].src==='vanguard').length;
     st.textContent = okEtfs.length+' of '+S.etfs.length+' ETFs decomposed · '
-      + (fmpN===okEtfs.length&&fmpN>0 ? 'FULL holdings via FMP'
-         : fmpN>0 ? fmpN+' full (FMP) + '+(okEtfs.length-fmpN)+' top-25 (StockAnalysis)'
-         : 'top-25 each — add a free FMP key (🔑) for full coverage');
+      + (fullN===okEtfs.length&&fullN>0 ? 'FULL constituent lists (issuer data)'
+         : fullN>0 ? fullN+' full (issuer data) + '+(okEtfs.length-fullN)+' top-25'
+         : 'top-25 each');
   }
   // Aggregate: combined exposure per stock = direct weight + Σ(ETF fund-weight × stock weight in ETF)
   const agg={};
@@ -1067,8 +1057,8 @@ function renderLookThrough(){
   aggEl.innerHTML =
     `<div style="display:grid;grid-template-columns:80px 1fr 80px 80px 90px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border)">
       <span>Stock</span><span>Held via</span><span style="text-align:right">Direct</span><span style="text-align:right">Via ETFs</span><span style="text-align:right">Combined</span></div>`+
-    rows.map(r=>`<div style="display:grid;grid-template-columns:80px 1fr 80px 80px 90px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
-      <span class="ticker-cell">${r.sym}</span>
+    rows.map(r=>`<div style="display:grid;grid-template-columns:80px 1fr 80px 80px 90px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px${r.direct>0?';cursor:pointer':''}" ${r.direct>0?`title="Open investment thesis for ${r.sym}" onclick="goToThesis('${r.sym}')"`:''}>
+      <span class="ticker-cell">${r.sym}${r.direct>0?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</span>
       <span style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.direct>0?'Direct':''}${r.direct>0&&r.parts.length?' + ':''}${[...new Set(r.parts)].join(', ')}</span>
       <span style="text-align:right">${r.direct>0?(r.direct*100).toFixed(2)+'%':'—'}</span>
       <span style="text-align:right">${r.via>0?(r.via*100).toFixed(2)+'%':'—'}</span>
@@ -1243,8 +1233,8 @@ function renderTop10() {
   const sorted=[...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,10);
   document.getElementById('top10Table').innerHTML=`
     <tr><th>#</th><th>Ticker</th><th>Company</th><th>Type</th><th>Sector</th><th>Price</th><th>Market Value</th><th>Weight</th><th>Return</th><th>Beta</th></tr>
-    ${sorted.map((h,i)=>`<tr><td style="color:var(--muted)">${i+1}</td>
-    <td class="ticker-cell" style="white-space:nowrap"><a href="${irLink(h.ticker,h.company)}" target="_blank" rel="noopener" title="Open Investor Relations" onclick="event.stopPropagation()">${logoImg(h.ticker)}</a>${h.ticker}</td><td style="cursor:pointer" title="Open investment thesis" onclick="goToThesis('${h.ticker}')">${h.company} <span style="font-size:10px;color:var(--gold)">📋</span></td>
+    ${sorted.map((h,i)=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}><td style="color:var(--muted)">${i+1}</td>
+    <td class="ticker-cell" style="white-space:nowrap"><a href="${irLink(h.ticker,h.company)}" target="_blank" rel="noopener" title="Open Investor Relations" onclick="event.stopPropagation()">${logoImg(h.ticker)}</a>${h.ticker}</td><td>${h.company} ${h.type!=='bond'?'<span style="font-size:10px;color:var(--gold)">📋</span>':''}</td>
     <td><span class="badge type-${h.type}">${h.type.toUpperCase()}</span></td>
     <td>${h.sector}</td><td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
     <td><strong>${fmt(h.marketValue||0)}</strong></td>
@@ -1296,8 +1286,8 @@ function renderHoldings(filter) {
     <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('dayPct')">Day % ↕</th>
     <th style="cursor:pointer;user-select:none" title="36-month regression beta vs SPY (monthly returns)" onclick="holdingsSortBy('beta')">3Y Beta ↕</th>
     </tr>
-    ${sorted.map(h=>`<tr>
-    <td class="ticker-cell">${h.ticker}</td><td>${h.company}</td>
+    ${sorted.map(h=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}>
+    <td class="ticker-cell">${h.ticker}${h.type!=='bond'?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</td><td>${h.company}</td>
     <td><span class="badge type-${h.type}">${h.type.toUpperCase()}</span></td>
     <td>${h.sector||'—'}</td><td>${h.shares?h.shares.toFixed(3):'—'}</td>
     <td>${h.avgCost?'$'+h.avgCost.toFixed(2):'—'}</td>
@@ -2371,11 +2361,13 @@ function handleExcelUpload(input){
       const data=new Uint8Array(e.target.result);const wb=XLSX.read(data,{type:'array',cellDates:true});
       const sheets=wb.SheetNames;
       const endSheet=wb.Sheets['Endowment'],ceeSheet=wb.Sheets['CEE Fund'];
+      // Transactions sheet is OPTIONAL — holdings-only uploads are fine. When a complete
+      // transaction history exists later, including the sheet will feed real performance charts.
       const txSheetName=sheets.find(s=>s.trim()==='Transactions'||s.trim()==='Transactions ');
-      if(!endSheet||!ceeSheet||!txSheetName){errEl.textContent='Missing required sheets.';errEl.style.display='block';return;}
+      if(!endSheet||!ceeSheet){errEl.textContent='Missing required sheets: the workbook needs "Endowment" and "CEE Fund" tabs (a "Transactions" tab is optional).';errEl.style.display='block';return;}
       const endR=parsePortfolioSheet(XLSX.utils.sheet_to_json(endSheet,{header:1,defval:null}),'Endowment');
       const ceeR=parsePortfolioSheet(XLSX.utils.sheet_to_json(ceeSheet,{header:1,defval:null}),'CEE Fund');
-      const txR=parseTransactionsXLS(XLSX.utils.sheet_to_json(wb.Sheets[txSheetName],{header:1,defval:null}));
+      const txR=txSheetName?parseTransactionsXLS(XLSX.utils.sheet_to_json(wb.Sheets[txSheetName],{header:1,defval:null})):null;
       // Validate before committing — a bad upload must not break the shared site.
       // Blocking errors abort; non-blocking warnings are reported but do not block (§20).
       const vEnd=validateParsedFund(endR,'Endowment'), vCee=validateParsedFund(ceeR,'CEE Fund');
@@ -2385,9 +2377,11 @@ function handleExcelUpload(input){
       if(blocking.length){errEl.innerHTML='Upload aborted — blocking errors:<br>• '+blocking.join('<br>• ');errEl.style.display='block';return;}
       RAW.endowment.equities=endR.equities;RAW.endowment.etfs=endR.etfs;RAW.endowment.cash=endR.cash;
       RAW.ceeFund.equities=ceeR.equities;RAW.ceeFund.etfs=ceeR.etfs;RAW.ceeFund.cash=ceeR.cash;
-      TRANSACTIONS.length=0;txR.forEach(t=>TRANSACTIONS.push(t));
+      // Only replace transaction history when the upload actually contains a Transactions sheet —
+      // a holdings-only upload must never wipe previously saved transactions.
+      if(txR!==null){ TRANSACTIONS.length=0; txR.forEach(t=>TRANSACTIONS.push(t)); }
       buildState();renderAll();
-      okEl.innerHTML=`✅ ${endR.equities.length} Endowment equities, ${endR.etfs.length} ETFs | ${ceeR.equities.length} CEE equities, ${ceeR.etfs.length} ETFs | ${txR.length} transactions`
+      okEl.innerHTML=`✅ ${endR.equities.length} Endowment equities, ${endR.etfs.length} ETFs | ${ceeR.equities.length} CEE equities, ${ceeR.etfs.length} ETFs | ${txR!==null?txR.length+' transactions':'no Transactions sheet (optional — existing history kept)'}`
         +`<div style="font-size:10px;margin-top:4px">Reconciliation: Endowment ${fmtK(endR.total)} · CEE ${fmtK(ceeR.total)}</div>`
         +(warnings.length?`<div style="font-size:10px;margin-top:4px;color:var(--warning)">⚠ ${warnings.length} warning${warnings.length>1?'s':''} (data NOT rewritten — fix in the source sheet):<br>• ${warnings.slice(0,8).join('<br>• ')}${warnings.length>8?'<br>…and '+(warnings.length-8)+' more (see console)':''}</div>`:'');
       if(warnings.length)console.warn('Upload validation warnings:',warnings);
@@ -3029,7 +3023,13 @@ function openThesisDetail(ticker) {
   const irUrl = h.type === 'etf' ? (ETF_IR_URLS[ticker] || '#') : (IR_URLS[ticker] || '#');
   document.getElementById('detailIR').href = irUrl;
 
-  // Stats
+  // Stats — ownership first (how much of this the ACTIVE fund owns), then per-share figures.
+  const _set=(id,val)=>{ const el=document.getElementById(id); if(el) el.innerHTML=val; };
+  _set('detailShares', h.shares ? h.shares.toLocaleString(undefined,{maximumFractionDigits:3}) : '—');
+  _set('detailMV', (h.marketValue||h.marketValue===0) ? '$'+fmt(h.marketValue||0) : '—');
+  _set('detailTotCost', h.costBasis ? '$'+fmt(h.costBasis) : '—');
+  _set('detailGL', (h.glDollar!=null&&h.costBasis) ?
+    `<span class="${h.glDollar>=0?'pos':'neg'}">${h.glDollar>=0?'+':'−'}$${fmt(Math.abs(h.glDollar))}</span>` : '—');
   document.getElementById('detailPrice').textContent = h.price ? '$'+h.price.toFixed(2) : '—';
   document.getElementById('detailCost').textContent = h.avgCost ? '$'+h.avgCost.toFixed(2) : '—';
   document.getElementById('detailReturn').innerHTML = h.glPct ?
