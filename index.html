@@ -659,7 +659,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <button class="filter-btn" onclick="setTrdFilter('Buy',this)">Buys</button>
       <button class="filter-btn" onclick="setTrdFilter('Sell',this)">Sells</button>
       <button class="filter-btn" onclick="setTrdFilter('corp',this)">Corporate Actions</button>
-      <select id="trdFund" onchange="renderTrades()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
+      <select id="trdFund" onchange="ledgerFundChanged('trdFund')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
         <option value="all">Both funds</option><option value="E">Endowment</option><option value="C">CEE Fund</option>
       </select>
       <select id="trdYear" onchange="renderTrades()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)"></select>
@@ -692,7 +692,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <button class="filter-btn" onclick="setDivFilter('reinvested',this)">Reinvested</button>
       <button class="filter-btn" onclick="setDivFilter('cash',this)">Paid in Cash</button>
       <button class="filter-btn" onclick="setDivFilter('interest',this)">Interest</button>
-      <select id="divFund" onchange="renderDividends()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
+      <select id="divFund" onchange="ledgerFundChanged('divFund')" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
         <option value="all">Both funds</option><option value="E">Endowment</option><option value="C">CEE Fund</option>
       </select>
       <select id="divYear" onchange="renderDividends()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)"></select>
@@ -1793,6 +1793,22 @@ async function loadLedger() {
   })();
   return ledgerLoading;
 }
+// The header toggle is how people move between the two funds everywhere else,
+// so the ledger follows it. "Both funds" stays available as a deliberate choice.
+const ledgerFundCode = () => (activeFund === 'endowment' ? 'E' : 'C');
+function syncLedgerFund(selId) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  // Leave an explicit "Both funds" selection alone; otherwise track the header.
+  if (sel.dataset.userSet === 'all') return;
+  sel.value = ledgerFundCode();
+}
+function ledgerFundChanged(selId) {
+  const sel = document.getElementById(selId);
+  if (sel) sel.dataset.userSet = sel.value === 'all' ? 'all' : '';
+  if (selId === 'trdFund') renderTrades(); else renderDividends();
+}
+
 function fillYears(selId, rows) {
   const sel = document.getElementById(selId);
   if (!sel || sel.dataset.filled) return;
@@ -1840,6 +1856,7 @@ async function initTrades() {
   try { await loadLedger(); }
   catch (e) { t.innerHTML = '<tr><td style="color:var(--red);padding:14px">Could not load transactions: ' + e.message + '</td></tr>'; return; }
   fillYears('trdYear', LEDGER.tx);
+  syncLedgerFund('trdFund');
   renderTrades();
 }
 function renderTrades() {
@@ -1934,6 +1951,7 @@ async function initDividends() {
   catch (e) { t.innerHTML = '<tr><td style="color:var(--red);padding:14px">Could not load transactions: ' + e.message + '</td></tr>'; return; }
   const inc = LEDGER.tx.filter(x => isIncome(x.a));
   fillYears('divYear', inc);
+  syncLedgerFund('divFund');
   renderDividends();
 }
 const isIncome = a => (LEDGER.dividendActions || []).includes(a) || INTEREST_ACTIONS.has(a);
@@ -2327,6 +2345,9 @@ function switchFund(fund, btn) {
   // performance views must redraw rather than keep showing the previous fund.
   else if (tab === 'track') renderTrack();
   else if (tab === 'sectorperf') renderSectorPerf();
+  // The ledger is fund-specific too, so it must follow the header toggle.
+  else if (tab === 'trades') { syncLedgerFund('trdFund'); renderTrades(); }
+  else if (tab === 'dividends') { syncLedgerFund('divFund'); renderDividends(); }
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
