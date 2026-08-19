@@ -1399,10 +1399,16 @@ function renderTrack() {
 
   const rs = riskStats(f, s, e);
   const pctAnn = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
+  // What the fund's dollars actually earned, and what the same wires would have
+  // earned in SPY over identical dates.
+  const own = mdWindow(f.nav, f.flows, s, e, 'SPY');
   document.getElementById('trkKpis').innerHTML =
-    kpiCard('Time-Weighted Return', pct(fundRet), 'comparable to SPY', cls(fundRet), true) +
+    kpiCard('Our Return', pct(own && own.ourRet), 'what our dollars earned, incl. timing', cls(own && own.ourRet), true) +
+    kpiCard('Same Money in SPY', pct(own && own.bmRet), 'identical cash, identical days', cls(own && own.bmRet), false) +
+    kpiCard('Alpha', pct(own && own.alpha), 'ours minus that counterfactual', cls(own && own.alpha), true) +
+    kpiCard('Time-Weighted Return', pct(fundRet), 'timing removed &middot; strict benchmark basis', cls(fundRet), false) +
     kpiCard('SPY Same Window', pct(spy), 'benchmark', cls(spy), false) +
-    kpiCard('Raw Gap vs SPY', pct(alpha), 'before adjusting for risk', cls(alpha), false) +
+    kpiCard('Raw Gap vs SPY', pct(alpha), 'time-weighted, before risk', cls(alpha), false) +
     (rs && rs.annualisable
       ? kpiCard('Risk-Adjusted Alpha', pctAnn(rs.jensen) + '/yr',
           'what stock picking added at beta ' + rs.beta.toFixed(2), cls(rs.jensen), true)
@@ -1470,18 +1476,31 @@ function renderTrack() {
     '<span class="legend-item"><span class="legend-dot" style="background:' + navyC + '"></span>' + f.name + '</span>' +
     active.map(b => '<span class="legend-item"><span class="legend-dot" style="background:' + b.color + '"></span>' + b.id + '</span>').join('');
 
-  // Equities vs ETFs — time-weighted per sleeve, so buying or trimming a sleeve
-  // does not masquerade as performance.
-  const eqR = idxRet(f.eqTwr, s, e), etR = idxRet(f.etfTwr, s, e);
+  // Equities vs ETFs, measured the same way as everything else: what each
+  // sleeve's dollars earned, against the same cash put into SPY on the same days.
+  const eqW  = mdWindow(f.eqNav,  f.eqFlow,  s, e, 'SPY');
+  const etfW = mdWindow(f.etfNav, f.etfFlow, s, e, 'SPY');
+  const sleeveRow = (label, arr, w, twr) =>
+    '<tr><td style="font-weight:700">' + label + '</td><td>$' + fmt(arr[e]) + '</td><td>' +
+    (f.nav[e] ? (arr[e] / f.nav[e] * 100).toFixed(1) : '0') + '%</td>' +
+    '<td class="' + cls(w && w.ourRet) + '" style="font-weight:700">' + pct(w && w.ourRet) + '</td>' +
+    '<td class="' + (w && w.gain >= 0 ? 'pos' : 'neg') + '">' + (w && w.gain >= 0 ? '+' : '-') + money0(w ? w.gain : 0) + '</td>' +
+    '<td class="' + cls(w && w.bmRet) + '">' + pct(w && w.bmRet) + '</td>' +
+    '<td class="' + cls(w && w.alpha) + '" style="font-weight:700">' + pct(w && w.alpha) + '</td>' +
+    '<td style="color:var(--muted)">' + pct(twr) + '</td></tr>';
   document.getElementById('trkSplitTable').innerHTML =
-    '<tr><th>Sleeve</th><th>Value Now</th><th>Share of Fund</th><th>Return</th><th>vs SPY</th></tr>' +
-    [['Equities', f.eqNav, eqR], ['ETFs', f.etfNav, etR]].map(([n, arr, r]) =>
-      '<tr><td style="font-weight:700">' + n + '</td><td>$' + fmt(arr[e]) + '</td><td>' +
-      (f.nav[e] ? (arr[e] / f.nav[e] * 100).toFixed(1) : '0') + '%</td><td class="' + cls(r) + '">' + pct(r) +
-      '</td><td class="' + cls(r != null && spy != null ? r - spy : null) + '">' +
-      pct(r != null && spy != null ? r - spy : null) + '</td></tr>').join('') +
-    '<tr><td style="font-weight:700">Total Fund</td><td><strong>$' + fmt(f.nav[e]) + '</strong></td><td>100%</td><td class="' +
-    cls(fundRet) + '"><strong>' + pct(fundRet) + '</strong></td><td class="' + cls(alpha) + '"><strong>' + pct(alpha) + '</strong></td></tr>';
+    '<tr><th>Sleeve</th><th>Value Now</th><th>Weight</th>' +
+    '<th title="What this sleeve\'s dollars earned, including when we bought">Our Return</th>' +
+    '<th>Dollar Gain</th><th title="Same cash into SPY on the same days">Same in SPY</th><th>Alpha</th>' +
+    '<th title="Timing removed">Time-Wtd</th></tr>' +
+    sleeveRow('Equities', f.eqNav, eqW, idxRet(f.eqTwr, s, e)) +
+    sleeveRow('ETFs', f.etfNav, etfW, idxRet(f.etfTwr, s, e)) +
+    '<tr><td style="font-weight:700">Total Fund</td><td><strong>$' + fmt(f.nav[e]) + '</strong></td><td>100%</td>' +
+    '<td class="' + cls(own && own.ourRet) + '"><strong>' + pct(own && own.ourRet) + '</strong></td>' +
+    '<td class="' + (own && own.gain >= 0 ? 'pos' : 'neg') + '"><strong>' + (own && own.gain >= 0 ? '+' : '-') + money0(own ? own.gain : 0) + '</strong></td>' +
+    '<td class="' + cls(own && own.bmRet) + '">' + pct(own && own.bmRet) + '</td>' +
+    '<td class="' + cls(own && own.alpha) + '"><strong>' + pct(own && own.alpha) + '</strong></td>' +
+    '<td style="color:var(--muted)">' + pct(fundRet) + '</td></tr>';
 
   const flowRows = [];
   for (let i = s; i <= e; i++) if (f.flows[i]) flowRows.push([dates[i], f.flows[i]]);
@@ -1496,8 +1515,11 @@ function renderTrack() {
   document.getElementById('trkNote').innerHTML =
     'Rebuilt from ' + (PERF.dates.length).toLocaleString() + ' trading days of transaction history (' +
     dates[0] + ' onward), anchored on the ' + PERF.anchor + ' holdings snapshot. ' +
-    '<strong>Time-weighted</strong> return strips out the $' + fmt(Math.abs(f.externalFlows || 0)) +
-    ' of wires so it can be compared with SPY fairly; <strong>money-weighted</strong> reflects the actual dollars at work.' +
+    '<strong>Our Return</strong> is what the dollars actually at work earned, so buying into a position ' +
+    'before it rose is credited rather than cancelled out &mdash; and it is measured against the same cash ' +
+    'put into SPY on the same days, which keeps the comparison honest. <strong>Time-weighted</strong> ' +
+    'strips timing out entirely and is the stricter benchmark basis; it also removes the $' +
+    fmt(Math.abs(f.externalFlows || 0)) + ' of wires.' +
     (rs && rs.annualisable ? '<br>The fund runs at beta ' + rs.beta.toFixed(2) + ' with ' +
       (rs.vol * 100).toFixed(1) + '% volatility against SPY\'s ' + (rs.spyVol * 100).toFixed(1) +
       '%, so the raw gap overstates the shortfall. <strong>Risk-adjusted alpha</strong> is the fair read on security selection: ' +
@@ -1552,36 +1574,46 @@ async function initSectorPerf() {
    benchmark ETF on exactly the same days. Comparing against that isolates what
    our security selection added, because the timing is held identical on both
    sides. twr is kept for reference - it strips timing out entirely. */
-function sectorWindow(name, navArr, flowArr, s, e) {
-  const V0 = navArr[s] || 0, V1 = navArr[e] || 0;
-  const span = e - s;
+/* The single calculation used for every "our return" figure in the dashboard -
+   fund total, equity sleeve, ETF sleeve and each sector. Given a daily value
+   series and the purchases/sales that moved it, it answers: what did the
+   dollars we had at work actually earn?
+
+   Buying into a position before it rises raises this number, which is the whole
+   point - a time-weighted return would cancel that decision out.
+
+   benchTicker, when supplied, builds the honest counterfactual: the same cash
+   moved into that benchmark on the same days. Both sides then share identical
+   timing, so the difference reflects what we picked, not when we bought. */
+function mdWindow(navArr, flowArr, s, e, benchTicker) {
+  if (!navArr) return null;
+  const V0 = navArr[s] || 0, V1 = navArr[e] || 0, span = e - s;
   let netFlow = 0, weighted = 0;
   const flows = [];
   for (let i = s + 1; i <= e; i++) {
     const fl = (flowArr && flowArr[i]) || 0;
     if (!fl) continue;
     netFlow += fl;
-    weighted += fl * ((e - i) / (span || 1));   // fraction of the window it was invested
+    weighted += fl * ((e - i) / (span || 1));   // how much of the window it was invested for
     flows.push({ i, fl });
   }
   const denom = V0 + weighted;
   const gain = V1 - V0 - netFlow;
   const ourRet = denom > 0 ? gain / denom * 100 : null;
 
-  // same cash, same days, into the benchmark ETF
   let bmRet = null, bmGain = null;
-  const bm = SECTOR_BENCHMARKS[name];
-  const px = bm && PERF.bench ? PERF.bench[bm] : null;
+  const px = benchTicker && PERF.bench ? PERF.bench[benchTicker] : null;
   if (px && px[s] > 0 && px[e] > 0 && denom > 0) {
     let shares = V0 / px[s];
     for (const { i, fl } of flows) if (px[i] > 0) shares += fl / px[i];
-    const bmV1 = shares * px[e];
-    bmGain = bmV1 - V0 - netFlow;
+    bmGain = shares * px[e] - V0 - netFlow;
     bmRet = bmGain / denom * 100;
   }
-  return { V0, V1, netFlow, gain, ourRet, bm, bmRet, bmGain,
+  return { V0, V1, netFlow, gain, ourRet, bm: benchTicker, bmRet, bmGain,
            alpha: (ourRet != null && bmRet != null) ? ourRet - bmRet : null };
 }
+const sectorWindow = (name, navArr, flowArr, s, e) =>
+  mdWindow(navArr, flowArr, s, e, SECTOR_BENCHMARKS[name]);
 
 function sectorPerfRows() {
   const f = PERF.funds[perfFundKey()];

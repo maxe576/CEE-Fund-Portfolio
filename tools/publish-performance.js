@@ -16,6 +16,7 @@ for(const [k,f] of Object.entries(P.funds)){
  for(const [s,v] of Object.entries(f.sectorFlows||{})) secFlow[s]=r0(v);
  OUT.funds[k]={name:f.name,nav:r0(f.nav),flows:r0(f.flows),eqNav:r0(f.eqNav),etfNav:r0(f.etfNav),
   twr:r2(f.twr),eqTwr:r2(f.eqTwr||[]),etfTwr:r2(f.etfTwr||[]),
+  eqFlow:r0(f.eqFlow||[]),etfFlow:r0(f.etfFlow||[]),
   sectors:sec,sectorTwr:secTwr,sectorFlows:secFlow,irr:f.irr,externalFlows:f.externalFlows,
   missingPrices:f.missingPrices,
   // ticker keys can contain '.', which Firebase forbids - store as pairs
