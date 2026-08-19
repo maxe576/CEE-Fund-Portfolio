@@ -169,6 +169,10 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   tx.forEach(t=>{(byDate[t.date]=byDate[t.date]||[]).push(t)});
 
   const nav=[],flows=[],eqNav=[],etfNav=[],eqFlow=[],etfFlow=[],secNav={},secFlow={},missing=new Set();
+  // Per-position daily value and flow, so we can report what WE earned on a
+  // holding rather than what the security did. Buying NVDA in March means our
+  // return starts in March, not on 1 January.
+  const tkVal={},tkFlow={};
   const start=calendar[0];
   // transactions dated before the calendar starts must be re-applied up front,
   // otherwise the backward walk removed them and nothing puts them back
@@ -193,6 +197,20 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
     if(ty==='etf')etf+=v; else eq+=v;
     const sname=sectorOf[tk]||'Other';
     sec[sname]=(sec[sname]||0)+v;
+    if(!tkVal[tk]) tkVal[tk]=new Array(nav.length).fill(0);
+    tkVal[tk].push(+v.toFixed(2));
+   }
+   // pad positions not held today, and record each one's purchases/sales
+   for(const k of Object.keys(tkVal)) if(tkVal[k].length<nav.length+1) tkVal[k].push(0);
+   const tkFlowDay={};
+   for(const t of (byDate[d]||[])){
+    if(!t.sym) continue;
+    if(t.action!=='Buy'&&t.action!=='Sell') continue;
+    tkFlowDay[t.sym]=(tkFlowDay[t.sym]||0)-t.amt;
+   }
+   for(const k of Object.keys(tkVal)){
+    if(!tkFlow[k]) tkFlow[k]=new Array(tkVal[k].length-1).fill(0);
+    tkFlow[k].push(+(tkFlowDay[k]||0).toFixed(2));
    }
    // Per-sector flows: only outright Buy/Sell count as allocation decisions.
    // Dividend reinvestment is left as internal growth because it IS return.
@@ -243,13 +261,59 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
    }
    secTwr[s]=idx;
   }
+  /* Per-holding, per-period results.
+     ourRet chain-links daily returns only across days the position was actually
+     held, with purchases and sales removed - so it answers "what did this
+     position earn us", not "what did the security do". */
+  const PERIOD_KEYS=['1W','1M','3M','6M','YTD','1Y','3Y','5Y','ALL'];
+  const startIdxFor=p=>{
+   const last=calendar[calendar.length-1];
+   if(p==='ALL') return 0;
+   const end=new Date(last+'T00:00:00'); let from;
+   if(p==='YTD') from=new Date(Date.UTC(end.getUTCFullYear(),0,1));
+   else{ from=new Date(end); const n=parseInt(p);
+    if(p.endsWith('W')) from.setDate(from.getDate()-7*n);
+    else if(p.endsWith('M')) from.setMonth(from.getMonth()-n);
+    else from.setFullYear(from.getFullYear()-n); }
+   const iso=from.toISOString().slice(0,10);
+   for(let i=0;i<calendar.length;i++) if(calendar[i]>=iso) return i;
+   return 0;
+  };
+  const holdings={};
+  const endI=calendar.length-1;
+  for(const [tk,vals] of Object.entries(tkVal)){
+   const fl=tkFlow[tk]||[];
+   const perPeriod={};
+   for(const p of PERIOD_KEYS){
+    const s0=startIdxFor(p);
+    let idx=null, gain=0, firstHeld=null, started=false;
+    for(let i=Math.max(s0,1);i<=endI;i++){
+     const prev=vals[i-1], cur=vals[i], f=fl[i]||0;
+     if(prev>0.005){
+      if(!started){ idx=1; started=true; firstHeld=firstHeld||calendar[i-1]; }
+      idx*= (1+((cur-f)-prev)/prev);
+      gain+=(cur-f)-prev;
+     } else if(cur>0.005 && !started){ firstHeld=calendar[i]; }
+    }
+    // the security's own return over the same window, for contrast
+    let sret=null;
+    const ser=S[tk];
+    if(ser&&ser.ok){
+     const a=ser.px[calendar[s0]],b=ser.px[calendar[endI]];
+     if(a>0&&b>0) sret=+((b/a-1)*100).toFixed(2);
+    }
+    if(started) perPeriod[p]={r:+((idx-1)*100).toFixed(2),g:Math.round(gain),from:firstHeld,s:sret};
+   }
+   if(Object.keys(perPeriod).length) holdings[tk]=perPeriod;
+  }
+
   const sleeveTwr=(series,fl)=>{const idx=[100];
    for(let i=1;i<series.length;i++){const prev=series[i-1];
     const r=prev>100?((series[i]-(fl[i]||0))-prev)/prev:0;
     idx.push(+(idx[i-1]*(1+r)).toFixed(4));} return idx;};
   OUT.funds[f.key]={
    name:f.name, nav, flows, eqNav, etfNav, twr, sectors:secNav, sectorTwr:secTwr,
-   eqTwr:sleeveTwr(eqNav,eqFlow), etfTwr:sleeveTwr(etfNav,etfFlow),
+   eqTwr:sleeveTwr(eqNav,eqFlow), etfTwr:sleeveTwr(etfNav,etfFlow), holdings,
    irr: irr!=null?+(irr*100).toFixed(2):null,
    externalFlows:+flows.reduce((a,b)=>a+b,0).toFixed(2),   // wires only, excl. opening NAV
    startNav:nav[0], endNav:nav[nav.length-1],

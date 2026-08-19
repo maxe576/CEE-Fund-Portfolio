@@ -1235,6 +1235,12 @@ async function loadPerfData() {
     if (!PERF || !PERF.dates) throw new Error('performance data is empty');
     PERF.sectorOf = {}; PERF.typeOf = {};
     (PERF.tickers || []).forEach(t => { PERF.sectorOf[t[0]] = t[1]; PERF.typeOf[t[0]] = t[2]; });
+    // holdings ship as [ticker, periods] pairs because Firebase keys cannot hold '.'
+    Object.values(PERF.funds || {}).forEach(f => {
+      if (Array.isArray(f.holdings)) {
+        const m = {}; f.holdings.forEach(p => { m[p[0]] = p[1]; }); f.holdings = m;
+      }
+    });
     return PERF;
   })();
   return perfLoading;
@@ -1513,9 +1519,12 @@ function setSpMode(m, btn) {
 function setSpPeriod(p, btn) {
   spPeriod = p;
   document.querySelectorAll('#spPeriodRow .period-btn').forEach(b => b.classList.toggle('active', b === btn));
-  spDrillSector = null;
+  // Keep any open sector expanded; renderSectorPerf redraws it for the new
+  // period so the detail never disagrees with the table above it.
   renderSectorPerf();
 }
+// Whole dollars read better than cents in these tables
+const money0 = n => '$' + Math.round(Math.abs(n)).toLocaleString();
 async function initSectorPerf() {
   try { await loadPerfData(); }
   catch (e) {
@@ -1615,44 +1624,67 @@ function renderSectorPerf() {
   if (spDrillSector) drillSector(spDrillSector, true);
 }
 
-// Holding-level returns inside a sector, fetched live for the selected period.
-async function drillSector(name, keep) {
+/* Holding-level results inside a sector.
+   "Our return" is what the position earned US over the period, chain-linked only
+   across the days we actually held it. That is deliberately different from the
+   security's own return: NVDA bought in March should not be credited or blamed
+   for January and February. Both are shown so the gap is visible. */
+function drillSector(name) {
   spDrillSector = name;
   const el = document.getElementById('spDrill');
+  const f = PERF.funds[perfFundKey()];
+  const H = f.holdings || {};
+  const per = spPeriod;
   const holds = S.holdings.filter(h => h.sector === name);
-  const yfPeriod = spPeriod === 'ALL' ? '5Y' : spPeriod;
-  el.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">' + name +
-    ' &mdash; holdings <span style="font-weight:400;color:var(--muted)">(' + yfPeriod + ' returns, loading…)</span></div>';
-  const rets = {};
-  for (let i = 0; i < holds.length; i += 6) {
-    await Promise.all(holds.slice(i, i + 6).map(async h => { rets[h.ticker] = await fetchCandleReturn(h.ticker, yfPeriod); }));
-  }
+  const rec = tk => (H[tk] || {})[per] || null;
+
   const bm = SECTOR_BENCHMARKS[name];
-  const bmRet = bm ? await fetchCandleReturn(bm, yfPeriod) : null;
-  const sorted = [...holds].sort((a, b) => (rets[b.ticker] ?? -999) - (rets[a.ticker] ?? -999));
+  const e = PERF.dates.length - 1, s = perfStartIdx(per);
+  const bmRet = bm && PERF.bench && PERF.bench[bm] ? idxRet(PERF.bench[bm], s, e) : null;
+
+  const sorted = [...holds].sort((a, b) => ((rec(b.ticker) || {}).r ?? -9999) - ((rec(a.ticker) || {}).r ?? -9999));
   const eq = sorted.filter(h => h.type === 'equity'), etf = sorted.filter(h => h.type === 'etf');
-  const wRet = list => { let sw = 0, sr = 0; list.forEach(h => { const v = rets[h.ticker]; if (v != null) { const w = h.marketValue || 0; sr += v * w; sw += w; } }); return sw ? sr / sw : null; };
+  const wRet = list => { let sw = 0, sr = 0; list.forEach(h => { const r = rec(h.ticker); if (r) { const w = h.marketValue || 0; sr += r.r * w; sw += w; } }); return sw ? sr / sw : null; };
   const eqR = wRet(eq), etfR = wRet(etf), allR = wRet(sorted);
+  const totalGain = sorted.reduce((a, h) => a + ((rec(h.ticker) || {}).g || 0), 0);
+
   const row = h => {
-    const v = rets[h.ticker], a = (v != null && bmRet != null) ? v - bmRet : null;
+    const r = rec(h.ticker);
+    if (!r) return '<tr><td class="ticker-cell">' + h.ticker + '</td><td>' + h.company +
+      '</td><td><span class="badge type-' + h.type + '">' + h.type.toUpperCase() + '</span></td>' +
+      '<td>$' + fmt(h.marketValue || 0) + '</td><td colspan="4" style="color:var(--muted);font-size:11px">not held during this period</td></tr>';
+    const a = bmRet != null ? r.r - bmRet : null;
+    const partial = r.from && r.from > PERF.dates[s];
     return '<tr><td class="ticker-cell">' + h.ticker + '</td><td>' + h.company + '</td>' +
       '<td><span class="badge type-' + h.type + '">' + h.type.toUpperCase() + '</span></td>' +
-      '<td>$' + fmt(h.marketValue || 0) + '</td><td class="' + cls(v) + '">' + pct(v) + '</td>' +
+      '<td>$' + fmt(h.marketValue || 0) + '</td>' +
+      '<td class="' + cls(r.r) + '" style="font-weight:700">' + pct(r.r) +
+      (partial ? '<div style="font-size:9px;color:var(--muted);font-weight:600">held from ' + r.from + '</div>' : '') + '</td>' +
+      '<td class="' + (r.g >= 0 ? 'pos' : 'neg') + '">' + (r.g >= 0 ? '+' : '-') + money0(r.g) + '</td>' +
+      '<td style="color:var(--muted)">' + pct(r.s) + '</td>' +
       '<td class="' + cls(a) + '">' + pct(a) + '</td></tr>';
   };
+
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-    '<span style="font-size:12px;font-weight:700;color:var(--navy)">' + name + ' &mdash; holdings (' + yfPeriod + ')</span>' +
+    '<span style="font-size:12px;font-weight:700;color:var(--navy)">' + name + ' &mdash; our positions (' + per + ')</span>' +
     '<button class="filter-btn" onclick="spDrillSector=null;document.getElementById(\'spDrill\').innerHTML=\'\'">&times; Close</button></div>' +
     '<div class="kpi-grid" style="margin-bottom:10px">' +
       kpiCard('Equities in sector', pct(eqR), eq.length + ' position' + (eq.length === 1 ? '' : 's'), cls(eqR), false) +
       kpiCard('ETFs in sector', pct(etfR), etf.length + ' position' + (etf.length === 1 ? '' : 's'), cls(etfR), false) +
-      kpiCard('Sector combined', pct(allR), 'value-weighted', cls(allR), true) +
+      kpiCard('Sector combined', pct(allR), 'our return, value-weighted', cls(allR), true) +
       kpiCard('Benchmark ' + (bm || ''), pct(bmRet), 'sector ETF', cls(bmRet), false) +
       kpiCard('Alpha', pct(allR != null && bmRet != null ? allR - bmRet : null), 'vs ' + (bm || 'benchmark'), cls(allR != null && bmRet != null ? allR - bmRet : null), true) +
+      kpiCard('Dollar Gain', (totalGain >= 0 ? '+' : '-') + money0(totalGain), 'earned in this sector', totalGain >= 0 ? 'pos' : 'neg', false) +
     '</div>' +
-    '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th><th>Market Value</th><th>' + yfPeriod +
-    ' Return</th><th>vs ' + (bm || 'ETF') + '</th></tr>' + sorted.map(row).join('') + '</table></div>';
+    '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th><th>Market Value</th>' +
+    '<th title="What this position earned us over the period, counting only the days we held it">Our Return</th>' +
+    '<th>Dollar Gain</th>' +
+    '<th title="What the security itself did over the full period, whether we owned it or not">Stock ' + per + '</th>' +
+    '<th>vs ' + (bm || 'ETF') + '</th></tr>' + sorted.map(row).join('') + '</table></div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">' +
+    '<strong>Our Return</strong> counts only the days we actually held the position, so a stock bought mid-period is judged from the day we bought it. ' +
+    '<strong>Stock ' + per + '</strong> is the security\'s own move over the whole period. Where the two differ sharply, our entry timing is the reason.</div>';
 }
 function showTab(tab, btn) {
   currentTab = tab;

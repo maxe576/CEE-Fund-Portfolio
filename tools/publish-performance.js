@@ -15,7 +15,9 @@ for(const [k,f] of Object.entries(P.funds)){
  OUT.funds[k]={name:f.name,nav:r0(f.nav),flows:r0(f.flows),eqNav:r0(f.eqNav),etfNav:r0(f.etfNav),
   twr:r2(f.twr),eqTwr:r2(f.eqTwr||[]),etfTwr:r2(f.etfTwr||[]),
   sectors:sec,sectorTwr:secTwr,irr:f.irr,externalFlows:f.externalFlows,
-  missingPrices:f.missingPrices};
+  missingPrices:f.missingPrices,
+  // ticker keys can contain '.', which Firebase forbids - store as pairs
+  holdings:Object.entries(f.holdings||{}).map(([tk,v])=>[tk,v])};
 }
 for(const [b,v] of Object.entries(P.bench)) OUT.bench[b]=r2(v);
 
