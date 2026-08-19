@@ -1243,6 +1243,45 @@ const idxRet = (arr, a, b) => (arr && arr[a] > 0 && arr[b] != null) ? (arr[b] / 
 const pct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
 const cls = v => v == null ? '' : (v >= 0 ? 'pos' : 'neg');
 
+// Approximate average cash yield over the rebuild window; used as the risk-free
+// leg in Jensen's alpha and Sharpe. Roughly the 3-month T-bill average 2022-2026.
+const RISK_FREE = 0.043;
+
+/* Risk statistics over a window.
+   A raw return gap vs SPY is unfair to a portfolio that deliberately runs less
+   risk: these funds hold bonds and cash and carry a beta well under 1. Jensen's
+   alpha asks the fair question - given the risk actually taken, did security
+   selection add or subtract value? */
+function riskStats(f, s, e) {
+  const spySeries = PERF.bench && PERF.bench.SPY;
+  if (!spySeries) return null;
+  const fr = [], sr = [];
+  for (let i = s + 1; i <= e; i++) {
+    const prev = f.nav[i - 1];
+    if (!(prev > 0) || !(spySeries[i - 1] > 0)) continue;
+    fr.push(((f.nav[i] - (f.flows[i] || 0)) - prev) / prev);
+    sr.push(spySeries[i] / spySeries[i - 1] - 1);
+  }
+  if (fr.length < 20) return null;
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const sd = a => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
+  const mf = mean(fr), ms = mean(sr), sds = sd(sr);
+  const beta = sds > 0 ? mean(fr.map((v, i) => (v - mf) * (sr[i] - ms))) / (sds * sds) : null;
+  const corr = (sd(fr) > 0 && sds > 0) ? mean(fr.map((v, i) => (v - mf) * (sr[i] - ms))) / (sd(fr) * sds) : null;
+  const years = (new Date(PERF.dates[e]) - new Date(PERF.dates[s])) / (365.25 * 864e5);
+  const fundTot = idxRet(f.twr, s, e) / 100, spyTot = idxRet(spySeries, s, e) / 100;
+  const annualisable = years >= 0.75;
+  const fundAnn = annualisable ? Math.pow(1 + fundTot, 1 / years) - 1 : null;
+  const spyAnn = annualisable ? Math.pow(1 + spyTot, 1 / years) - 1 : null;
+  const vol = sd(fr) * Math.sqrt(252);
+  let jensen = null;
+  if (annualisable && beta != null) jensen = fundAnn - (RISK_FREE + beta * (spyAnn - RISK_FREE));
+  const sharpe = (annualisable && vol > 0) ? (fundAnn - RISK_FREE) / vol : null;
+  const spyVol = sds * Math.sqrt(252);
+  const spySharpe = (annualisable && spyVol > 0) ? (spyAnn - RISK_FREE) / spyVol : null;
+  return { beta, corr, years, fundAnn, spyAnn, vol, spyVol, jensen, sharpe, spySharpe, annualisable };
+}
+
 // Sample an index series down to ~n points for charting
 function sampleSeries(arr, s, e, n) {
   const out = [], span = e - s;
@@ -1332,10 +1371,22 @@ function renderTrack() {
   let peak = f.twr[s], mdd = 0;
   for (let i = s; i <= e; i++) { if (f.twr[i] > peak) peak = f.twr[i]; const dd = (f.twr[i] / peak - 1) * 100; if (dd < mdd) mdd = dd; }
 
+  const rs = riskStats(f, s, e);
+  const pctAnn = v => v == null ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(2) + '%';
   document.getElementById('trkKpis').innerHTML =
     kpiCard('Time-Weighted Return', pct(fundRet), 'comparable to SPY', cls(fundRet), true) +
     kpiCard('SPY Same Window', pct(spy), 'benchmark', cls(spy), false) +
-    kpiCard('Alpha vs SPY', pct(alpha), alpha >= 0 ? 'ahead of the index' : 'behind the index', cls(alpha), true) +
+    kpiCard('Raw Gap vs SPY', pct(alpha), 'before adjusting for risk', cls(alpha), false) +
+    (rs && rs.annualisable
+      ? kpiCard('Risk-Adjusted Alpha', pctAnn(rs.jensen) + '/yr',
+          'what stock picking added at beta ' + rs.beta.toFixed(2), cls(rs.jensen), true)
+      : kpiCard('Risk-Adjusted Alpha', '—', 'needs 9+ months of history', '', true)) +
+    (rs && rs.annualisable
+      ? kpiCard('Annualised', pctAnn(rs.fundAnn) + '/yr', 'SPY ' + pctAnn(rs.spyAnn) + '/yr', cls(rs.fundAnn), false) : '') +
+    (rs ? kpiCard('Beta vs SPY', rs.beta != null ? rs.beta.toFixed(2) : '—',
+          rs.beta < 0.95 ? 'less risk than the index' : rs.beta > 1.05 ? 'more risk than the index' : 'index-like risk', '', false) : '') +
+    (rs && rs.sharpe != null
+      ? kpiCard('Sharpe Ratio', rs.sharpe.toFixed(2), 'SPY ' + rs.spySharpe.toFixed(2) + ' &middot; return per unit of risk', '', false) : '') +
     kpiCard('Market Gain', '$' + fmt(Math.abs(marketGain)), (marketGain >= 0 ? 'earned' : 'lost') + ', excludes wires', cls(marketGain), false) +
     kpiCard('Capital Wired In', '$' + fmt(Math.abs(flowIn)), flowIn ? 'not counted as return' : 'none this period', '', false) +
     kpiCard('Max Drawdown', pct(mdd), 'deepest peak-to-trough', 'neg', false) +
@@ -1421,6 +1472,10 @@ function renderTrack() {
     dates[0] + ' onward), anchored on the ' + PERF.anchor + ' holdings snapshot. ' +
     '<strong>Time-weighted</strong> return strips out the $' + fmt(Math.abs(f.externalFlows || 0)) +
     ' of wires so it can be compared with SPY fairly; <strong>money-weighted</strong> reflects the actual dollars at work.' +
+    (rs && rs.annualisable ? '<br>The fund runs at beta ' + rs.beta.toFixed(2) + ' with ' +
+      (rs.vol * 100).toFixed(1) + '% volatility against SPY\'s ' + (rs.spyVol * 100).toFixed(1) +
+      '%, so the raw gap overstates the shortfall. <strong>Risk-adjusted alpha</strong> is the fair read on security selection: ' +
+      'it compares the fund with what a portfolio of the same risk would have been expected to earn.' : '') +
     (miss ? ' <span style="color:var(--gold)">' + miss + ' legacy symbol' + (miss > 1 ? 's' : '') + ' could not be priced and are excluded.</span>' : '');
 }
 
