@@ -273,7 +273,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
 <nav class="nav">
   <button class="nav-tab active" data-group="overview" onclick="showTab('overview',this)">📊 Overview</button>
   <button class="nav-tab" data-group="portfolio" onclick="showTab('holdings',this)">💼 Portfolio</button>
-  <button class="nav-tab" data-group="performance" onclick="showTab('benchmark',this)">📈 Performance</button>
+  <button class="nav-tab" data-group="performance" onclick="showTab('track',this)">📈 Performance</button>
   <button class="nav-tab" data-group="risk" onclick="showTab('risk',this)">🛡 Risk &amp; Exposure</button>
   <button class="nav-tab" data-group="thesis" onclick="showTab('thesis',this)">📋 Investment Thesis</button>
   <button class="nav-tab" data-group="whatif" onclick="showTab('whatif',this)">🔮 What-If</button>
@@ -646,6 +646,55 @@ tr:hover td{background:rgba(212,167,44,.06)}
   <div class="card" style="margin-top:16px"><div class="card-title">Top 15 Holdings</div><div class="tbl-wrap"><table id="aumTop15"></table></div></div>
   <div class="card" style="margin-top:16px"><div class="card-title">All Holdings <span id="aumCount" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div><div class="tbl-wrap"><table id="aumTable"></table></div></div>
 </div>
+<!-- ===== TRACK RECORD (transaction-driven overall performance) ===== -->
+<div id="tab-track" class="tab-panel">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">
+      <span>Track Record <span id="trkFundLabel" style="font-weight:400;color:var(--muted);font-size:12px"></span></span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted)">VIEW</span>
+        <button class="period-btn active" data-trkmode="line" onclick="setTrkMode('line',this)">Line</button>
+        <button class="period-btn" data-trkmode="bar" onclick="setTrkMode('bar',this)">Bar</button>
+      </div>
+    </div>
+    <div class="period-row" id="trkPeriodRow"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-right:2px">COMPARE</span>
+      <span id="trkBenchRow" style="display:flex;gap:6px;flex-wrap:wrap"></span>
+    </div>
+    <div class="kpi-grid" id="trkKpis" style="margin-bottom:14px"></div>
+    <div class="chart-container" style="height:320px"><canvas id="trkChart"></canvas></div>
+    <div class="chart-legend" id="trkLegend"></div>
+    <div id="trkNote" style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5"></div>
+  </div>
+  <div class="grid-2">
+    <div class="card"><div class="card-title">Equities vs ETFs</div><div class="tbl-wrap"><table id="trkSplitTable"></table></div></div>
+    <div class="card"><div class="card-title">Capital Flows</div><div class="tbl-wrap"><table id="trkFlowTable"></table></div></div>
+  </div>
+</div>
+
+<!-- ===== SECTOR PERFORMANCE (transaction-driven, vs sector ETFs) ===== -->
+<div id="tab-sectorperf" class="tab-panel">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">
+      <span>Sector Performance <span id="spFundLabel" style="font-weight:400;color:var(--muted);font-size:12px"></span></span>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted)">VIEW</span>
+        <button class="period-btn active" data-spmode="bar" onclick="setSpMode('bar',this)">Bar</button>
+        <button class="period-btn" data-spmode="line" onclick="setSpMode('line',this)">Line</button>
+      </div>
+    </div>
+    <div class="period-row" id="spPeriodRow"></div>
+    <div class="chart-container" style="height:320px"><canvas id="spChart"></canvas></div>
+    <div class="chart-legend" id="spLegend"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Our Sectors vs Their Benchmark ETFs <span style="font-weight:400;font-size:11px;color:var(--muted)">click a row for holding-level returns</span></div>
+    <div class="tbl-wrap"><table id="spTable"></table></div>
+    <div id="spDrill" style="margin-top:14px"></div>
+  </div>
+</div>
+
 <div id="tab-whatif" class="tab-panel">
   <div class="card" style="margin-bottom:16px">
     <div class="card-title">What-If Scenario Simulator
@@ -1111,7 +1160,7 @@ let currentTab = 'overview';
 const NAV_GROUPS = {
   overview:   { tabs: [['overview','Overview'], ['aum','Total AUM (Both Funds)']] },
   portfolio:  { tabs: [['holdings','Holdings'], ['sectors','Sectors']] },
-  performance:{ tabs: [['benchmark','vs S&P 500'], ['sectorcompare','Sector Performance']] },
+  performance:{ tabs: [['track','Overall'], ['sectorperf','By Sector'], ['benchmark','vs S&P 500'], ['sectorcompare','Sector Analysis']] },
   risk:       { tabs: [['risk','Risk & Exposure']] },
   thesis:     { tabs: [['thesis','Investment Thesis']] },
   whatif:     { tabs: [['whatif','What-If']] },
@@ -1129,6 +1178,406 @@ function runTabHook(tab) {
   else if (tab === 'aum') renderAUM();
   else if (tab === 'movers') { if (moversData[activeMoversView]) renderMovers(activeMoversView); else loadMovers(); }
   else if (tab === 'risk') { renderRiskExposure(); loadEtfLookThrough(); }
+  else if (tab === 'track') initTrack();
+  else if (tab === 'sectorperf') initSectorPerf();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TRACK RECORD — performance rebuilt from the full Schwab transaction history.
+   Series are precomputed and stored at /ceePerformance so the browser does no
+   heavy lifting. Two return measures are reported, and they answer different
+   questions:
+     TWR (time-weighted)  — removes the effect of deposits/withdrawals. This is
+                            the only number comparable to SPY.
+     MWR (money-weighted) — annualised IRR on the dollars actually invested.
+   ══════════════════════════════════════════════════════════════════════════ */
+// FB_DB_URL is declared further down, so resolve it lazily at call time.
+const perfUrl = () => FB_DB_URL + '/ceePerformance.json';
+let PERF = null, perfLoading = null;
+let trkPeriod = 'YTD', trkMode = 'line', trkChartRef = null;
+let spPeriod  = 'YTD', spMode  = 'bar',  spChartRef  = null, spDrillSector = null;
+const PERF_PERIODS = ['1W','1M','3M','6M','YTD','1Y','3Y','5Y','ALL'];
+const TRK_BENCH = [
+  { id:'SPY', color:'#e08b2a', locked:true,  on:true  },
+  { id:'QQQ', color:'#8a5cd6', locked:false, on:false },
+  { id:'VTI', color:'#2a9d8f', locked:false, on:false },
+  { id:'AGG', color:'#9aa5b4', locked:false, on:false }
+];
+const perfFundKey = () => (activeFund === 'endowment' ? 'endowment' : 'ceeFund');
+
+async function loadPerfData() {
+  if (PERF) return PERF;
+  if (perfLoading) return perfLoading;
+  perfLoading = (async () => {
+    const r = await fetch(perfUrl());
+    if (!r.ok) throw new Error('performance data unavailable (' + r.status + ')');
+    PERF = await r.json();
+    if (!PERF || !PERF.dates) throw new Error('performance data is empty');
+    PERF.sectorOf = {}; PERF.typeOf = {};
+    (PERF.tickers || []).forEach(t => { PERF.sectorOf[t[0]] = t[1]; PERF.typeOf[t[0]] = t[2]; });
+    return PERF;
+  })();
+  return perfLoading;
+}
+
+// First index of the window for a period key. 'ALL' = whole history.
+function perfStartIdx(period) {
+  const d = PERF.dates, last = d[d.length - 1];
+  if (period === 'ALL') return 0;
+  const end = new Date(last + 'T00:00:00');
+  let from;
+  if (period === 'YTD') from = new Date(end.getFullYear(), 0, 1);
+  else {
+    from = new Date(end);
+    const n = parseInt(period);
+    if (period.endsWith('W')) from.setDate(from.getDate() - 7 * n);
+    else if (period.endsWith('M')) from.setMonth(from.getMonth() - n);
+    else from.setFullYear(from.getFullYear() - n);
+  }
+  const iso = from.toISOString().slice(0, 10);
+  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i;
+  return 0;
+}
+// % change of an index series between two positions
+const idxRet = (arr, a, b) => (arr && arr[a] > 0 && arr[b] != null) ? (arr[b] / arr[a] - 1) * 100 : null;
+const pct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+const cls = v => v == null ? '' : (v >= 0 ? 'pos' : 'neg');
+
+// Sample an index series down to ~n points for charting
+function sampleSeries(arr, s, e, n) {
+  const out = [], span = e - s;
+  const step = Math.max(1, Math.floor(span / n));
+  for (let i = s; i <= e; i += step) out.push(i);
+  if (out[out.length - 1] !== e) out.push(e);
+  return out;
+}
+// Bucket an index series into calendar-period returns for the bar view
+function bucketReturns(arr, s, e, dates) {
+  const spanDays = (new Date(dates[e]) - new Date(dates[s])) / 864e5;
+  const mode = spanDays > 900 ? 'year' : spanDays > 200 ? 'quarter' : spanDays > 45 ? 'month' : 'week';
+  const key = d => {
+    const dt = new Date(d + 'T00:00:00');
+    if (mode === 'year') return String(dt.getFullYear());
+    if (mode === 'quarter') return dt.getFullYear() + ' Q' + (Math.floor(dt.getMonth() / 3) + 1);
+    if (mode === 'month') return dt.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    const wk = new Date(dt); wk.setDate(wk.getDate() - wk.getDay());
+    return wk.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const buckets = [];
+  let curKey = null, startIdx = s;
+  for (let i = s; i <= e; i++) {
+    const k = key(dates[i]);
+    if (curKey === null) { curKey = k; startIdx = s; continue; }
+    if (k !== curKey) { buckets.push({ label: curKey, ret: idxRet(arr, startIdx, i - 1) }); curKey = k; startIdx = i - 1; }
+  }
+  buckets.push({ label: curKey, ret: idxRet(arr, startIdx, e) });
+  return buckets.filter(b => b.ret != null);
+}
+
+function setTrkMode(m, btn) {
+  trkMode = m;
+  document.querySelectorAll('[data-trkmode]').forEach(b => b.classList.toggle('active', b === btn));
+  renderTrack();
+}
+function setTrkPeriod(p, btn) {
+  trkPeriod = p;
+  document.querySelectorAll('#trkPeriodRow .period-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderTrack();
+}
+function toggleTrkBench(id, btn) {
+  const b = TRK_BENCH.find(x => x.id === id);
+  if (!b || b.locked) return;
+  b.on = !b.on; btn.classList.toggle('active', b.on);
+  renderTrack();
+}
+
+async function initTrack() {
+  const note = document.getElementById('trkNote');
+  if (!PERF) { note.textContent = 'Loading performance history…'; }
+  try { await loadPerfData(); }
+  catch (e) {
+    note.innerHTML = '<span style="color:var(--red)">Could not load performance history: ' + e.message + '</span>';
+    return;
+  }
+  const pr = document.getElementById('trkPeriodRow');
+  if (!pr.children.length) {
+    pr.innerHTML = PERF_PERIODS.map(p =>
+      '<button class="period-btn' + (p === trkPeriod ? ' active' : '') + '" onclick="setTrkPeriod(\'' + p + '\',this)">' + p + '</button>').join('');
+  }
+  const br = document.getElementById('trkBenchRow');
+  br.innerHTML = TRK_BENCH.map(b =>
+    '<button class="filter-btn' + (b.on ? ' active' : '') + '"' +
+    (b.locked ? ' title="Always shown"' : ' onclick="toggleTrkBench(\'' + b.id + '\',this)"') +
+    ' style="border-color:' + b.color + '"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
+    b.color + ';margin-right:5px"></span>' + b.id + (b.locked ? ' &middot; always on' : '') + '</button>').join('');
+  renderTrack();
+}
+
+function renderTrack() {
+  if (!PERF) return;
+  const f = PERF.funds[perfFundKey()];
+  if (!f) return;
+  const dates = PERF.dates, e = dates.length - 1, s = perfStartIdx(trkPeriod);
+  document.getElementById('trkFundLabel').textContent =
+    '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
+
+  const fundRet = idxRet(f.twr, s, e);
+  const spy = PERF.bench && PERF.bench.SPY ? idxRet(PERF.bench.SPY, s, e) : null;
+  const alpha = (fundRet != null && spy != null) ? fundRet - spy : null;
+  const navChg = f.nav[e] - f.nav[s];
+  const flowIn = f.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+  const marketGain = navChg - flowIn;
+
+  // max drawdown on the time-weighted index
+  let peak = f.twr[s], mdd = 0;
+  for (let i = s; i <= e; i++) { if (f.twr[i] > peak) peak = f.twr[i]; const dd = (f.twr[i] / peak - 1) * 100; if (dd < mdd) mdd = dd; }
+
+  document.getElementById('trkKpis').innerHTML =
+    kpiCard('Time-Weighted Return', pct(fundRet), 'comparable to SPY', cls(fundRet), true) +
+    kpiCard('SPY Same Window', pct(spy), 'benchmark', cls(spy), false) +
+    kpiCard('Alpha vs SPY', pct(alpha), alpha >= 0 ? 'ahead of the index' : 'behind the index', cls(alpha), true) +
+    kpiCard('Market Gain', '$' + fmt(Math.abs(marketGain)), (marketGain >= 0 ? 'earned' : 'lost') + ', excludes wires', cls(marketGain), false) +
+    kpiCard('Capital Wired In', '$' + fmt(Math.abs(flowIn)), flowIn ? 'not counted as return' : 'none this period', '', false) +
+    kpiCard('Max Drawdown', pct(mdd), 'deepest peak-to-trough', 'neg', false) +
+    (trkPeriod === 'ALL' || trkPeriod === '5Y' || trkPeriod === '3Y'
+      ? kpiCard('Money-Weighted (IRR)', f.irr != null ? f.irr.toFixed(2) + '%/yr' : '—', 'what our dollars earned', cls(f.irr), false) : '');
+
+  const idx = sampleSeries(f.twr, s, e, 160);
+  const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
+    (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
+  const active = TRK_BENCH.filter(b => b.on && PERF.bench && PERF.bench[b.id]);
+  const navyC = '#0c2a5e';
+
+  if (trkChartRef) trkChartRef.destroy();
+  const ctx = document.getElementById('trkChart').getContext('2d');
+
+  if (trkMode === 'line') {
+    const ds = [{
+      label: f.name, data: idx.map(i => +(idxRet(f.twr, s, i) || 0).toFixed(2)),
+      borderColor: navyC, backgroundColor: 'rgba(12,42,94,.07)', borderWidth: 2.6,
+      pointRadius: 0, fill: true, tension: .25
+    }];
+    active.forEach(b => ds.push({
+      label: b.id, data: idx.map(i => +(idxRet(PERF.bench[b.id], s, i) || 0).toFixed(2)),
+      borderColor: b.color, backgroundColor: 'transparent', borderWidth: 1.8,
+      pointRadius: 0, fill: false, tension: .25, borderDash: b.id === 'SPY' ? [] : [5, 3]
+    }));
+    trkChartRef = new Chart(ctx, {
+      type: 'line', data: { labels, datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                  x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } } }
+      }
+    });
+  } else {
+    const fb = bucketReturns(f.twr, s, e, dates);
+    const ds = [{ label: f.name, data: fb.map(b => +b.ret.toFixed(2)),
+      backgroundColor: fb.map(b => b.ret >= 0 ? 'rgba(21,154,81,.85)' : 'rgba(214,69,61,.85)'), borderRadius: 3 }];
+    active.forEach(b => {
+      const bb = bucketReturns(PERF.bench[b.id], s, e, dates);
+      ds.push({ label: b.id, data: bb.map(x => +x.ret.toFixed(2)), backgroundColor: b.color + '88', borderRadius: 3 });
+    });
+    trkChartRef = new Chart(ctx, {
+      type: 'bar', data: { labels: fb.map(b => b.label), datasets: ds },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                  x: { ticks: { font: { size: 10 } }, grid: { display: false } } }
+      }
+    });
+  }
+  document.getElementById('trkLegend').innerHTML =
+    '<span class="legend-item"><span class="legend-dot" style="background:' + navyC + '"></span>' + f.name + '</span>' +
+    active.map(b => '<span class="legend-item"><span class="legend-dot" style="background:' + b.color + '"></span>' + b.id + '</span>').join('');
+
+  // Equities vs ETFs — time-weighted per sleeve, so buying or trimming a sleeve
+  // does not masquerade as performance.
+  const eqR = idxRet(f.eqTwr, s, e), etR = idxRet(f.etfTwr, s, e);
+  document.getElementById('trkSplitTable').innerHTML =
+    '<tr><th>Sleeve</th><th>Value Now</th><th>Share of Fund</th><th>Return</th><th>vs SPY</th></tr>' +
+    [['Equities', f.eqNav, eqR], ['ETFs', f.etfNav, etR]].map(([n, arr, r]) =>
+      '<tr><td style="font-weight:700">' + n + '</td><td>$' + fmt(arr[e]) + '</td><td>' +
+      (f.nav[e] ? (arr[e] / f.nav[e] * 100).toFixed(1) : '0') + '%</td><td class="' + cls(r) + '">' + pct(r) +
+      '</td><td class="' + cls(r != null && spy != null ? r - spy : null) + '">' +
+      pct(r != null && spy != null ? r - spy : null) + '</td></tr>').join('') +
+    '<tr><td style="font-weight:700">Total Fund</td><td><strong>$' + fmt(f.nav[e]) + '</strong></td><td>100%</td><td class="' +
+    cls(fundRet) + '"><strong>' + pct(fundRet) + '</strong></td><td class="' + cls(alpha) + '"><strong>' + pct(alpha) + '</strong></td></tr>';
+
+  const flowRows = [];
+  for (let i = s; i <= e; i++) if (f.flows[i]) flowRows.push([dates[i], f.flows[i]]);
+  document.getElementById('trkFlowTable').innerHTML =
+    '<tr><th>Date</th><th>Type</th><th>Amount</th></tr>' +
+    (flowRows.length ? flowRows.map(([d, v]) =>
+      '<tr><td>' + d + '</td><td>' + (v > 0 ? 'Capital added' : 'Capital withdrawn') + '</td><td class="' +
+      (v > 0 ? 'pos' : 'neg') + '">' + (v > 0 ? '+' : '-') + '$' + fmt(Math.abs(v)) + '</td></tr>').join('')
+      : '<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">No external capital moved in this period</td></tr>');
+
+  const miss = (f.missingPrices || []).length;
+  document.getElementById('trkNote').innerHTML =
+    'Rebuilt from ' + (PERF.dates.length).toLocaleString() + ' trading days of transaction history (' +
+    dates[0] + ' onward), anchored on the ' + PERF.anchor + ' holdings snapshot. ' +
+    '<strong>Time-weighted</strong> return strips out the $' + fmt(Math.abs(f.externalFlows || 0)) +
+    ' of wires so it can be compared with SPY fairly; <strong>money-weighted</strong> reflects the actual dollars at work.' +
+    (miss ? ' <span style="color:var(--gold)">' + miss + ' legacy symbol' + (miss > 1 ? 's' : '') + ' could not be priced and are excluded.</span>' : '');
+}
+
+function kpiCard(label, value, hint, klass, accent) {
+  return '<div class="kpi' + (accent ? ' accent' : '') + '"><div class="kpi-label">' + label +
+    '</div><div class="kpi-value ' + (klass || '') + '">' + value + '</div><div class="kpi-sub">' + hint + '</div></div>';
+}
+
+/* ── SECTOR PERFORMANCE ─────────────────────────────────────────────────── */
+function setSpMode(m, btn) {
+  spMode = m;
+  document.querySelectorAll('[data-spmode]').forEach(b => b.classList.toggle('active', b === btn));
+  renderSectorPerf();
+}
+function setSpPeriod(p, btn) {
+  spPeriod = p;
+  document.querySelectorAll('#spPeriodRow .period-btn').forEach(b => b.classList.toggle('active', b === btn));
+  spDrillSector = null;
+  renderSectorPerf();
+}
+async function initSectorPerf() {
+  try { await loadPerfData(); }
+  catch (e) {
+    document.getElementById('spTable').innerHTML =
+      '<tr><td style="color:var(--red);padding:14px">Could not load performance history: ' + e.message + '</td></tr>';
+    return;
+  }
+  const pr = document.getElementById('spPeriodRow');
+  if (!pr.children.length) {
+    pr.innerHTML = PERF_PERIODS.map(p =>
+      '<button class="period-btn' + (p === spPeriod ? ' active' : '') + '" onclick="setSpPeriod(\'' + p + '\',this)">' + p + '</button>').join('');
+  }
+  renderSectorPerf();
+}
+
+function sectorPerfRows() {
+  const f = PERF.funds[perfFundKey()];
+  const e = PERF.dates.length - 1, s = perfStartIdx(spPeriod);
+  const EXCL = ['Broad Market', 'Fixed Income', 'Other'];
+  const rows = [];
+  for (const [name, navArr] of Object.entries(f.sectors || {})) {
+    if (EXCL.includes(name)) continue;
+    if (!navArr[e] || navArr[e] < 100) continue;
+    const twr = (f.sectorTwr || {})[name];
+    const ours = idxRet(twr, s, e);
+    const bm = SECTOR_BENCHMARKS[name];
+    const bmRet = bm && PERF.bench && PERF.bench[bm] ? idxRet(PERF.bench[bm], s, e) : null;
+    rows.push({ name, value: navArr[e], ours, bm, bmRet,
+      alpha: (ours != null && bmRet != null) ? ours - bmRet : null,
+      weight: f.nav[e] ? navArr[e] / f.nav[e] * 100 : 0 });
+  }
+  return rows.sort((a, b) => b.value - a.value);
+}
+
+function renderSectorPerf() {
+  if (!PERF) return;
+  const f = PERF.funds[perfFundKey()];
+  const dates = PERF.dates, e = dates.length - 1, s = perfStartIdx(spPeriod);
+  document.getElementById('spFundLabel').textContent = '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
+  const rows = sectorPerfRows();
+
+  if (spChartRef) spChartRef.destroy();
+  const ctx = document.getElementById('spChart').getContext('2d');
+
+  if (spMode === 'bar') {
+    spChartRef = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: rows.map(r => r.name),
+        datasets: [
+          { label: 'Our sector', data: rows.map(r => r.ours == null ? 0 : +r.ours.toFixed(2)),
+            backgroundColor: rows.map(r => r.ours >= 0 ? 'rgba(12,42,94,.88)' : 'rgba(214,69,61,.88)'), borderRadius: 3 },
+          { label: 'Benchmark ETF', data: rows.map(r => r.bmRet == null ? 0 : +r.bmRet.toFixed(2)),
+            backgroundColor: 'rgba(224,139,42,.65)', borderRadius: 3 }
+        ] },
+      options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.x) } } },
+        scales: { x: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                  y: { ticks: { font: { size: 10 } }, grid: { display: false } } } }
+    });
+  } else {
+    const idx = sampleSeries(f.twr, s, e, 140);
+    const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
+      (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
+    const palette = ['#0c2a5e', '#c9a84c', '#2057c9', '#159a51', '#d6453d', '#7c3aed', '#0891b2', '#b45309', '#be185d', '#4d7c0f', '#0f766e'];
+    const ds = rows.slice(0, 8).map((r, i) => ({
+      label: r.name, data: idx.map(j => +(idxRet((f.sectorTwr || {})[r.name], s, j) || 0).toFixed(2)),
+      borderColor: palette[i % palette.length], backgroundColor: 'transparent',
+      borderWidth: 1.9, pointRadius: 0, fill: false, tension: .25
+    }));
+    spChartRef = new Chart(ctx, {
+      type: 'line', data: { labels, datasets: ds },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                  x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } } } }
+    });
+    const palette2 = ['#0c2a5e', '#c9a84c', '#2057c9', '#159a51', '#d6453d', '#7c3aed', '#0891b2', '#b45309'];
+    document.getElementById('spLegend').innerHTML = rows.slice(0, 8).map((r, i) =>
+      '<span class="legend-item"><span class="legend-dot" style="background:' + palette2[i % palette2.length] + '"></span>' + r.name + '</span>').join('');
+  }
+  if (spMode === 'bar') {
+    document.getElementById('spLegend').innerHTML =
+      '<span class="legend-item"><span class="legend-dot" style="background:#0c2a5e"></span>Our sector</span>' +
+      '<span class="legend-item"><span class="legend-dot" style="background:rgba(224,139,42,.85)"></span>Benchmark ETF</span>';
+  }
+
+  document.getElementById('spTable').innerHTML =
+    '<tr><th>Sector</th><th>Value</th><th>Weight</th><th>Our Return</th><th>Benchmark</th><th>ETF Return</th><th>Alpha</th></tr>' +
+    rows.map(r =>
+      '<tr style="cursor:pointer" onclick="drillSector(\'' + r.name.replace(/'/g, "\\'") + '\')">' +
+      '<td style="font-weight:700;color:var(--navy)">' + r.name + '</td>' +
+      '<td>$' + fmt(r.value) + '</td><td>' + r.weight.toFixed(1) + '%</td>' +
+      '<td class="' + cls(r.ours) + '">' + pct(r.ours) + '</td>' +
+      '<td class="ticker-cell">' + (r.bm || '—') + '</td>' +
+      '<td class="' + cls(r.bmRet) + '">' + pct(r.bmRet) + '</td>' +
+      '<td class="' + cls(r.alpha) + '" style="font-weight:700">' + pct(r.alpha) + '</td></tr>').join('');
+  if (spDrillSector) drillSector(spDrillSector, true);
+}
+
+// Holding-level returns inside a sector, fetched live for the selected period.
+async function drillSector(name, keep) {
+  spDrillSector = name;
+  const el = document.getElementById('spDrill');
+  const holds = S.holdings.filter(h => h.sector === name);
+  const yfPeriod = spPeriod === 'ALL' ? '5Y' : spPeriod;
+  el.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:8px">' + name +
+    ' &mdash; holdings <span style="font-weight:400;color:var(--muted)">(' + yfPeriod + ' returns, loading…)</span></div>';
+  const rets = {};
+  for (let i = 0; i < holds.length; i += 6) {
+    await Promise.all(holds.slice(i, i + 6).map(async h => { rets[h.ticker] = await fetchCandleReturn(h.ticker, yfPeriod); }));
+  }
+  const bm = SECTOR_BENCHMARKS[name];
+  const bmRet = bm ? await fetchCandleReturn(bm, yfPeriod) : null;
+  const sorted = [...holds].sort((a, b) => (rets[b.ticker] ?? -999) - (rets[a.ticker] ?? -999));
+  const eq = sorted.filter(h => h.type === 'equity'), etf = sorted.filter(h => h.type === 'etf');
+  const wRet = list => { let sw = 0, sr = 0; list.forEach(h => { const v = rets[h.ticker]; if (v != null) { const w = h.marketValue || 0; sr += v * w; sw += w; } }); return sw ? sr / sw : null; };
+  const eqR = wRet(eq), etfR = wRet(etf), allR = wRet(sorted);
+  const row = h => {
+    const v = rets[h.ticker], a = (v != null && bmRet != null) ? v - bmRet : null;
+    return '<tr><td class="ticker-cell">' + h.ticker + '</td><td>' + h.company + '</td>' +
+      '<td><span class="badge type-' + h.type + '">' + h.type.toUpperCase() + '</span></td>' +
+      '<td>$' + fmt(h.marketValue || 0) + '</td><td class="' + cls(v) + '">' + pct(v) + '</td>' +
+      '<td class="' + cls(a) + '">' + pct(a) + '</td></tr>';
+  };
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+    '<span style="font-size:12px;font-weight:700;color:var(--navy)">' + name + ' &mdash; holdings (' + yfPeriod + ')</span>' +
+    '<button class="filter-btn" onclick="spDrillSector=null;document.getElementById(\'spDrill\').innerHTML=\'\'">&times; Close</button></div>' +
+    '<div class="kpi-grid" style="margin-bottom:10px">' +
+      kpiCard('Equities in sector', pct(eqR), eq.length + ' position' + (eq.length === 1 ? '' : 's'), cls(eqR), false) +
+      kpiCard('ETFs in sector', pct(etfR), etf.length + ' position' + (etf.length === 1 ? '' : 's'), cls(etfR), false) +
+      kpiCard('Sector combined', pct(allR), 'value-weighted', cls(allR), true) +
+      kpiCard('Benchmark ' + (bm || ''), pct(bmRet), 'sector ETF', cls(bmRet), false) +
+      kpiCard('Alpha', pct(allR != null && bmRet != null ? allR - bmRet : null), 'vs ' + (bm || 'benchmark'), cls(allR != null && bmRet != null ? allR - bmRet : null), true) +
+    '</div>' +
+    '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th><th>Market Value</th><th>' + yfPeriod +
+    ' Return</th><th>vs ' + (bm || 'ETF') + '</th></tr>' + sorted.map(row).join('') + '</table></div>';
 }
 function showTab(tab, btn) {
   currentTab = tab;
