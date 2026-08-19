@@ -9,12 +9,14 @@ const r2=a=>a.map(v=>v==null?null:+v.toFixed(2));
 const metaArr=Object.keys(P.meta.sectorOf||{}).map(t=>[t,P.meta.sectorOf[t],P.meta.typeOf[t]||'equity']);
 const OUT={generatedAt:P.generatedAt,anchor:P.anchor,dates:P.dates,funds:{},bench:{},tickers:metaArr};
 for(const [k,f] of Object.entries(P.funds)){
- const sec={},secTwr={};
+ const sec={},secTwr={},secFlow={};
  for(const [s,v] of Object.entries(f.sectors)) sec[s]=r0(v);
  for(const [s,v] of Object.entries(f.sectorTwr||{})) secTwr[s]=r2(v);
+ // purchases/sales per sector - needed to measure the effect of entry timing
+ for(const [s,v] of Object.entries(f.sectorFlows||{})) secFlow[s]=r0(v);
  OUT.funds[k]={name:f.name,nav:r0(f.nav),flows:r0(f.flows),eqNav:r0(f.eqNav),etfNav:r0(f.etfNav),
   twr:r2(f.twr),eqTwr:r2(f.eqTwr||[]),etfTwr:r2(f.etfTwr||[]),
-  sectors:sec,sectorTwr:secTwr,irr:f.irr,externalFlows:f.externalFlows,
+  sectors:sec,sectorTwr:secTwr,sectorFlows:secFlow,irr:f.irr,externalFlows:f.externalFlows,
   missingPrices:f.missingPrices,
   // ticker keys can contain '.', which Firebase forbids - store as pairs
   holdings:Object.entries(f.holdings||{}).map(([tk,v])=>[tk,v])};

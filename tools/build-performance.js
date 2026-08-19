@@ -313,7 +313,7 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
     idx.push(+(idx[i-1]*(1+r)).toFixed(4));} return idx;};
   OUT.funds[f.key]={
    name:f.name, nav, flows, eqNav, etfNav, twr, sectors:secNav, sectorTwr:secTwr,
-   eqTwr:sleeveTwr(eqNav,eqFlow), etfTwr:sleeveTwr(etfNav,etfFlow), holdings,
+   eqTwr:sleeveTwr(eqNav,eqFlow), etfTwr:sleeveTwr(etfNav,etfFlow), holdings, sectorFlows:secFlow,
    irr: irr!=null?+(irr*100).toFixed(2):null,
    externalFlows:+flows.reduce((a,b)=>a+b,0).toFixed(2),   // wires only, excl. opening NAV
    startNav:nav[0], endNav:nav[nav.length-1],

@@ -1540,6 +1540,49 @@ async function initSectorPerf() {
   renderSectorPerf();
 }
 
+/* Sector results over a window.
+
+   Two different questions, two different numbers:
+
+   ourRet (Modified Dietz) is what the sector actually earned on the dollars we
+   had in it, so adding to a position before a rise IS rewarded. This is the
+   number the chart and table lead with, because it is what the fund experienced.
+
+   bmRet is the counterfactual: the same dollars moved into the sector's
+   benchmark ETF on exactly the same days. Comparing against that isolates what
+   our security selection added, because the timing is held identical on both
+   sides. twr is kept for reference - it strips timing out entirely. */
+function sectorWindow(name, navArr, flowArr, s, e) {
+  const V0 = navArr[s] || 0, V1 = navArr[e] || 0;
+  const span = e - s;
+  let netFlow = 0, weighted = 0;
+  const flows = [];
+  for (let i = s + 1; i <= e; i++) {
+    const fl = (flowArr && flowArr[i]) || 0;
+    if (!fl) continue;
+    netFlow += fl;
+    weighted += fl * ((e - i) / (span || 1));   // fraction of the window it was invested
+    flows.push({ i, fl });
+  }
+  const denom = V0 + weighted;
+  const gain = V1 - V0 - netFlow;
+  const ourRet = denom > 0 ? gain / denom * 100 : null;
+
+  // same cash, same days, into the benchmark ETF
+  let bmRet = null, bmGain = null;
+  const bm = SECTOR_BENCHMARKS[name];
+  const px = bm && PERF.bench ? PERF.bench[bm] : null;
+  if (px && px[s] > 0 && px[e] > 0 && denom > 0) {
+    let shares = V0 / px[s];
+    for (const { i, fl } of flows) if (px[i] > 0) shares += fl / px[i];
+    const bmV1 = shares * px[e];
+    bmGain = bmV1 - V0 - netFlow;
+    bmRet = bmGain / denom * 100;
+  }
+  return { V0, V1, netFlow, gain, ourRet, bm, bmRet, bmGain,
+           alpha: (ourRet != null && bmRet != null) ? ourRet - bmRet : null };
+}
+
 function sectorPerfRows() {
   const f = PERF.funds[perfFundKey()];
   const e = PERF.dates.length - 1, s = perfStartIdx(spPeriod);
@@ -1548,12 +1591,11 @@ function sectorPerfRows() {
   for (const [name, navArr] of Object.entries(f.sectors || {})) {
     if (EXCL.includes(name)) continue;
     if (!navArr[e] || navArr[e] < 100) continue;
-    const twr = (f.sectorTwr || {})[name];
-    const ours = idxRet(twr, s, e);
-    const bm = SECTOR_BENCHMARKS[name];
-    const bmRet = bm && PERF.bench && PERF.bench[bm] ? idxRet(PERF.bench[bm], s, e) : null;
-    rows.push({ name, value: navArr[e], ours, bm, bmRet,
-      alpha: (ours != null && bmRet != null) ? ours - bmRet : null,
+    const w = sectorWindow(name, navArr, (f.sectorFlows || {})[name], s, e);
+    rows.push({ name, value: navArr[e],
+      ours: w.ourRet, gain: w.gain, netFlow: w.netFlow,
+      bm: w.bm, bmRet: w.bmRet, bmGain: w.bmGain, alpha: w.alpha,
+      twr: idxRet((f.sectorTwr || {})[name], s, e),
       weight: f.nav[e] ? navArr[e] / f.nav[e] * 100 : 0 });
   }
   return rows.sort((a, b) => b.value - a.value);
@@ -1576,7 +1618,7 @@ function renderSectorPerf() {
         datasets: [
           { label: 'Our sector', data: rows.map(r => r.ours == null ? 0 : +r.ours.toFixed(2)),
             backgroundColor: rows.map(r => r.ours >= 0 ? 'rgba(12,42,94,.88)' : 'rgba(214,69,61,.88)'), borderRadius: 3 },
-          { label: 'Benchmark ETF', data: rows.map(r => r.bmRet == null ? 0 : +r.bmRet.toFixed(2)),
+          { label: 'Same money in the ETF', data: rows.map(r => r.bmRet == null ? 0 : +r.bmRet.toFixed(2)),
             backgroundColor: 'rgba(224,139,42,.65)', borderRadius: 3 }
         ] },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
@@ -1584,43 +1626,58 @@ function renderSectorPerf() {
         scales: { x: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
                   y: { ticks: { font: { size: 10 } }, grid: { display: false } } } }
     });
+    document.getElementById('spLegend').innerHTML =
+      '<span class="legend-item"><span class="legend-dot" style="background:#0c2a5e"></span>Our sector (what our dollars earned)</span>' +
+      '<span class="legend-item"><span class="legend-dot" style="background:rgba(224,139,42,.85)"></span>Same money, same days, in the ETF</span>';
   } else {
-    const idx = sampleSeries(f.twr, s, e, 140);
+    // Cumulative dollars earned. Buying into a sector before it rises shows up
+    // directly here, which a percentage return can hide.
+    const idx = sampleSeries(f.nav, s, e, 140);
     const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
       (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
     const palette = ['#0c2a5e', '#c9a84c', '#2057c9', '#159a51', '#d6453d', '#7c3aed', '#0891b2', '#b45309', '#be185d', '#4d7c0f', '#0f766e'];
-    const ds = rows.slice(0, 8).map((r, i) => ({
-      label: r.name, data: idx.map(j => +(idxRet((f.sectorTwr || {})[r.name], s, j) || 0).toFixed(2)),
-      borderColor: palette[i % palette.length], backgroundColor: 'transparent',
-      borderWidth: 1.9, pointRadius: 0, fill: false, tension: .25
-    }));
+    const top = rows.slice(0, 8);
+    const ds = top.map((r, k) => {
+      const navArr = f.sectors[r.name], flArr = (f.sectorFlows || {})[r.name] || [];
+      // running sum of value change with purchases and sales taken out
+      const cum = []; let run = 0, prevI = s;
+      for (const j of idx) {
+        for (let i = prevI + 1; i <= j; i++) run += (navArr[i] - navArr[i - 1] - (flArr[i] || 0));
+        prevI = j; cum.push(Math.round(run));
+      }
+      return { label: r.name, data: cum, borderColor: palette[k % palette.length],
+        backgroundColor: 'transparent', borderWidth: 1.9, pointRadius: 0, fill: false, tension: .25 };
+    });
     spChartRef = new Chart(ctx, {
       type: 'line', data: { labels, datasets: ds },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.parsed.y >= 0 ? '+' : '-') + money0(c.parsed.y) } } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString(), font: { size: 11 } }, grid: { color: '#f1f5f9' } },
                   x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } } } }
     });
-    const palette2 = ['#0c2a5e', '#c9a84c', '#2057c9', '#159a51', '#d6453d', '#7c3aed', '#0891b2', '#b45309'];
-    document.getElementById('spLegend').innerHTML = rows.slice(0, 8).map((r, i) =>
-      '<span class="legend-item"><span class="legend-dot" style="background:' + palette2[i % palette2.length] + '"></span>' + r.name + '</span>').join('');
-  }
-  if (spMode === 'bar') {
     document.getElementById('spLegend').innerHTML =
-      '<span class="legend-item"><span class="legend-dot" style="background:#0c2a5e"></span>Our sector</span>' +
-      '<span class="legend-item"><span class="legend-dot" style="background:rgba(224,139,42,.85)"></span>Benchmark ETF</span>';
+      '<span style="font-size:11px;color:var(--muted);width:100%;text-align:center;margin-bottom:4px">Cumulative dollars earned &mdash; purchases and sales removed, so this is gain, not money added</span>' +
+      top.map((r, i) => '<span class="legend-item"><span class="legend-dot" style="background:' +
+        palette[i % palette.length] + '"></span>' + r.name + '</span>').join('');
   }
 
   document.getElementById('spTable').innerHTML =
-    '<tr><th>Sector</th><th>Value</th><th>Weight</th><th>Our Return</th><th>Benchmark</th><th>ETF Return</th><th>Alpha</th></tr>' +
+    '<tr><th>Sector</th><th>Value</th><th>Weight</th>' +
+    '<th title="What our dollars actually earned in this sector, including the effect of when we bought">Our Return</th>' +
+    '<th>Dollar Gain</th><th>Benchmark</th>' +
+    '<th title="The same cash moved into the ETF on the same days - so timing is identical and only selection differs">Same Money in ETF</th>' +
+    '<th>Alpha</th>' +
+    '<th title="Return with the effect of timing stripped out">Time-Wtd</th></tr>' +
     rows.map(r =>
       '<tr style="cursor:pointer" onclick="drillSector(\'' + r.name.replace(/'/g, "\\'") + '\')">' +
       '<td style="font-weight:700;color:var(--navy)">' + r.name + '</td>' +
       '<td>$' + fmt(r.value) + '</td><td>' + r.weight.toFixed(1) + '%</td>' +
-      '<td class="' + cls(r.ours) + '">' + pct(r.ours) + '</td>' +
+      '<td class="' + cls(r.ours) + '" style="font-weight:700">' + pct(r.ours) + '</td>' +
+      '<td class="' + (r.gain >= 0 ? 'pos' : 'neg') + '">' + (r.gain >= 0 ? '+' : '-') + money0(r.gain) + '</td>' +
       '<td class="ticker-cell">' + (r.bm || '—') + '</td>' +
       '<td class="' + cls(r.bmRet) + '">' + pct(r.bmRet) + '</td>' +
-      '<td class="' + cls(r.alpha) + '" style="font-weight:700">' + pct(r.alpha) + '</td></tr>').join('');
+      '<td class="' + cls(r.alpha) + '" style="font-weight:700">' + pct(r.alpha) + '</td>' +
+      '<td style="color:var(--muted)">' + pct(r.twr) + '</td></tr>').join('');
   if (spDrillSector) drillSector(spDrillSector, true);
 }
 
@@ -1638,15 +1695,17 @@ function drillSector(name) {
   const holds = S.holdings.filter(h => h.sector === name);
   const rec = tk => (H[tk] || {})[per] || null;
 
-  const bm = SECTOR_BENCHMARKS[name];
   const e = PERF.dates.length - 1, s = perfStartIdx(per);
-  const bmRet = bm && PERF.bench && PERF.bench[bm] ? idxRet(PERF.bench[bm], s, e) : null;
+  // Headline figures come from the same calculation as the table above, so the
+  // two can never disagree.
+  const w = sectorWindow(name, f.sectors[name] || [], (f.sectorFlows || {})[name], s, e);
+  const bm = w.bm, bmRet = w.bmRet;
 
   const sorted = [...holds].sort((a, b) => ((rec(b.ticker) || {}).r ?? -9999) - ((rec(a.ticker) || {}).r ?? -9999));
   const eq = sorted.filter(h => h.type === 'equity'), etf = sorted.filter(h => h.type === 'etf');
-  const wRet = list => { let sw = 0, sr = 0; list.forEach(h => { const r = rec(h.ticker); if (r) { const w = h.marketValue || 0; sr += r.r * w; sw += w; } }); return sw ? sr / sw : null; };
-  const eqR = wRet(eq), etfR = wRet(etf), allR = wRet(sorted);
-  const totalGain = sorted.reduce((a, h) => a + ((rec(h.ticker) || {}).g || 0), 0);
+  const wRet = list => { let sw = 0, sr = 0; list.forEach(h => { const r = rec(h.ticker); if (r) { const wt = h.marketValue || 0; sr += r.r * wt; sw += wt; } }); return sw ? sr / sw : null; };
+  const eqR = wRet(eq), etfR = wRet(etf), allR = w.ourRet;
+  const totalGain = w.gain;
 
   const row = h => {
     const r = rec(h.ticker);
@@ -1672,9 +1731,9 @@ function drillSector(name) {
     '<div class="kpi-grid" style="margin-bottom:10px">' +
       kpiCard('Equities in sector', pct(eqR), eq.length + ' position' + (eq.length === 1 ? '' : 's'), cls(eqR), false) +
       kpiCard('ETFs in sector', pct(etfR), etf.length + ' position' + (etf.length === 1 ? '' : 's'), cls(etfR), false) +
-      kpiCard('Sector combined', pct(allR), 'our return, value-weighted', cls(allR), true) +
-      kpiCard('Benchmark ' + (bm || ''), pct(bmRet), 'sector ETF', cls(bmRet), false) +
-      kpiCard('Alpha', pct(allR != null && bmRet != null ? allR - bmRet : null), 'vs ' + (bm || 'benchmark'), cls(allR != null && bmRet != null ? allR - bmRet : null), true) +
+      kpiCard('Sector combined', pct(allR), 'what our dollars earned here', cls(allR), true) +
+      kpiCard('Same money in ' + (bm || 'ETF'), pct(bmRet), 'identical cash, identical days', cls(bmRet), false) +
+      kpiCard('Alpha', pct(w.alpha), 'ours minus the ETF counterfactual', cls(w.alpha), true) +
       kpiCard('Dollar Gain', (totalGain >= 0 ? '+' : '-') + money0(totalGain), 'earned in this sector', totalGain >= 0 ? 'pos' : 'neg', false) +
     '</div>' +
     '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th><th>Market Value</th>' +
