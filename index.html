@@ -667,9 +667,13 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <div class="chart-legend" id="trkLegend"></div>
     <div id="trkNote" style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5"></div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-title">Endowment vs CEE Fund <span style="font-weight:400;font-size:11px;color:var(--muted)">separate portfolios, separate transaction histories &mdash; same measurement basis</span></div>
+    <div class="tbl-wrap"><table id="trkFundCompare"></table></div>
+  </div>
   <div class="grid-2">
-    <div class="card"><div class="card-title">Equities vs ETFs</div><div class="tbl-wrap"><table id="trkSplitTable"></table></div></div>
-    <div class="card"><div class="card-title">Capital Flows</div><div class="tbl-wrap"><table id="trkFlowTable"></table></div></div>
+    <div class="card"><div class="card-title">Equities vs ETFs <span id="trkSplitFund" style="font-weight:400;font-size:11px;color:var(--muted)"></span></div><div class="tbl-wrap"><table id="trkSplitTable"></table></div></div>
+    <div class="card"><div class="card-title">Capital Flows <span id="trkFlowFund" style="font-weight:400;font-size:11px;color:var(--muted)"></span></div><div class="tbl-wrap"><table id="trkFlowTable"></table></div></div>
   </div>
 </div>
 
@@ -1355,6 +1359,12 @@ function toggleTrkBench(id, btn) {
   b.on = !b.on; btn.classList.toggle('active', b.on);
   renderTrack();
 }
+let trkShowOtherFund = false;
+function toggleOtherFund(btn) {
+  trkShowOtherFund = !trkShowOtherFund;
+  btn.classList.toggle('active', trkShowOtherFund);
+  renderTrack();
+}
 
 async function initTrack() {
   const note = document.getElementById('trkNote');
@@ -1374,7 +1384,10 @@ async function initTrack() {
     '<button class="filter-btn' + (b.on ? ' active' : '') + '"' +
     (b.locked ? ' title="Always shown"' : ' onclick="toggleTrkBench(\'' + b.id + '\',this)"') +
     ' style="border-color:' + b.color + '"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
-    b.color + ';margin-right:5px"></span>' + b.id + (b.locked ? ' &middot; always on' : '') + '</button>').join('');
+    b.color + ';margin-right:5px"></span>' + b.id + (b.locked ? ' &middot; always on' : '') + '</button>').join('') +
+    '<button class="filter-btn' + (trkShowOtherFund ? ' active' : '') + '" onclick="toggleOtherFund(this)" ' +
+    'title="Overlay the other portfolio" style="border-color:#c9a84c"><span style="display:inline-block;width:8px;height:8px;' +
+    'border-radius:50%;background:#c9a84c;margin-right:5px"></span>Other fund</button>';
   renderTrack();
 }
 
@@ -1429,6 +1442,8 @@ function renderTrack() {
   const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
     (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
   const active = TRK_BENCH.filter(b => b.on && PERF.bench && PERF.bench[b.id]);
+  const otherFund = trkShowOtherFund
+    ? PERF.funds[perfFundKey() === 'endowment' ? 'ceeFund' : 'endowment'] : null;
   const navyC = '#0c2a5e';
 
   if (trkChartRef) trkChartRef.destroy();
@@ -1445,6 +1460,11 @@ function renderTrack() {
       borderColor: b.color, backgroundColor: 'transparent', borderWidth: 1.8,
       pointRadius: 0, fill: false, tension: .25, borderDash: b.id === 'SPY' ? [] : [5, 3]
     }));
+    if (otherFund) ds.push({
+      label: otherFund.name, data: idx.map(i => +(idxRet(otherFund.twr, s, i) || 0).toFixed(2)),
+      borderColor: '#c9a84c', backgroundColor: 'transparent', borderWidth: 2,
+      pointRadius: 0, fill: false, tension: .25, borderDash: [2, 2]
+    });
     trkChartRef = new Chart(ctx, {
       type: 'line', data: { labels, datasets: ds },
       options: {
@@ -1462,6 +1482,10 @@ function renderTrack() {
       const bb = bucketReturns(PERF.bench[b.id], s, e, dates);
       ds.push({ label: b.id, data: bb.map(x => +x.ret.toFixed(2)), backgroundColor: b.color + '88', borderRadius: 3 });
     });
+    if (otherFund) {
+      const ob = bucketReturns(otherFund.twr, s, e, dates);
+      ds.push({ label: otherFund.name, data: ob.map(x => +x.ret.toFixed(2)), backgroundColor: '#c9a84c99', borderRadius: 3 });
+    }
     trkChartRef = new Chart(ctx, {
       type: 'bar', data: { labels: fb.map(b => b.label), datasets: ds },
       options: {
@@ -1474,7 +1498,8 @@ function renderTrack() {
   }
   document.getElementById('trkLegend').innerHTML =
     '<span class="legend-item"><span class="legend-dot" style="background:' + navyC + '"></span>' + f.name + '</span>' +
-    active.map(b => '<span class="legend-item"><span class="legend-dot" style="background:' + b.color + '"></span>' + b.id + '</span>').join('');
+    active.map(b => '<span class="legend-item"><span class="legend-dot" style="background:' + b.color + '"></span>' + b.id + '</span>').join('') +
+    (otherFund ? '<span class="legend-item"><span class="legend-dot" style="background:#c9a84c"></span>' + otherFund.name + '</span>' : '');
 
   // Equities vs ETFs, measured the same way as everything else: what each
   // sleeve's dollars earned, against the same cash put into SPY on the same days.
@@ -1510,6 +1535,38 @@ function renderTrack() {
       '<tr><td>' + d + '</td><td>' + (v > 0 ? 'Capital added' : 'Capital withdrawn') + '</td><td class="' +
       (v > 0 ? 'pos' : 'neg') + '">' + (v > 0 ? '+' : '-') + '$' + fmt(Math.abs(v)) + '</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">No external capital moved in this period</td></tr>');
+
+  // Both funds side by side on the selected period. They run different books
+  // and different mandates, so the comparison is informative rather than a
+  // scoreboard — the Endowment carries bonds the CEE Fund does not.
+  const cmpRows = [['endowment', 'Endowment'], ['ceeFund', 'CEE Fund']].map(([k, nm]) => {
+    const g = PERF.funds[k]; if (!g) return '';
+    const w = mdWindow(g.nav, g.flows, s, e, 'SPY');
+    const grs = riskStats(g, s, e);
+    const gTwr = idxRet(g.twr, s, e);
+    let gPeak = g.twr[s], gMdd = 0;
+    for (let i = s; i <= e; i++) { if (g.twr[i] > gPeak) gPeak = g.twr[i]; const dd = (g.twr[i] / gPeak - 1) * 100; if (dd < gMdd) gMdd = dd; }
+    const wired = g.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+    const isActive = k === perfFundKey();
+    return '<tr style="cursor:pointer' + (isActive ? ';background:rgba(201,168,76,.08)' : '') +
+      '" onclick="switchFund(\'' + (k === 'endowment' ? 'endowment' : 'cee') + '\',null)" title="Click to switch to this fund">' +
+      '<td style="font-weight:700;color:var(--navy)">' + nm + (isActive ? ' <span style="font-size:9px;color:var(--gold)">&#9679; viewing</span>' : '') + '</td>' +
+      '<td>$' + fmt(g.nav[e]) + '</td>' +
+      '<td class="' + cls(w && w.ourRet) + '" style="font-weight:700">' + pct(w && w.ourRet) + '</td>' +
+      '<td class="' + (w && w.gain >= 0 ? 'pos' : 'neg') + '">' + (w && w.gain >= 0 ? '+' : '-') + money0(w ? w.gain : 0) + '</td>' +
+      '<td class="' + cls(w && w.bmRet) + '">' + pct(w && w.bmRet) + '</td>' +
+      '<td class="' + cls(w && w.alpha) + '" style="font-weight:700">' + pct(w && w.alpha) + '</td>' +
+      '<td style="color:var(--muted)">' + pct(gTwr) + '</td>' +
+      '<td>' + (grs && grs.beta != null ? grs.beta.toFixed(2) : '—') + '</td>' +
+      '<td class="neg">' + pct(gMdd) + '</td>' +
+      '<td>' + (wired ? (wired > 0 ? '+' : '-') + money0(wired) : '—') + '</td></tr>';
+  }).join('');
+  document.getElementById('trkFundCompare').innerHTML =
+    '<tr><th>Fund</th><th>Value</th><th>Our Return</th><th>Dollar Gain</th><th>Same in SPY</th><th>Alpha</th>' +
+    '<th>Time-Wtd</th><th>Beta</th><th>Max DD</th><th>Capital Wired</th></tr>' + cmpRows;
+  const fLbl = '&middot; ' + f.name;
+  document.getElementById('trkSplitFund').innerHTML = fLbl;
+  document.getElementById('trkFlowFund').innerHTML = fLbl;
 
   const miss = (f.missingPrices || []).length;
   document.getElementById('trkNote').innerHTML =
@@ -1818,6 +1875,10 @@ function switchFund(fund, btn) {
   else if (tab === 'movers') { moversData = {}; loadMovers(); }   // fund changed: reload for the new fund's holdings
   else if (tab === 'sectorcompare') renderSectorCards();
   else if (tab === 'risk') loadEtfLookThrough();                  // recompute look-through for the new fund
+  // The two funds hold different books and are managed separately, so their
+  // performance views must redraw rather than keep showing the previous fund.
+  else if (tab === 'track') renderTrack();
+  else if (tab === 'sectorperf') renderSectorPerf();
 }
 
 // ── KPIs ──────────────────────────────────────────────────────────────────────
