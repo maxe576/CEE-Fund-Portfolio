@@ -924,7 +924,24 @@ function calculateSectorExposure(holdings, { denominator = 'totalFund', totalFun
 function fmtBeta(b) { return (b == null || !Number.isFinite(b)) ? '—' : b.toFixed(2); }
 
 // ── RETURN CALCULATIONS ───────────────────────────────────────────────────────
+// Year-to-date figures from the rebuilt series, when it has loaded.
+function perfYTD(fundKey) {
+  if (!PERF) return null;
+  const f = PERF.funds[fundKey === 'endowment' ? 'endowment' : 'ceeFund'];
+  if (!f || !f.twr) return null;
+  const D = PERF.dates, e = D.length - 1, yr = D[e].slice(0, 4);
+  let s = 0; for (let i = 0; i < D.length; i++) if (D[i].startsWith(yr)) { s = i; break; }
+  const flows = f.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+  return { twr: (f.twr[e] / f.twr[s] - 1) * 100, flows,
+           spy: PERF.bench && PERF.bench.SPY ? (PERF.bench.SPY[e] / PERF.bench.SPY[s] - 1) * 100 : null };
+}
+
 function calcFundYTDReturn(fundKey) {
+  // Prefer the transaction-rebuilt time-weighted return. The simple balance
+  // comparison below treats deposits as investment gains, which overstated the
+  // Endowment badly once it received $30k mid-February.
+  const p = perfYTD(fundKey);
+  if (p) return p.twr;
   // Accept both key spellings: the fund selector uses 'cee', the baselines table uses 'ceeFund'.
   const b = YTD_BASELINES[fundKey] || (fundKey === 'cee' ? YTD_BASELINES.ceeFund : null);
   if (!b) return 0;
@@ -1180,6 +1197,9 @@ function runTabHook(tab) {
   else if (tab === 'risk') { renderRiskExposure(); loadEtfLookThrough(); }
   else if (tab === 'track') initTrack();
   else if (tab === 'sectorperf') initSectorPerf();
+  // The YTD figure here needs the rebuilt series to strip out deposits, so
+  // fetch it once and redraw when it lands.
+  else if (tab === 'benchmark' && !PERF) loadPerfData().then(renderBenchmark).catch(() => {});
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1896,9 +1916,25 @@ function renderBenchmark() {
   const fundBeta=S.beta;
   document.getElementById('riskComparison').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Metric</span><span style="text-align:center">${S.fundName}</span><span style="text-align:center">S&P 500</span></div>
-    ${[['Beta',fmtBeta(fundBeta),'1.00'],['YTD Return (holdings)',calcFundYTDReturn(S.fund).toFixed(2)+'%',(ytdCache&&ytdCache['SPY']!=null)?ytdCache['SPY'].toFixed(2)+'%':'—'],['Positions',S.holdings.length,'500'],['Top Holding Wt',((Math.max(...S.holdings.map(h=>h.marketValue||0))/S.total)*100).toFixed(1)+'%','~7%'],['Cash Weight',(S.cash/S.total*100).toFixed(1)+'%','~0%']].map(([l,f,sp])=>`
+    ${[['Beta',fmtBeta(fundBeta),'1.00'],['YTD Return (time-weighted)',calcFundYTDReturn(S.fund).toFixed(2)+'%',(()=>{const p=perfYTD(S.fund);if(p&&p.spy!=null)return p.spy.toFixed(2)+'%';return (ytdCache&&ytdCache['SPY']!=null)?ytdCache['SPY'].toFixed(2)+'%':'—';})()],['Positions',S.holdings.length,'500'],['Top Holding Wt',((Math.max(...S.holdings.map(h=>h.marketValue||0))/S.total)*100).toFixed(1)+'%','~7%'],['Cash Weight',(S.cash/S.total*100).toFixed(1)+'%','~0%']].map(([l,f,sp])=>`
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
     <span style="color:var(--gray)">${l}</span><span style="text-align:center;font-weight:700;color:var(--navy)">${f}</span><span style="text-align:center;color:var(--gray)">${sp}</span></div>`).join('')}`;
+  // Explain the number whenever capital moved in or out this year, so nobody
+  // reconciles it against the raw account balance and thinks it looks low.
+  const _p = perfYTD(S.fund);
+  const _rcEl = document.getElementById('riskComparison');
+  if (_rcEl && _p && Math.abs(_p.flows) > 0.5) {
+    const naive = ((S.total - (YTD_BASELINES[S.fund === 'endowment' ? 'endowment' : 'ceeFund'] || {}).jan1Total) /
+                   (YTD_BASELINES[S.fund === 'endowment' ? 'endowment' : 'ceeFund'] || {}).jan1Total) * 100;
+    _rcEl.insertAdjacentHTML('beforeend',
+      '<div style="margin-top:10px;padding:9px 11px;background:rgba(201,168,76,.10);border-left:3px solid var(--gold);border-radius:4px;font-size:11px;line-height:1.55;color:var(--muted)">' +
+      '<strong style="color:var(--navy)">Why this differs from the account balance:</strong> the fund received $' +
+      fmt(Math.abs(_p.flows)) + ' of ' + (_p.flows > 0 ? 'new capital' : 'withdrawals') + ' this year. ' +
+      'Comparing balances alone would read ' + (isFinite(naive) ? naive.toFixed(2) + '%' : 'higher') +
+      ', but deposits are not investment gains. The ' + _p.twr.toFixed(2) +
+      '% above is time-weighted, so it is comparable to the S&amp;P.</div>');
+  }
+
   const rows=Object.keys(SP500_SECTORS).map(sec=>{
     const fs=sectors.find(s=>s.name===sec);
     const fp=fs?fs.pct*100:0;
