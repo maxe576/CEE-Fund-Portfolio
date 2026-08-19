@@ -277,6 +277,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
   <button class="nav-tab" data-group="risk" onclick="showTab('risk',this)">🛡 Risk &amp; Exposure</button>
   <button class="nav-tab" data-group="thesis" onclick="showTab('thesis',this)">📋 Investment Thesis</button>
   <button class="nav-tab" data-group="whatif" onclick="showTab('whatif',this)">🔮 What-If</button>
+  <button class="nav-tab" data-group="ledger" onclick="showTab('trades',this)">🧾 Transactions</button>
   <button class="nav-tab" data-group="monitoring" onclick="showTab('news',this)">📡 Market Monitoring</button>
 </nav>
 <div class="main">
@@ -646,6 +647,62 @@ tr:hover td{background:rgba(212,167,44,.06)}
   <div class="card" style="margin-top:16px"><div class="card-title">Top 15 Holdings</div><div class="tbl-wrap"><table id="aumTop15"></table></div></div>
   <div class="card" style="margin-top:16px"><div class="card-title">All Holdings <span id="aumCount" style="font-size:11px;font-weight:400;color:var(--muted)"></span></div><div class="tbl-wrap"><table id="aumTable"></table></div></div>
 </div>
+<!-- ===== TRADE LEDGER ===== -->
+<div id="tab-trades" class="tab-panel">
+  <div class="kpi-grid" id="trdKpis"></div>
+  <div class="card">
+    <div class="card-title">Trade Ledger
+      <span style="font-size:11px;font-weight:400;color:var(--muted)">every buy and sell, with what the stock has done since</span>
+    </div>
+    <div class="filter-row" id="trdFilterRow">
+      <button class="filter-btn active" onclick="setTrdFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setTrdFilter('Buy',this)">Buys</button>
+      <button class="filter-btn" onclick="setTrdFilter('Sell',this)">Sells</button>
+      <button class="filter-btn" onclick="setTrdFilter('corp',this)">Corporate Actions</button>
+      <select id="trdFund" onchange="renderTrades()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
+        <option value="all">Both funds</option><option value="E">Endowment</option><option value="C">CEE Fund</option>
+      </select>
+      <select id="trdYear" onchange="renderTrades()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)"></select>
+      <input id="trdSearch" placeholder="🔍 Ticker…" oninput="renderTrades()" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-width:150px;font-family:inherit;background:var(--card);color:var(--text)">
+    </div>
+    <div class="tbl-wrap"><table id="trdTable"></table></div>
+    <div id="trdCount" style="margin-top:10px;font-size:11px;color:var(--muted)"></div>
+  </div>
+</div>
+
+<!-- ===== DIVIDENDS & INCOME ===== -->
+<div id="tab-dividends" class="tab-panel">
+  <div class="kpi-grid" id="divKpis"></div>
+  <div class="grid-2" style="margin-bottom:14px">
+    <div class="card">
+      <div class="card-title">Income by Year</div>
+      <div style="height:200px"><canvas id="divChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Payers <span style="font-weight:400;font-size:11px;color:var(--muted)">lifetime</span></div>
+      <div class="tbl-wrap" style="max-height:220px;overflow-y:auto"><table id="divTopTable"></table></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Dividend &amp; Interest Records
+      <span style="font-size:11px;font-weight:400;color:var(--muted)">cash received, reinvestments, and interest</span>
+    </div>
+    <div class="filter-row" id="divFilterRow">
+      <button class="filter-btn active" onclick="setDivFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setDivFilter('reinvested',this)">Reinvested</button>
+      <button class="filter-btn" onclick="setDivFilter('cash',this)">Paid in Cash</button>
+      <button class="filter-btn" onclick="setDivFilter('interest',this)">Interest</button>
+      <select id="divFund" onchange="renderDividends()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)">
+        <option value="all">Both funds</option><option value="E">Endowment</option><option value="C">CEE Fund</option>
+      </select>
+      <select id="divYear" onchange="renderDividends()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--card);color:var(--text)"></select>
+      <input id="divSearch" placeholder="🔍 Ticker…" oninput="renderDividends()" style="margin-left:auto;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;min-width:150px;font-family:inherit;background:var(--card);color:var(--text)">
+    </div>
+    <div class="tbl-wrap"><table id="divTable"></table></div>
+    <div id="divCount" style="margin-top:10px;font-size:11px;color:var(--muted)"></div>
+  </div>
+</div>
+
 <!-- ===== TRACK RECORD (transaction-driven overall performance) ===== -->
 <div id="tab-track" class="tab-panel">
   <div class="card" style="margin-bottom:14px">
@@ -658,6 +715,15 @@ tr:hover td{background:rgba(212,167,44,.06)}
       </div>
     </div>
     <div class="period-row" id="trkPeriodRow"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted)">CUSTOM RANGE</span>
+      <input type="date" id="customFrom" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--text)">
+      <span style="font-size:11px;color:var(--muted)">to</span>
+      <input type="date" id="customTo" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--text)">
+      <button class="period-btn" onclick="applyCustomRange()">Apply</button>
+      <button class="period-btn" onclick="clearCustomRange()">Clear</button>
+      <span class="custom-range-note" style="display:none;font-size:11px;font-weight:700;color:var(--gold)"></span>
+    </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-right:2px">COMPARE</span>
       <span id="trkBenchRow" style="display:flex;gap:6px;flex-wrap:wrap"></span>
@@ -699,6 +765,15 @@ tr:hover td{background:rgba(212,167,44,.06)}
       </div>
     </div>
     <div class="period-row" id="spPeriodRow"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted)">CUSTOM RANGE</span>
+      <input type="date" id="spCustomFrom" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--text)">
+      <span style="font-size:11px;color:var(--muted)">to</span>
+      <input type="date" id="spCustomTo" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--card);color:var(--text)">
+      <button class="period-btn" onclick="applySpCustomRange()">Apply</button>
+      <button class="period-btn" onclick="clearCustomRange()">Clear</button>
+      <span class="custom-range-note" style="display:none;font-size:11px;font-weight:700;color:var(--gold)"></span>
+    </div>
     <div class="chart-container" style="height:320px"><canvas id="spChart"></canvas></div>
     <div class="chart-legend" id="spLegend"></div>
   </div>
@@ -1195,6 +1270,7 @@ const NAV_GROUPS = {
   risk:       { tabs: [['risk','Risk & Exposure']] },
   thesis:     { tabs: [['thesis','Investment Thesis']] },
   whatif:     { tabs: [['whatif','What-If']] },
+  ledger:     { tabs: [['trades','Trades'], ['dividends','Dividends & Income']] },
   monitoring: { tabs: [['news','Market News'], ['calendar','Economic Calendar'], ['movers','Movers']] }
 };
 function _groupOf(tab) {
@@ -1211,6 +1287,8 @@ function runTabHook(tab) {
   else if (tab === 'risk') { renderRiskExposure(); loadEtfLookThrough(); }
   else if (tab === 'track') initTrack();
   else if (tab === 'sectorperf') initSectorPerf();
+  else if (tab === 'trades') initTrades();
+  else if (tab === 'dividends') initDividends();
   // The YTD figure here needs the rebuilt series to strip out deposits, so
   // fetch it once and redraw when it lands.
   else if (tab === 'benchmark' && !PERF) loadPerfData().then(renderBenchmark).catch(() => {});
@@ -1260,9 +1338,47 @@ async function loadPerfData() {
   return perfLoading;
 }
 
+// Custom window, set from the date pickers. When active it overrides the
+// period buttons on both Performance sub-tabs.
+let customFrom = null, customTo = null;
+function perfEndIdx() {
+  const d = PERF.dates;
+  if (customTo) { for (let i = d.length - 1; i >= 0; i--) if (d[i] <= customTo) return i; return 0; }
+  return d.length - 1;
+}
+// Both sub-tabs share one window; each keeps its own pair of inputs in sync.
+function applySpCustomRange() {
+  document.getElementById('customFrom').value = document.getElementById('spCustomFrom').value;
+  document.getElementById('customTo').value = document.getElementById('spCustomTo').value;
+  applyCustomRange();
+}
+function applyCustomRange() {
+  const a = document.getElementById('customFrom').value, b = document.getElementById('customTo').value;
+  if (!a && !b) return clearCustomRange();
+  document.getElementById('spCustomFrom').value = a;
+  document.getElementById('spCustomTo').value = b;
+  customFrom = a || null; customTo = b || null;
+  document.querySelectorAll('#trkPeriodRow .period-btn, #spPeriodRow .period-btn').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.custom-range-note').forEach(n => {
+    n.textContent = 'Custom: ' + (customFrom || PERF.dates[0]) + ' to ' + (customTo || PERF.dates[PERF.dates.length - 1]);
+    n.style.display = 'inline';
+  });
+  renderTrack(); if (document.getElementById('tab-sectorperf').classList.contains('active')) renderSectorPerf();
+}
+function clearCustomRange() {
+  customFrom = customTo = null;
+  ['customFrom', 'customTo', 'spCustomFrom', 'spCustomTo'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.querySelectorAll('.custom-range-note').forEach(n => { n.style.display = 'none'; });
+  document.querySelectorAll('#trkPeriodRow .period-btn').forEach(x => x.classList.toggle('active', x.textContent === trkPeriod));
+  document.querySelectorAll('#spPeriodRow .period-btn').forEach(x => x.classList.toggle('active', x.textContent === spPeriod));
+  renderTrack(); if (document.getElementById('tab-sectorperf').classList.contains('active')) renderSectorPerf();
+}
+
 // First index of the window for a period key. 'ALL' = whole history.
 function perfStartIdx(period) {
-  const d = PERF.dates, last = d[d.length - 1];
+  const d = PERF.dates, last = d[perfEndIdx()];
+  if (customFrom) { for (let i = 0; i < d.length; i++) if (d[i] >= customFrom) return i; return 0; }
+  if (customTo) return 0;
   if (period === 'ALL') return 0;
   const end = new Date(last + 'T00:00:00');
   let from;
@@ -1411,7 +1527,7 @@ function renderTrack() {
   if (!PERF) return;
   const f = PERF.funds[perfFundKey()];
   if (!f) return;
-  const dates = PERF.dates, e = dates.length - 1, s = perfStartIdx(trkPeriod);
+  const dates = PERF.dates, e = perfEndIdx(), s = perfStartIdx(trkPeriod);
   document.getElementById('trkFundLabel').textContent =
     '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
 
@@ -1649,6 +1765,224 @@ function renderTrack() {
     (miss ? ' <span style="color:var(--gold)">' + miss + ' legacy symbol' + (miss > 1 ? 's' : '') + ' could not be priced and are excluded.</span>' : '');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   TRANSACTION LEDGER — every trade, dividend and corporate action from both
+   Schwab accounts. Trades carry what the security has done SINCE the trade
+   date, so a purchase can be judged on how it worked out and a sale on what
+   it went on to do.
+   ══════════════════════════════════════════════════════════════════════════ */
+let LEDGER = null, ledgerLoading = null;
+let trdFilter = 'all', divFilter = 'all', divChartRef = null;
+const CORP_ACTIONS = new Set(['Stock Split','Spin-off','Mandatory Reorg Exc','Cash Merger',
+  'Cash Merger Adj','Cash In Lieu','Reinvestment Adj','Wire Received','Wire Sent']);
+const INTEREST_ACTIONS = new Set(['Bank Interest','Bond Interest']);
+const REINVEST_ACTIONS = new Set(['Reinvest Dividend','Qual Div Reinvest','Pr Yr Div Reinvest']);
+const FUND_NAME = { E: 'Endowment', C: 'CEE Fund' };
+
+async function loadLedger() {
+  if (LEDGER) return LEDGER;
+  if (ledgerLoading) return ledgerLoading;
+  ledgerLoading = (async () => {
+    const r = await fetch(FB_DB_URL + '/ceeTransactions.json');
+    if (!r.ok) throw new Error('transaction history unavailable (' + r.status + ')');
+    LEDGER = await r.json();
+    if (!LEDGER || !LEDGER.tx) throw new Error('transaction history is empty');
+    LEDGER.px = {}; (LEDGER.lastPx || []).forEach(p => { LEDGER.px[p[0]] = p[1]; });
+    return LEDGER;
+  })();
+  return ledgerLoading;
+}
+function fillYears(selId, rows) {
+  const sel = document.getElementById(selId);
+  if (!sel || sel.dataset.filled) return;
+  const yrs = [...new Set(rows.map(t => (t.d || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  sel.innerHTML = '<option value="all">All years</option>' + yrs.map(y => '<option value="' + y + '">' + y + '</option>').join('');
+  sel.dataset.filled = '1';
+}
+const fmtDate = d => { if (!d) return '—'; const dt = new Date(d + 'T00:00:00');
+  return isNaN(dt) ? d : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+function actionBadge(a) {
+  const map = { Buy: ['#9fc4ff', 'rgba(101,163,255,.18)'], Sell: ['#f7cf6b', 'rgba(247,185,40,.18)'] };
+  const c = map[a] || ['#94a3b8', 'rgba(148,163,184,.16)'];
+  return '<span class="badge" style="color:' + c[0] + ';background:' + c[1] + '">' + (a || '—') + '</span>';
+}
+const daysSince = d => Math.max(0, Math.round((new Date(LEDGER.asOf) - new Date(d)) / 864e5));
+
+// ── TRADES ────────────────────────────────────────────────────────────────
+function setTrdFilter(f, btn) {
+  trdFilter = f;
+  document.querySelectorAll('#trdFilterRow .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderTrades();
+}
+async function initTrades() {
+  const t = document.getElementById('trdTable');
+  try { await loadLedger(); }
+  catch (e) { t.innerHTML = '<tr><td style="color:var(--red);padding:14px">Could not load transactions: ' + e.message + '</td></tr>'; return; }
+  fillYears('trdYear', LEDGER.tx);
+  renderTrades();
+}
+function renderTrades() {
+  if (!LEDGER) return;
+  const fund = document.getElementById('trdFund').value;
+  const year = document.getElementById('trdYear').value;
+  const q = (document.getElementById('trdSearch').value || '').trim().toUpperCase();
+
+  const isTrade = a => a === 'Buy' || a === 'Sell';
+  let rows = LEDGER.tx.filter(t => {
+    if (trdFilter === 'all') { if (!isTrade(t.a) && !CORP_ACTIONS.has(t.a)) return false; }
+    else if (trdFilter === 'corp') { if (!CORP_ACTIONS.has(t.a)) return false; }
+    else if (t.a !== trdFilter) return false;
+    if (fund !== 'all' && t.f !== fund) return false;
+    if (year !== 'all' && (t.d || '').slice(0, 4) !== year) return false;
+    if (q && !((t.t || '').toUpperCase().includes(q))) return false;
+    return true;
+  });
+
+  // KPIs over the filtered set
+  let nBuy = 0, nSell = 0, bought = 0, sold = 0, openPnl = 0, sellDelta = 0;
+  rows.forEach(t => {
+    const now = LEDGER.px[t.t];
+    if (t.a === 'Buy') { nBuy++; bought += Math.abs(t.m);
+      if (now && t.p) openPnl += (now - t.p) * (t.q || 0); }
+    else if (t.a === 'Sell') { nSell++; sold += Math.abs(t.m);
+      if (now && t.p) sellDelta += (now - t.p) * (t.q || 0); }
+  });
+  document.getElementById('trdKpis').innerHTML =
+    kpiCard('Buys', String(nBuy), money0(bought) + ' invested', '', true) +
+    kpiCard('Sells', String(nSell), money0(sold) + ' realised', '', false) +
+    kpiCard('Buys Since Trade', (openPnl >= 0 ? '+' : '-') + money0(openPnl),
+      'value change on shares bought', openPnl >= 0 ? 'pos' : 'neg', true) +
+    kpiCard('Sells Since Trade', (sellDelta >= 0 ? '+' : '-') + money0(sellDelta),
+      sellDelta >= 0 ? 'left on the table' : 'loss avoided', sellDelta >= 0 ? 'neg' : 'pos', false) +
+    kpiCard('Records', String(rows.length), 'matching the filters', '', false);
+
+  document.getElementById('trdTable').innerHTML =
+    '<tr><th>Date</th><th>Fund</th><th>Action</th><th>Ticker</th><th style="text-align:right">Shares</th>' +
+    '<th style="text-align:right">Price</th><th style="text-align:right">Amount</th>' +
+    '<th style="text-align:right">Price Now</th>' +
+    '<th style="text-align:right" title="How the security has moved since this trade">Since Trade</th>' +
+    '<th style="text-align:right" title="Buy: value gained or lost on those shares. Sell: what those shares would be worth now versus what we sold them for.">Effect</th></tr>' +
+    rows.map(t => {
+      const now = LEDGER.px[t.t];
+      const canScore = now && t.p > 0 && (t.a === 'Buy' || t.a === 'Sell');
+      const chg = canScore ? (now / t.p - 1) * 100 : null;
+      const dollars = canScore ? (now - t.p) * (t.q || 0) : null;
+      // A rise after a sale is a cost, not a win — colour it accordingly.
+      const good = t.a === 'Sell' ? (chg != null && chg < 0) : (chg != null && chg > 0);
+      const chgCls = chg == null ? '' : (good ? 'pos' : 'neg');
+      const note = t.a === 'Sell' && chg != null ? (chg >= 0 ? 'rose after sale' : 'fell after sale') : '';
+      return '<tr>' +
+        '<td style="white-space:nowrap">' + fmtDate(t.d) + '</td>' +
+        '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
+        '<td>' + actionBadge(t.a) + '</td>' +
+        '<td class="ticker-cell">' + (t.t || '—') + '</td>' +
+        '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') + '</td>' +
+        '<td style="text-align:right">' + (t.p ? '$' + (+t.p).toFixed(2) : '—') + '</td>' +
+        '<td style="text-align:right" class="' + (t.m >= 0 ? 'pos' : 'neg') + '">' + (t.m ? (t.m >= 0 ? '+' : '-') + money0(t.m) : '—') + '</td>' +
+        '<td style="text-align:right">' + (now ? '$' + now.toFixed(2) : '—') + '</td>' +
+        '<td style="text-align:right" class="' + chgCls + '">' + (chg == null ? '—' : pct(chg)) +
+          (note ? '<div style="font-size:9px;color:var(--muted);font-weight:600">' + note + '</div>' : '') + '</td>' +
+        '<td style="text-align:right" class="' + chgCls + '">' + (dollars == null ? '—' : (dollars >= 0 ? '+' : '-') + money0(dollars)) + '</td>' +
+      '</tr>';
+    }).join('');
+  document.getElementById('trdCount').textContent =
+    'Showing ' + rows.length + ' of ' + LEDGER.tx.length + ' records · prices as of ' + LEDGER.asOf;
+}
+
+// ── DIVIDENDS & INCOME ────────────────────────────────────────────────────
+function setDivFilter(f, btn) {
+  divFilter = f;
+  document.querySelectorAll('#divFilterRow .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderDividends();
+}
+async function initDividends() {
+  const t = document.getElementById('divTable');
+  try { await loadLedger(); }
+  catch (e) { t.innerHTML = '<tr><td style="color:var(--red);padding:14px">Could not load transactions: ' + e.message + '</td></tr>'; return; }
+  const inc = LEDGER.tx.filter(x => isIncome(x.a));
+  fillYears('divYear', inc);
+  renderDividends();
+}
+const isIncome = a => (LEDGER.dividendActions || []).includes(a) || INTEREST_ACTIONS.has(a);
+
+function renderDividends() {
+  if (!LEDGER) return;
+  const fund = document.getElementById('divFund').value;
+  const year = document.getElementById('divYear').value;
+  const q = (document.getElementById('divSearch').value || '').trim().toUpperCase();
+
+  const all = LEDGER.tx.filter(t => isIncome(t.a) && t.m > 0);
+  let rows = all.filter(t => {
+    if (divFilter === 'reinvested' && !REINVEST_ACTIONS.has(t.a)) return false;
+    if (divFilter === 'cash' && (REINVEST_ACTIONS.has(t.a) || INTEREST_ACTIONS.has(t.a))) return false;
+    if (divFilter === 'interest' && !INTEREST_ACTIONS.has(t.a)) return false;
+    if (fund !== 'all' && t.f !== fund) return false;
+    if (year !== 'all' && (t.d || '').slice(0, 4) !== year) return false;
+    if (q && !((t.t || '').toUpperCase().includes(q))) return false;
+    return true;
+  });
+
+  const total = rows.reduce((s, t) => s + t.m, 0);
+  const reinv = rows.filter(t => REINVEST_ACTIONS.has(t.a)).reduce((s, t) => s + t.m, 0);
+  const interest = rows.filter(t => INTEREST_ACTIONS.has(t.a)).reduce((s, t) => s + t.m, 0);
+  const thisYear = String(new Date(LEDGER.asOf).getFullYear());
+  const ytd = rows.filter(t => (t.d || '').startsWith(thisYear)).reduce((s, t) => s + t.m, 0);
+  const payers = new Set(rows.filter(t => t.t).map(t => t.t)).size;
+
+  document.getElementById('divKpis').innerHTML =
+    kpiCard('Total Income', money0(total), rows.length + ' payments', 'pos', true) +
+    kpiCard(thisYear + ' Income', money0(ytd), 'received this year', 'pos', true) +
+    kpiCard('Reinvested', money0(reinv), total ? (reinv / total * 100).toFixed(0) + '% put back to work' : '—', '', false) +
+    kpiCard('Paid in Cash', money0(total - reinv - interest), 'kept as cash', '', false) +
+    kpiCard('Interest', money0(interest), 'bank and bond interest', '', false) +
+    kpiCard('Paying Positions', String(payers), 'distinct tickers', '', false);
+
+  // income by year
+  const byYear = {};
+  rows.forEach(t => { const y = (t.d || '').slice(0, 4); if (y) byYear[y] = (byYear[y] || 0) + t.m; });
+  const yrs = Object.keys(byYear).sort();
+  if (divChartRef) divChartRef.destroy();
+  divChartRef = new Chart(document.getElementById('divChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels: yrs, datasets: [{ label: 'Income', data: yrs.map(y => +byYear[y].toFixed(2)),
+      backgroundColor: 'rgba(201,168,76,.85)', borderRadius: 3 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => money0(c.parsed.y) } } },
+      scales: { y: { ticks: { callback: v => '$' + Math.round(v).toLocaleString(), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+                x: { ticks: { font: { size: 10 } }, grid: { display: false } } } }
+  });
+
+  // top payers
+  const byTk = {};
+  rows.forEach(t => { if (t.t) byTk[t.t] = (byTk[t.t] || 0) + t.m; });
+  const top = Object.entries(byTk).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  document.getElementById('divTopTable').innerHTML =
+    '<tr><th>Ticker</th><th style="text-align:right">Income</th><th style="text-align:right">Share</th></tr>' +
+    (top.length ? top.map(([tk, v]) =>
+      '<tr><td class="ticker-cell">' + tk + '</td><td style="text-align:right" class="pos">' + money0(v) +
+      '</td><td style="text-align:right;color:var(--muted)">' + (total ? (v / total * 100).toFixed(1) : '0') + '%</td></tr>').join('')
+      : '<tr><td colspan="3" style="color:var(--muted);padding:12px">No records match these filters</td></tr>');
+
+  document.getElementById('divTable').innerHTML =
+    '<tr><th>Date</th><th>Fund</th><th>Ticker</th><th>Type</th><th style="text-align:right">Amount</th><th>Treatment</th></tr>' +
+    rows.map(t => {
+      const reinvested = REINVEST_ACTIONS.has(t.a);
+      const isInt = INTEREST_ACTIONS.has(t.a);
+      return '<tr><td style="white-space:nowrap">' + fmtDate(t.d) + '</td>' +
+        '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
+        '<td class="ticker-cell">' + (t.t || '—') + '</td>' +
+        '<td style="font-size:11px">' + t.a + '</td>' +
+        '<td style="text-align:right" class="pos">' + (t.m < 10 ? '$' + t.m.toFixed(2) : money0(t.m)) + '</td>' +
+        '<td>' + (isInt ? '<span class="badge" style="color:#94a3b8;background:rgba(148,163,184,.16)">Interest</span>'
+          : reinvested ? '<span class="badge" style="color:#7ee2a6;background:rgba(74,222,128,.16)">Reinvested</span>'
+          : '<span class="badge" style="color:#f0c75e;background:rgba(201,168,76,.2)">Cash</span>') + '</td></tr>';
+    }).join('');
+  document.getElementById('divCount').textContent =
+    'Showing ' + rows.length + ' of ' + all.length + ' income records';
+}
+
 function kpiCard(label, value, hint, klass, accent) {
   return '<div class="kpi' + (accent ? ' accent' : '') + '"><div class="kpi-label">' + label +
     '</div><div class="kpi-value ' + (klass || '') + '">' + value + '</div><div class="kpi-sub">' + hint + '</div></div>';
@@ -1739,7 +2073,7 @@ const sectorWindow = (name, navArr, flowArr, s, e) =>
 
 function sectorPerfRows() {
   const f = PERF.funds[perfFundKey()];
-  const e = PERF.dates.length - 1, s = perfStartIdx(spPeriod);
+  const e = perfEndIdx(), s = perfStartIdx(spPeriod);
   const EXCL = ['Broad Market', 'Fixed Income', 'Other'];
   const rows = [];
   for (const [name, navArr] of Object.entries(f.sectors || {})) {
@@ -1763,7 +2097,7 @@ function sectorPerfRows() {
 function renderSectorPerf() {
   if (!PERF) return;
   const f = PERF.funds[perfFundKey()];
-  const dates = PERF.dates, e = dates.length - 1, s = perfStartIdx(spPeriod);
+  const dates = PERF.dates, e = perfEndIdx(), s = perfStartIdx(spPeriod);
   document.getElementById('spFundLabel').textContent = '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
   const rows = sectorPerfRows();
 
@@ -1854,7 +2188,7 @@ function drillSector(name) {
   const holds = S.holdings.filter(h => h.sector === name);
   const rec = tk => (H[tk] || {})[per] || null;
 
-  const e = PERF.dates.length - 1, s = perfStartIdx(per);
+  const e = perfEndIdx(), s = perfStartIdx(per);
   // Headline figures come from the same calculation as the table above, so the
   // two can never disagree.
   const w = mdWindow(f.sectors[name] || [], (f.sectorFlows || {})[name], s, e);

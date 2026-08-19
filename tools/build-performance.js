@@ -339,6 +339,29 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   OUT.bench[b]=arr.map(v=>v==null?null:+v.toFixed(4));
  }
  OUT.meta.sectorOf=sectorOf; OUT.meta.typeOf=typeOf;
+
+ // ── TRANSACTION LEDGER ──────────────────────────────────────────────────────
+ // Published separately so the Performance tab does not pay to download it.
+ // Compact keys: d date, f fund, a action, t ticker, q shares, p price, m amount.
+ const DIV_ACTIONS=new Set([...INCOME].filter(a=>a!=='Cash Merger'));
+ const ledger=[];
+ for(const f of FUNDS){
+  for(const t of f.tx){
+   ledger.push({d:t.date,f:f.key==='ceeFund'?'C':'E',a:t.action,t:t.sym||null,
+    q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0});
+  }
+ }
+ ledger.sort((a,b)=>b.d.localeCompare(a.d));
+ // Latest close per ticker, so the ledger can show what a trade did afterwards
+ const lastPx={};
+ for(const tk of tickers){ const ser=S[tk]; if(!ser||!ser.ok) continue;
+  const keys=Object.keys(ser.px); if(keys.length) lastPx[tk]=ser.px[keys[keys.length-1]]; }
+ const LEDGER={generatedAt:OUT.generatedAt,asOf:calendar[calendar.length-1],
+   tx:ledger, lastPx:Object.entries(lastPx),
+   dividendActions:[...DIV_ACTIONS], externalActions:[...EXTERNAL]};
+ fs.writeFileSync(path.join(__dirname,'ledger.json'),JSON.stringify(LEDGER));
+ console.log(`ledger.json: ${ledger.length} transactions, ${Object.keys(lastPx).length} last prices ` +
+   `(${(fs.statSync(path.join(__dirname,'ledger.json')).size/1024).toFixed(0)} KB)`);
  fs.writeFileSync(path.join(__dirname,'perf.json'),JSON.stringify(OUT));
  const spy=OUT.bench.SPY;
  console.log(`\nSPY over same window: ${((spy[spy.length-1]/spy[0]-1)*100).toFixed(2)}%`);

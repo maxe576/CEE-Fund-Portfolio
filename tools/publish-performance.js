@@ -24,15 +24,26 @@ for(const [k,f] of Object.entries(P.funds)){
 }
 for(const [b,v] of Object.entries(P.bench)) OUT.bench[b]=r2(v);
 
-const body=JSON.stringify(OUT);
-console.log(`payload ${(body.length/1024).toFixed(0)} KB`);
-const u=new URL('https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceePerformance.json');
-const req=https.request({hostname:u.hostname,path:u.pathname,method:'PUT',
- headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},res=>{
- let d='';res.on('data',c=>d+=c);
- res.on('end',()=>{console.log('status',res.statusCode);
-  fs.writeFileSync(path.join(__dirname,'perf.min.json'),body);
-  console.log('also wrote perf.min.json for local preview');});
-});
-req.on('error',e=>console.error('ERR',e.message));
-req.write(body);req.end();
+function put(node,obj){
+ return new Promise((res,rej)=>{
+  const body=JSON.stringify(obj);
+  console.log(`  ${node}: ${(body.length/1024).toFixed(0)} KB`);
+  const u=new URL(`https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/${node}.json`);
+  const req=https.request({hostname:u.hostname,path:u.pathname+u.search,method:'PUT',
+   headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}},r=>{
+   let d='';r.on('data',c=>d+=c);
+   r.on('end',()=>{console.log(`  -> status ${r.statusCode}`); r.statusCode===200?res():rej(new Error(d.slice(0,200)));});
+  });
+  req.on('error',rej); req.write(body); req.end();
+ });
+}
+
+(async()=>{
+ console.log('publishing:');
+ await put('ceePerformance',OUT);
+ fs.writeFileSync(path.join(__dirname,'perf.min.json'),JSON.stringify(OUT));
+ const lp=path.join(__dirname,'ledger.json');
+ if(fs.existsSync(lp)) await put('ceeTransactions',JSON.parse(fs.readFileSync(lp,'utf8')));
+ else console.log('  (no ledger.json - run build-performance.js first)');
+ console.log('done');
+})().catch(e=>{console.error('FAILED:',e.message);process.exit(1);});
