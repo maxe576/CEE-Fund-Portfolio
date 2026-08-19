@@ -344,11 +344,18 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  // Published separately so the Performance tab does not pay to download it.
  // Compact keys: d date, f fund, a action, t ticker, q shares, p price, m amount.
  const DIV_ACTIONS=new Set([...INCOME].filter(a=>a!=='Cash Merger'));
+ // A trade price is the raw price paid that day; the "price now" it gets
+ // compared against is split-adjusted. Without the factor between them, a
+ // 4-for-1 split reads as a 75% collapse. sf carries that factor so the two
+ // sides of every comparison sit on the same basis.
  const ledger=[];
  for(const f of FUNDS){
   for(const t of f.tx){
-   ledger.push({d:t.date,f:f.key==='ceeFund'?'C':'E',a:t.action,t:t.sym||null,
-    q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0});
+   const sf=t.sym&&!IS_CUSIP(t.sym)?splitFactor(t.sym,t.date):1;
+   const rec={d:t.date,f:f.key==='ceeFund'?'C':'E',a:t.action,t:t.sym||null,
+    q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0};
+   if(Math.abs(sf-1)>1e-9) rec.sf=+sf.toFixed(6);
+   ledger.push(rec);
   }
  }
  ledger.sort((a,b)=>b.d.localeCompare(a.d));
@@ -356,8 +363,12 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const lastPx={};
  for(const tk of tickers){ const ser=S[tk]; if(!ser||!ser.ok) continue;
   const keys=Object.keys(ser.px); if(keys.length) lastPx[tk]=ser.px[keys[keys.length-1]]; }
+ // Every split that touched a ticker we have traded, so the ledger can say
+ // which one moved a given row.
+ const splitsOut={};
+ for(const tk of tickers){ const sp=S[tk]?.splits||[]; if(sp.length) splitsOut[tk]=sp.map(x=>[x.date,+x.ratio.toFixed(4)]); }
  const LEDGER={generatedAt:OUT.generatedAt,asOf:calendar[calendar.length-1],
-   tx:ledger, lastPx:Object.entries(lastPx),
+   tx:ledger, lastPx:Object.entries(lastPx), splits:Object.entries(splitsOut),
    dividendActions:[...DIV_ACTIONS], externalActions:[...EXTERNAL]};
  fs.writeFileSync(path.join(__dirname,'ledger.json'),JSON.stringify(LEDGER));
  console.log(`ledger.json: ${ledger.length} transactions, ${Object.keys(lastPx).length} last prices ` +

@@ -1788,6 +1788,7 @@ async function loadLedger() {
     LEDGER = await r.json();
     if (!LEDGER || !LEDGER.tx) throw new Error('transaction history is empty');
     LEDGER.px = {}; (LEDGER.lastPx || []).forEach(p => { LEDGER.px[p[0]] = p[1]; });
+    LEDGER.splitsBy = {}; (LEDGER.splits || []).forEach(p => { LEDGER.splitsBy[p[0]] = p[1]; });
     return LEDGER;
   })();
   return ledgerLoading;
@@ -1807,6 +1808,25 @@ function actionBadge(a) {
   return '<span class="badge" style="color:' + c[0] + ';background:' + c[1] + '">' + (a || '—') + '</span>';
 }
 const daysSince = d => Math.max(0, Math.round((new Date(LEDGER.asOf) - new Date(d)) / 864e5));
+
+/* Splits that landed after a trade. Prices we paid are raw; the price we
+   compare against is split-adjusted, so every comparison has to be put on the
+   same footing first. `sf` is the factor between them, supplied by the rebuild.
+
+   Shares grow by the factor, price per share shrinks by it, and the position's
+   value is unchanged by the split itself — which is the point. */
+// Only outright trades get adjusted. A Stock Split row is already stated in
+// post-split terms by the broker, so scaling it again would double-count; the
+// other corporate actions carry no price to restate.
+const isTradeRow = t => t.a === 'Buy' || t.a === 'Sell';
+const splitAdjPrice  = t => (t.sf && isTradeRow(t) && t.p > 0 ? t.p / t.sf : t.p);
+const splitAdjShares = t => (t.sf && isTradeRow(t) ? (t.q || 0) * t.sf : (t.q || 0));
+function splitNote(t) {
+  if (!t.sf || !LEDGER.splitsBy[t.t]) return '';
+  const after = LEDGER.splitsBy[t.t].filter(s => s[0] > t.d);
+  if (!after.length) return '';
+  return after.map(s => (s[1] % 1 === 0 ? s[1] : s[1].toFixed(3)) + ':1 ' + s[0]).join(', ');
+}
 
 // ── TRADES ────────────────────────────────────────────────────────────────
 function setTrdFilter(f, btn) {
@@ -1840,13 +1860,15 @@ function renderTrades() {
   });
 
   // KPIs over the filtered set
-  let nBuy = 0, nSell = 0, bought = 0, sold = 0, openPnl = 0, sellDelta = 0;
+  let nBuy = 0, nSell = 0, bought = 0, sold = 0, openPnl = 0, sellDelta = 0, nSplitAdj = 0;
   rows.forEach(t => {
     const now = LEDGER.px[t.t];
+    const px = splitAdjPrice(t), sh = splitAdjShares(t);
+    if (t.sf && isTradeRow(t) && t.p > 0) nSplitAdj++;
     if (t.a === 'Buy') { nBuy++; bought += Math.abs(t.m);
-      if (now && t.p) openPnl += (now - t.p) * (t.q || 0); }
+      if (now && px) openPnl += (now - px) * sh; }
     else if (t.a === 'Sell') { nSell++; sold += Math.abs(t.m);
-      if (now && t.p) sellDelta += (now - t.p) * (t.q || 0); }
+      if (now && px) sellDelta += (now - px) * sh; }
   });
   document.getElementById('trdKpis').innerHTML =
     kpiCard('Buys', String(nBuy), money0(bought) + ' invested', '', true) +
@@ -1855,7 +1877,7 @@ function renderTrades() {
       'value change on shares bought', openPnl >= 0 ? 'pos' : 'neg', true) +
     kpiCard('Sells Since Trade', (sellDelta >= 0 ? '+' : '-') + money0(sellDelta),
       sellDelta >= 0 ? 'left on the table' : 'loss avoided', sellDelta >= 0 ? 'neg' : 'pos', false) +
-    kpiCard('Records', String(rows.length), 'matching the filters', '', false);
+    kpiCard('Records', String(rows.length), nSplitAdj ? nSplitAdj + ' adjusted for splits' : 'matching the filters', '', false);
 
   document.getElementById('trdTable').innerHTML =
     '<tr><th>Date</th><th>Fund</th><th>Action</th><th>Ticker</th><th style="text-align:right">Shares</th>' +
@@ -1865,9 +1887,12 @@ function renderTrades() {
     '<th style="text-align:right" title="Buy: value gained or lost on those shares. Sell: what those shares would be worth now versus what we sold them for.">Effect</th></tr>' +
     rows.map(t => {
       const now = LEDGER.px[t.t];
-      const canScore = now && t.p > 0 && (t.a === 'Buy' || t.a === 'Sell');
-      const chg = canScore ? (now / t.p - 1) * 100 : null;
-      const dollars = canScore ? (now - t.p) * (t.q || 0) : null;
+      const adjPx = splitAdjPrice(t), adjSh = splitAdjShares(t);
+      const canScore = now && adjPx > 0 && (t.a === 'Buy' || t.a === 'Sell');
+      const chg = canScore ? (now / adjPx - 1) * 100 : null;
+      const dollars = canScore ? (now - adjPx) * adjSh : null;
+      const sn = splitNote(t);
+      const showAdj = sn && isTradeRow(t) && t.p > 0;   // annotate only where it changes the maths
       // A rise after a sale is a cost, not a win — colour it accordingly.
       const good = t.a === 'Sell' ? (chg != null && chg < 0) : (chg != null && chg > 0);
       const chgCls = chg == null ? '' : (good ? 'pos' : 'neg');
@@ -1877,17 +1902,23 @@ function renderTrades() {
         '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
         '<td>' + actionBadge(t.a) + '</td>' +
         '<td class="ticker-cell">' + (t.t || '—') + '</td>' +
-        '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') + '</td>' +
-        '<td style="text-align:right">' + (t.p ? '$' + (+t.p).toFixed(2) : '—') + '</td>' +
+        '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') +
+          (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600">&rarr; ' + adjSh.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' after split</div>' : '') + '</td>' +
+        '<td style="text-align:right">' + (t.p ? '$' + (+t.p).toFixed(2) : '—') +
+          (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600" title="Split-adjusted so it is comparable with the price today">= $' + adjPx.toFixed(2) + ' adj</div>' : '') + '</td>' +
         '<td style="text-align:right" class="' + (t.m >= 0 ? 'pos' : 'neg') + '">' + (t.m ? (t.m >= 0 ? '+' : '-') + money0(t.m) : '—') + '</td>' +
         '<td style="text-align:right">' + (now ? '$' + now.toFixed(2) : '—') + '</td>' +
         '<td style="text-align:right" class="' + chgCls + '">' + (chg == null ? '—' : pct(chg)) +
-          (note ? '<div style="font-size:9px;color:var(--muted);font-weight:600">' + note + '</div>' : '') + '</td>' +
+          (note ? '<div style="font-size:9px;color:var(--muted);font-weight:600">' + note + '</div>' : '') +
+          (sn ? '<div style="font-size:9px;color:var(--gold);font-weight:600" title="Split since this trade">' + sn + '</div>' : '') + '</td>' +
         '<td style="text-align:right" class="' + chgCls + '">' + (dollars == null ? '—' : (dollars >= 0 ? '+' : '-') + money0(dollars)) + '</td>' +
       '</tr>';
     }).join('');
-  document.getElementById('trdCount').textContent =
-    'Showing ' + rows.length + ' of ' + LEDGER.tx.length + ' records · prices as of ' + LEDGER.asOf;
+  document.getElementById('trdCount').innerHTML =
+    'Showing ' + rows.length + ' of ' + LEDGER.tx.length + ' records &middot; prices as of ' + LEDGER.asOf +
+    (nSplitAdj ? '<br><span style="color:var(--gold)">' + nSplitAdj + ' of these were followed by a stock split.</span> ' +
+      'Their price and share count are shown both as traded and split-adjusted, because the price we compare against today is ' +
+      'itself split-adjusted &mdash; without that, a 4-for-1 split would read as a 75% loss.' : '');
 }
 
 // ── DIVIDENDS & INCOME ────────────────────────────────────────────────────
