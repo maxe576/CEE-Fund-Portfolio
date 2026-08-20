@@ -487,6 +487,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
         <button onclick="closeThesisDetail()" 
           style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg-alt);cursor:pointer;color:var(--gray)">← Back</button>
       </div>
+      <div id="thesisHoldingNotice" style="display:none;margin-bottom:12px;padding:8px 11px;background:rgba(212,167,44,.10);border-left:3px solid var(--gold);border-radius:4px;font-size:11.5px;line-height:1.5;color:var(--muted)"></div>
 
       <!-- Quick stats row -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px;padding:12px;background:#0d223b;border-radius:8px">
@@ -1866,6 +1867,18 @@ function actionBadge(a) {
 }
 const daysSince = d => Math.max(0, Math.round((new Date(LEDGER.asOf) - new Date(d)) / 864e5));
 
+/* A ticker cell links through to that company's Investment Thesis. CUSIP-only
+   symbols (the Treasury, the pre-rename Exxon line) have no thesis to open, so
+   they stay plain rather than becoming a click that goes nowhere. */
+const isCusip = s => /^[0-9][0-9A-Z]{8}$/.test(String(s || ''));
+function tickerCell(tk) {
+  if (!tk) return '<td>—</td>';
+  if (isCusip(tk)) return '<td class="ticker-cell" title="No thesis — bond or pre-rename identifier">' + tk + '</td>';
+  return '<td class="ticker-cell"><a href="javascript:void(0)" onclick="goToThesis(\'' + tk + '\')" ' +
+    'title="Open the investment thesis for ' + tk + '" ' +
+    'style="color:inherit;text-decoration:none;border-bottom:1px dotted currentColor;cursor:pointer">' + tk + '</a></td>';
+}
+
 /* Splits that landed after a trade. Prices we paid are raw; the price we
    compare against is split-adjusted, so every comparison has to be put on the
    same footing first. `sf` is the factor between them, supplied by the rebuild.
@@ -1959,7 +1972,7 @@ function renderTrades() {
         '<td style="white-space:nowrap">' + fmtDate(t.d) + '</td>' +
         '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
         '<td>' + actionBadge(t.a) + '</td>' +
-        '<td class="ticker-cell">' + (t.t || '—') + '</td>' +
+        tickerCell(t.t) +
         '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') +
           (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600">&rarr; ' + adjSh.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' after split</div>' : '') + '</td>' +
         '<td style="text-align:right">' + (t.p ? '$' + (+t.p).toFixed(2) : '—') +
@@ -2051,7 +2064,7 @@ function renderDividends() {
   document.getElementById('divTopTable').innerHTML =
     '<tr><th>Ticker</th><th style="text-align:right">Income</th><th style="text-align:right">Share</th></tr>' +
     (top.length ? top.map(([tk, v]) =>
-      '<tr><td class="ticker-cell">' + tk + '</td><td style="text-align:right" class="pos">' + money0(v) +
+      '<tr>' + tickerCell(tk) + '<td style="text-align:right" class="pos">' + money0(v) +
       '</td><td style="text-align:right;color:var(--muted)">' + (total ? (v / total * 100).toFixed(1) : '0') + '%</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);padding:12px">No records match these filters</td></tr>');
 
@@ -2062,7 +2075,7 @@ function renderDividends() {
       const isInt = INTEREST_ACTIONS.has(t.a);
       return '<tr><td style="white-space:nowrap">' + fmtDate(t.d) + '</td>' +
         '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
-        '<td class="ticker-cell">' + (t.t || '—') + '</td>' +
+        tickerCell(t.t) +
         '<td style="font-size:11px">' + t.a + '</td>' +
         '<td style="text-align:right" class="pos">' + (t.m < 10 ? '$' + t.m.toFixed(2) : money0(t.m)) + '</td>' +
         '<td>' + (isInt ? '<span class="badge" style="color:#94a3b8;background:rgba(148,163,184,.16)">Interest</span>'
@@ -4246,8 +4259,30 @@ async function fetchPEViaYahoo(ticker){
 function openThesisDetail(ticker) {
   currentThesisTicker = ticker;
   // Use the ACTIVE fund's holding so a ticker held in both funds shows the correct values.
-  const h = findActiveHolding(ticker);
-  if (!h) return;
+  let h = findActiveHolding(ticker);
+  // Research outlives the position. A ticker reached from the trade ledger may
+  // be held only by the other fund, or sold long ago — the saved thesis still
+  // has to open, with position stats simply shown as absent.
+  let heldBy = h ? 'active' : null;
+  if (!h) {
+    const t = String(ticker || '').toUpperCase();
+    const other = ALL_HOLDINGS().find(x => String(x.ticker || '').toUpperCase() === t);
+    if (other) { h = other; heldBy = 'other'; }
+  }
+  if (!h) {
+    h = { ticker, company: (typeof COMPANY_NAMES !== 'undefined' && COMPANY_NAMES[ticker]) || ticker,
+          type: 'equity', price: 0, avgCost: 0, marketValue: 0, glPct: 0, beta: null, sector: null };
+    heldBy = 'none';
+  }
+  const notice = document.getElementById('thesisHoldingNotice');
+  if (notice) {
+    notice.style.display = (heldBy === 'active') ? 'none' : 'block';
+    notice.textContent = heldBy === 'other'
+      ? 'Held by the other fund, not ' + S.fundName + '. The position figures below are that fund’s; the thesis itself is shared.'
+      : heldBy === 'none'
+        ? 'Not currently held in either fund. The research is kept — position figures are blank.'
+        : '';
+  }
 
   document.getElementById('thesisDetailPanel').style.display = 'block';
   document.getElementById('thesisSectorPanel').style.display = 'none';
