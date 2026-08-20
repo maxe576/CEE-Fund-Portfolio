@@ -1309,11 +1309,49 @@ let PERF = null, perfLoading = null;
 let trkPeriod = 'YTD', trkMode = 'line', trkChartRef = null;
 let spPeriod  = 'YTD', spMode  = 'bar',  spChartRef  = null, spDrillSector = null;
 const PERF_PERIODS = ['1W','1M','3M','6M','YTD','1Y','3Y','5Y','ALL'];
+/* One palette for every chart, read from the stylesheet at draw time.
+   The charts previously hardcoded light-theme values — a #0c2a5e fund line and
+   #f1f5f9 gridlines — which are all but invisible on this dark card, and did
+   not match the swatches in their own legends. Pulling from the CSS variables
+   keeps chart, legend and table on the same colours, and follows the theme if
+   it ever changes. */
+function chartPalette() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n, fb) => (cs.getPropertyValue(n).trim() || fb);
+  return {
+    fund:   v('--blue', '#2057c9'),      // our portfolio
+    gold:   v('--gold', '#c9a84c'),      // second series / other fund
+    green:  v('--green', '#159a51'),
+    red:    v('--red', '#d6453d'),
+    grid:   v('--border', '#e6e9ee'),
+    tick:   v('--muted', '#8a96a6'),
+    card:   v('--card', '#ffffff')
+  };
+}
+// Chart.js wants a fill; derive a translucent version of any colour.
+function fade(hex, a) {
+  const h = String(hex).replace('#', '');
+  if (h.length !== 6) return hex;
+  const n = parseInt(h, 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+// Axis label and border colours, applied once as Chart.js defaults so every
+// chart picks them up without each one repeating itself.
+function applyChartTheme() {
+  if (typeof Chart === 'undefined') return;
+  const P = chartPalette();
+  Chart.defaults.color = P.tick;
+  Chart.defaults.borderColor = P.grid;
+}
+// Distinct hues for multi-series charts, chosen to stay legible on the dark
+// card rather than the near-black tones the earlier list used.
+const SERIES_PALETTE = ['#65a3ff', '#d4a72c', '#4ade80', '#ff8a8a', '#b98cf0',
+                        '#3fc9b4', '#f0a94a', '#f472b6', '#9fb0c5', '#7dd3fc', '#a3e635'];
 const TRK_BENCH = [
-  { id:'SPY', color:'#e08b2a', locked:true,  on:true  },
-  { id:'QQQ', color:'#8a5cd6', locked:false, on:false },
-  { id:'VTI', color:'#2a9d8f', locked:false, on:false },
-  { id:'AGG', color:'#9aa5b4', locked:false, on:false }
+  { id:'SPY', color:'#f0a94a', locked:true,  on:true  },
+  { id:'QQQ', color:'#b98cf0', locked:false, on:false },
+  { id:'VTI', color:'#3fc9b4', locked:false, on:false },
+  { id:'AGG', color:'#9fb0c5', locked:false, on:false }
 ];
 const perfFundKey = () => (activeFund === 'endowment' ? 'endowment' : 'ceeFund');
 
@@ -1576,7 +1614,8 @@ function renderTrack() {
   const active = TRK_BENCH.filter(b => b.on && PERF.bench && PERF.bench[b.id]);
   const otherFund = trkShowOtherFund
     ? PERF.funds[perfFundKey() === 'endowment' ? 'ceeFund' : 'endowment'] : null;
-  const navyC = '#0c2a5e';
+  const P = chartPalette();
+  const navyC = P.fund;
 
   if (trkChartRef) trkChartRef.destroy();
   const ctx = document.getElementById('trkChart').getContext('2d');
@@ -1584,7 +1623,7 @@ function renderTrack() {
   if (trkMode === 'line') {
     const ds = [{
       label: f.name, data: idx.map(i => +(idxRet(f.twr, s, i) || 0).toFixed(2)),
-      borderColor: navyC, backgroundColor: 'rgba(12,42,94,.07)', borderWidth: 2.6,
+      borderColor: navyC, backgroundColor: fade(navyC, .10), borderWidth: 2.6,
       pointRadius: 0, fill: true, tension: .25
     }];
     active.forEach(b => ds.push({
@@ -1594,7 +1633,7 @@ function renderTrack() {
     }));
     if (otherFund) ds.push({
       label: otherFund.name, data: idx.map(i => +(idxRet(otherFund.twr, s, i) || 0).toFixed(2)),
-      borderColor: '#c9a84c', backgroundColor: 'transparent', borderWidth: 2,
+      borderColor: P.gold, backgroundColor: 'transparent', borderWidth: 2,
       pointRadius: 0, fill: false, tension: .25, borderDash: [2, 2]
     });
     trkChartRef = new Chart(ctx, {
@@ -1602,28 +1641,30 @@ function renderTrack() {
       options: {
         responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: chartPalette().grid } },
                   x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } } }
       }
     });
   } else {
+    // One colour per series, matching the legend. Colouring our bars by gain or
+    // loss instead made them disagree with the swatch beside them.
     const fb = bucketReturns(f.twr, s, e, dates);
     const ds = [{ label: f.name, data: fb.map(b => +b.ret.toFixed(2)),
-      backgroundColor: fb.map(b => b.ret >= 0 ? 'rgba(21,154,81,.85)' : 'rgba(214,69,61,.85)'), borderRadius: 3 }];
+      backgroundColor: fade(navyC, .9), borderRadius: 3 }];
     active.forEach(b => {
       const bb = bucketReturns(PERF.bench[b.id], s, e, dates);
-      ds.push({ label: b.id, data: bb.map(x => +x.ret.toFixed(2)), backgroundColor: b.color + '88', borderRadius: 3 });
+      ds.push({ label: b.id, data: bb.map(x => +x.ret.toFixed(2)), backgroundColor: fade(b.color, .85), borderRadius: 3 });
     });
     if (otherFund) {
       const ob = bucketReturns(otherFund.twr, s, e, dates);
-      ds.push({ label: otherFund.name, data: ob.map(x => +x.ret.toFixed(2)), backgroundColor: '#c9a84c99', borderRadius: 3 });
+      ds.push({ label: otherFund.name, data: ob.map(x => +x.ret.toFixed(2)), backgroundColor: fade(P.gold, .85), borderRadius: 3 });
     }
     trkChartRef = new Chart(ctx, {
       type: 'bar', data: { labels: fb.map(b => b.label), datasets: ds },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: chartPalette().grid } },
                   x: { ticks: { font: { size: 10 } }, grid: { display: false } } }
       }
     });
@@ -1631,7 +1672,7 @@ function renderTrack() {
   document.getElementById('trkLegend').innerHTML =
     '<span class="legend-item"><span class="legend-dot" style="background:' + navyC + '"></span>' + f.name + '</span>' +
     active.map(b => '<span class="legend-item"><span class="legend-dot" style="background:' + b.color + '"></span>' + b.id + '</span>').join('') +
-    (otherFund ? '<span class="legend-item"><span class="legend-dot" style="background:#c9a84c"></span>' + otherFund.name + '</span>' : '');
+    (otherFund ? '<span class="legend-item"><span class="legend-dot" style="background:' + P.gold + '"></span>' + otherFund.name + '</span>' : '');
 
   // Equities vs ETFs, measured the same way as everything else: what each
   // sleeve's dollars earned, against the same cash put into SPY on the same days.
@@ -1665,7 +1706,7 @@ function renderTrack() {
   // Bar = the same two sleeves as period-by-period returns.
   if (splitChartRef) splitChartRef.destroy();
   const sctx = document.getElementById('trkSplitChart').getContext('2d');
-  const EQ_C = '#0c2a5e', ETF_C = '#c9a84c';
+  const EQ_C = P.fund, ETF_C = P.gold;
   if (splitMode === 'line') {
     const idxS = sampleSeries(f.nav, s, e, 120);
     const cumOf = (navArr, flArr) => {
@@ -1682,14 +1723,14 @@ function renderTrack() {
         labels: idxS.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
           (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' })),
         datasets: [
-          { label: 'Equities', data: cumOf(f.eqNav, f.eqFlow), borderColor: EQ_C, backgroundColor: 'rgba(12,42,94,.06)', borderWidth: 2.2, pointRadius: 0, fill: true, tension: .25 },
+          { label: 'Equities', data: cumOf(f.eqNav, f.eqFlow), borderColor: EQ_C, backgroundColor: fade(EQ_C, .10), borderWidth: 2.2, pointRadius: 0, fill: true, tension: .25 },
           { label: 'ETFs', data: cumOf(f.etfNav, f.etfFlow), borderColor: ETF_C, backgroundColor: 'transparent', borderWidth: 2.2, pointRadius: 0, fill: false, tension: .25 }
         ]
       },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } },
           tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.parsed.y >= 0 ? '+' : '-') + money0(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString(), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString(), font: { size: 10 } }, grid: { color: chartPalette().grid } },
                   x: { ticks: { font: { size: 9 }, maxTicksLimit: 8 }, grid: { display: false } } } }
     });
   } else {
@@ -1697,13 +1738,13 @@ function renderTrack() {
     splitChartRef = new Chart(sctx, {
       type: 'bar',
       data: { labels: eqB.map(b => b.label), datasets: [
-        { label: 'Equities', data: eqB.map(b => +b.ret.toFixed(2)), backgroundColor: EQ_C + 'e0', borderRadius: 3 },
-        { label: 'ETFs', data: etB.map(b => +b.ret.toFixed(2)), backgroundColor: ETF_C + 'e0', borderRadius: 3 }
+        { label: 'Equities', data: eqB.map(b => +b.ret.toFixed(2)), backgroundColor: fade(EQ_C, .88), borderRadius: 3 },
+        { label: 'ETFs', data: etB.map(b => +b.ret.toFixed(2)), backgroundColor: fade(ETF_C, .88), borderRadius: 3 }
       ] },
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: true, labels: { boxWidth: 10, font: { size: 10 } } },
           tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 10 } }, grid: { color: chartPalette().grid } },
                   x: { ticks: { font: { size: 9 } }, grid: { display: false } } } }
     });
   }
@@ -1996,10 +2037,10 @@ function renderDividends() {
   divChartRef = new Chart(document.getElementById('divChart').getContext('2d'), {
     type: 'bar',
     data: { labels: yrs, datasets: [{ label: 'Income', data: yrs.map(y => +byYear[y].toFixed(2)),
-      backgroundColor: 'rgba(201,168,76,.85)', borderRadius: 3 }] },
+      backgroundColor: fade(chartPalette().gold, .85), borderRadius: 3 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => money0(c.parsed.y) } } },
-      scales: { y: { ticks: { callback: v => '$' + Math.round(v).toLocaleString(), font: { size: 10 } }, grid: { color: '#f1f5f9' } },
+      scales: { y: { ticks: { callback: v => '$' + Math.round(v).toLocaleString(), font: { size: 10 } }, grid: { color: chartPalette().grid } },
                 x: { ticks: { font: { size: 10 } }, grid: { display: false } } } }
   });
 
@@ -2151,6 +2192,7 @@ function renderSectorPerf() {
   const rows = sectorPerfRows();
 
   if (spChartRef) spChartRef.destroy();
+  const SP = chartPalette();
   const ctx = document.getElementById('spChart').getContext('2d');
 
   if (spMode === 'bar') {
@@ -2159,25 +2201,25 @@ function renderSectorPerf() {
       data: { labels: rows.map(r => r.name),
         datasets: [
           { label: 'Our sector', data: rows.map(r => r.ours == null ? 0 : +r.ours.toFixed(2)),
-            backgroundColor: rows.map(r => r.ours >= 0 ? 'rgba(12,42,94,.88)' : 'rgba(214,69,61,.88)'), borderRadius: 3 },
+            backgroundColor: fade(SP.fund, .9), borderRadius: 3 },
           { label: 'Sector ETF', data: rows.map(r => r.bmRet == null ? 0 : +r.bmRet.toFixed(2)),
-            backgroundColor: 'rgba(224,139,42,.65)', borderRadius: 3 }
+            backgroundColor: fade(SP.gold, .75), borderRadius: 3 }
         ] },
       options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + pct(c.parsed.x) } } },
-        scales: { x: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        scales: { x: { ticks: { callback: v => (v >= 0 ? '+' : '') + v + '%', font: { size: 11 } }, grid: { color: chartPalette().grid } },
                   y: { ticks: { font: { size: 10 } }, grid: { display: false } } } }
     });
     document.getElementById('spLegend').innerHTML =
-      '<span class="legend-item"><span class="legend-dot" style="background:#0c2a5e"></span>Our sector (what our dollars earned)</span>' +
-      '<span class="legend-item"><span class="legend-dot" style="background:rgba(224,139,42,.85)"></span>Sector ETF</span>';
+      '<span class="legend-item"><span class="legend-dot" style="background:' + SP.fund + '"></span>Our sector (what our dollars earned)</span>' +
+      '<span class="legend-item"><span class="legend-dot" style="background:' + SP.gold + '"></span>Sector ETF</span>';
   } else {
     // Cumulative dollars earned. Buying into a sector before it rises shows up
     // directly here, which a percentage return can hide.
     const idx = sampleSeries(f.nav, s, e, 140);
     const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
       (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
-    const palette = ['#0c2a5e', '#c9a84c', '#2057c9', '#159a51', '#d6453d', '#7c3aed', '#0891b2', '#b45309', '#be185d', '#4d7c0f', '#0f766e'];
+    const palette = SERIES_PALETTE;
     const top = rows.slice(0, 8);
     const ds = top.map((r, k) => {
       const navArr = f.sectors[r.name], flArr = (f.sectorFlows || {})[r.name] || [];
@@ -2194,7 +2236,7 @@ function renderSectorPerf() {
       type: 'line', data: { labels, datasets: ds },
       options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.parsed.y >= 0 ? '+' : '-') + money0(c.parsed.y) } } },
-        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString(), font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        scales: { y: { ticks: { callback: v => (v >= 0 ? '+' : '-') + '$' + Math.abs(Math.round(v)).toLocaleString(), font: { size: 11 } }, grid: { color: chartPalette().grid } },
                   x: { ticks: { font: { size: 10 }, maxTicksLimit: 12 }, grid: { display: false } } } }
     });
     document.getElementById('spLegend').innerHTML =
@@ -4750,6 +4792,7 @@ async function loadTickerNews(ticker){
 }
 
 window.addEventListener('load', () => {
+  applyChartTheme();   // chart text and axes must match the stylesheet
   init();
   // Auto-refresh live prices on load (the embedded prices are only a build-time snapshot)
   setTimeout(()=>{ fetchLivePrices().catch(()=>{}); }, 1200);
