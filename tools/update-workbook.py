@@ -105,10 +105,12 @@ import json as _json
 _extra = os.path.join(os.path.dirname(os.path.abspath(__file__)), "new_tx.json")
 if os.path.exists(_extra):
     _seen = {(t[0], t[1], t[2], t[3], round(t[4], 4)) for t in txs}
-    for d, fund, t, a, q, pr, amt in _json.load(open(_extra)):
+    for row in _json.load(open(_extra)):
+        d, fund, t, a, q, pr, amt = row[:7]
+        desc = row[7] if len(row) > 7 else ""
         key = (d, fund, t, a, round(q, 4))
         if key in _seen: continue
-        txs.append((d, fund, t, a, q, pr, amt, 0.0, ""))
+        txs.append((d, fund, t, a, q, pr, amt, 0.0, desc))
 txs.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
 
 # ---- rewrite the package ---------------------------------------------------

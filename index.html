@@ -1971,7 +1971,11 @@ function renderTrades() {
       return '<tr>' +
         '<td style="white-space:nowrap">' + fmtDate(t.d) + '</td>' +
         '<td style="font-size:11px;color:var(--muted)">' + (FUND_NAME[t.f] || '—') + '</td>' +
-        '<td>' + actionBadge(t.a) + '</td>' +
+        '<td>' + actionBadge(t.a) +
+          // Cash movements carry no ticker, so the description is the only thing
+          // that says what they were for.
+          (t.desc && !t.t ? '<div style="font-size:9px;color:var(--gold);font-weight:600;margin-top:2px">'
+            + t.desc + '</div>' : '') + '</td>' +
         tickerCell(t.t) +
         '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') +
           (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600">&rarr; ' + adjSh.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' after split</div>' : '') + '</td>' +

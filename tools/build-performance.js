@@ -145,9 +145,10 @@ function loadPositions(p){
  const extraPath=path.join(__dirname,'new_tx.json');
  const extra=fs.existsSync(extraPath)?JSON.parse(fs.readFileSync(extraPath,'utf8')):[];
  for(const f of FUNDS){ f.tx=load(f.file,f.name); f.positions=loadPositions(f.pos);
-  for(const [d,fund,t,a,q,pr,amt] of extra){
+  for(const row of extra){
+   const [d,fund,t,a,q,pr,amt]=row, desc=row[7]||'';
    if(fund!==f.name) continue;
-   f.tx.push({date:d,action:a,sym:norm(t||''),qty:q||0,price:pr||0,fee:0,amt:amt||0,fund:f.name});
+   f.tx.push({date:d,action:a,sym:norm(t||''),qty:q||0,price:pr||0,fee:0,amt:amt||0,fund:f.name,desc});
   }
   f.tx.sort((x,y)=>x.date.localeCompare(y.date));
   f.tx.forEach(t=>{if(t.sym&&!IS_CUSIP(t.sym))universe.add(t.sym)});
@@ -391,7 +392,7 @@ function loadPositions(p){
   for(const t of f.tx){
    const sf=t.sym&&!IS_CUSIP(t.sym)?splitFactor(t.sym,t.date):1;
    const rec={d:t.date,f:f.key==='ceeFund'?'C':'E',a:t.action,t:t.sym||null,
-    q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0};
+    q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0,desc:t.desc||''};
    if(Math.abs(sf-1)>1e-9) rec.sf=+sf.toFixed(6);
    ledger.push(rec);
   }

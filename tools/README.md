@@ -132,12 +132,18 @@ positions must reproduce the new positions exactly.
 Clear `new_tx.json` once a CSV export covers the same period, or the rows will
 be counted twice.
 
-## Open question on the CEE Fund
+## Scholarship withdrawals
 
-On 2026-09-02 the CEE Fund's cash reads $169.92. The 08/31 sales settled 09/01
-and raised $3,893.67 on an opening balance of $1,276.24, which should leave
-$5,169.91. The gap is exactly $5,000.00. Nothing in the August statement
-accounts for it and the Endowment did not receive it, so it is recorded as a
-wire out dated 09/02 to keep the ledger balanced. **This needs confirming** — if
-it was a purchase that settles later, or a transfer, the entry should be
-corrected.
+On 2026-09-02 $5,000.00 left the CEE Fund to fund scholarships. The five sells
+placed on 08/31 (ADI 2, HD 2, RSPN 16, PLTR 6, SOFI 23) raised $3,893.73 and the
+remaining $1,106.27 came from existing cash, taking the balance from $1,276.24
+down to $169.92.
+
+It is recorded as a `Wire Sent` with the description `SCHOLARSHIP DISBURSEMENT`.
+Keeping the action as a wire matters: the engine treats it as an **external
+flow**, so the money leaving is not counted as an investment loss. Only the
+description changes; the classification stays the one the return maths expects.
+
+Record future disbursements the same way. The Trades tab prints the description
+under the action for any row without a ticker, so a cash movement always says
+what it was for.

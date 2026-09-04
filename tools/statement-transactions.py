@@ -54,13 +54,12 @@ NEW = [
     ("2026-09-01", "CEE Fund", "V",    "Qual Div Reinvest", 0,      0,          4.04),
     ("2026-09-01", "CEE Fund", "VMC",  "Reinvest Shares",   0.0061, 260.6557,  -1.59),
     ("2026-09-01", "CEE Fund", "VMC",  "Qual Div Reinvest", 0,      0,          1.59),
-    # ---------------- CEE Fund: unexplained cash outflow ----------------------
-    # Sales settled 09/01 raised $3,893.67 on an opening balance of $1,276.24,
-    # so cash should read $5,169.91. The 9/2 file says $169.92 - exactly $4,999.99
-    # short. Nothing in the August statement accounts for it, and the Endowment
-    # did not receive it. Recorded so the ledger balances; the description says
-    # plainly that it needs confirming.
-    ("2026-09-02", "CEE Fund", "", "Wire Sent", 0, 0, -5000.00),
+    # ---------------- CEE Fund: scholarship disbursement ---------------------
+    # The five 08/31 sells were raised to fund scholarships. Proceeds of
+    # $3,893.73 plus $1,106.27 of existing cash left the account as a $5,000.00
+    # withdrawal. Kept as a Wire Sent so the engine treats it as an external
+    # flow - money leaving for its intended purpose, not an investment loss.
+    ("2026-09-02", "CEE Fund", "", "Wire Sent", 0, 0, -5000.00, "SCHOLARSHIP DISBURSEMENT"),
 ]
 
 def positions(p):
@@ -90,7 +89,7 @@ for fund, (of, nf) in FILES.items():
     start, scash = positions(DL + of)
     end,   ecash = positions(DL + nf)
     sim, cash = dict(start), scash
-    for d, f, t, a, q, p, amt in NEW:
+    for d, f, t, a, q, p, amt, *_rest in NEW:
         if f != fund: continue
         if a in SH_IN and t:  sim[t] = sim.get(t, 0) + q
         if a in SH_OUT and t: sim[t] = sim.get(t, 0) - q
