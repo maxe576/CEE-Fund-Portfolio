@@ -447,6 +447,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <div class="card">
       <div class="card-title">
         <span id="thesisSectorName">Sector</span> Thesis
+        <span id="thesisSectorStats" style="font-weight:400;font-size:11px;color:var(--muted);margin-left:10px"></span>
         <button onclick="document.getElementById('thesisSectorPanel').style.display='none'" 
           style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg-alt);cursor:pointer;color:var(--gray)">← Back</button>
       </div>
@@ -961,6 +962,10 @@ function isEquityRiskHolding(h) {
     || (!h.type && !['Fixed Income', 'Broad Market'].includes(h.sector));
 }
 function hasValidEquityBeta(h) {
+  // Number(null) and Number('') are both 0, and Number.isFinite(0) is true — so
+  // testing the coerced value alone let a holding with NO beta count as beta 0
+  // and quietly drag the fund average down. Reject the empty cases first.
+  if (h.beta === null || h.beta === undefined || h.beta === '') return false;
   return isEquityRiskHolding(h) && Number.isFinite(Number(h.beta));
 }
 function calculateEquityBeta(holdings) {
@@ -1055,16 +1060,27 @@ function calcSectors(holdings, total) {
   const m = {};
   for (const h of holdings) {
     const sec = h.sector||'Other';
-    if (!m[sec]) m[sec] = {value:0, beta_num:0, holdings:[]};
+    if (!m[sec]) m[sec] = {value:0, beta_num:0, beta_den:0, holdings:[]};
     m[sec].value += h.marketValue||0;
-    m[sec].beta_num += (h.beta||1)*(h.marketValue||0);
+    // Sector beta uses the same eligibility rule as the fund beta: only holdings
+    // that carry equity risk AND have a real published beta. Treating a missing
+    // beta as 1 (or as 0) silently bends the average toward whatever was assumed.
+    if (hasValidEquityBeta(h)) {
+      m[sec].beta_num += Number(h.beta)*(h.marketValue||0);
+      m[sec].beta_den += (h.marketValue||0);
+    }
     m[sec].holdings.push(h);
   }
   // Diversification denominator = real sectors only (exclude Broad Market & Fixed Income),
   // so true sector weights sum to 100%. Matches the Investment Thesis tab basis.
   const SECTOR_EXCLUDE = ['Broad Market', 'Fixed Income'];
   const sectorBase = Object.entries(m).filter(([name])=>!SECTOR_EXCLUDE.includes(name)).reduce((s,[,d])=>s+d.value,0) || 1;
-  return Object.entries(m).map(([name,d])=>({name,value:d.value,pct:d.value/sectorBase,beta:d.beta_num/(d.value||1),holdings:d.holdings})).sort((a,b)=>b.value-a.value);
+  return Object.entries(m).map(([name,d])=>({
+    name, value:d.value, pct:d.value/sectorBase, holdings:d.holdings,
+    beta: d.beta_den > 0 ? d.beta_num/d.beta_den : null,
+    // Share of the sector's market value that actually has a beta behind it.
+    betaCoverage: d.value > 0 ? d.beta_den/d.value : 0
+  })).sort((a,b)=>b.value-a.value);
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
@@ -2558,7 +2574,7 @@ function renderSectorDetail() {
     <div class="sp_">${(s.pct*100).toFixed(1)}%</div>
     <div class="sp_" style="color:var(--gray)">${(s.value/(S.total||1)*100).toFixed(1)}%</div>
     <div class="sv">${fmtK(s.value)}</div>
-    <div style="width:46px;text-align:right;font-size:11px;color:var(--gray);flex-shrink:0">${s.beta.toFixed(2)}β</div></div>`).join('')+
+    <div style="width:46px;text-align:right;font-size:11px;color:var(--gray);flex-shrink:0">${fmtBeta(s.beta)}${Number.isFinite(s.beta)?'β':''}</div></div>`).join('')+
     `<div class="snapshot-note" style="margin-top:10px">Direct classified exposure. Broad-market ETFs, fixed income, and cash are not decomposed into look-through sector exposure.</div>`;
   const allSectors=[...new Set(S.holdings.map(h=>h.sector))].sort();
   document.getElementById('sectorFilterRow').innerHTML=
@@ -2595,7 +2611,7 @@ function renderSectorBeta() {
     <div style="display:grid;grid-template-columns:1fr 1fr;font-size:10px;font-weight:700;color:var(--muted);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:8px"><span>Sector</span><span style="text-align:right">Beta · Weight</span></div>
     ${sectors.map(s=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)">
     <span style="font-size:11px;font-weight:600">${s.name}</span>
-    <span><span style="font-size:13px;font-weight:700;color:${s.beta>1.2?'#ff8f8f':s.beta<0.8?'#4ade80':'#f4f7fb'}">${s.beta.toFixed(2)}</span>
+    <span><span style="font-size:13px;font-weight:700;color:${!Number.isFinite(s.beta)?'var(--muted)':s.beta>1.2?'#ff8f8f':s.beta<0.8?'#4ade80':'#f4f7fb'}">${fmtBeta(s.beta)}</span>
     <span style="font-size:11px;color:var(--muted);margin-left:8px">${(s.pct*100).toFixed(1)}%</span></span></div>`).join('')}`;
 }
 
@@ -2613,7 +2629,7 @@ function renderSectorCards() {
         <div class="sc-name">${s.name}</div>
         <div class="perf-value ${secReturn>=0?'pos':'neg'}" style="font-size:16px">${secReturn>=0?'+':''}${secReturn.toFixed(1)}%</div>
         <div style="font-size:9px;color:var(--muted);margin-top:1px">return since purchase</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${(s.pct*100).toFixed(1)}% of eq. portfolio · β${s.beta.toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${(s.pct*100).toFixed(1)}% of eq. portfolio · β${fmtBeta(s.beta)}</div>
       </div>`;
     }).join('')}</div>`;
 }
@@ -2870,8 +2886,8 @@ function calcWhatIf() {
 
   const maxPct = Math.max(...newSectors.map(s=>s.pct));
   document.getElementById('wiSectorImpact').innerHTML=`
-    <div style="display:grid;grid-template-columns:155px 1fr 60px 60px 60px 60px 60px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">
-    <span>Sector</span><span>Bar</span><span style="text-align:right">Before</span><span style="text-align:right">After</span><span style="text-align:right">Change</span><span style="text-align:right">S&P</span><span style="text-align:right">vs S&P</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 56px 56px 56px 76px 56px 56px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">
+    <span>Sector</span><span>Bar</span><span style="text-align:right">Before</span><span style="text-align:right">After</span><span style="text-align:right">Change</span><span style="text-align:right" title="Value-weighted beta of the sector, before and after the trades">Beta</span><span style="text-align:right">S&P</span><span style="text-align:right">vs S&P</span></div>
     ${newSectors.map(ns=>{
       const os=typeof oldSectors!=='undefined'?oldSectors.find(s=>s.name===ns.name):sectors.find(s=>s.name===ns.name);
       const oldPct=os?os.pct:0;
@@ -2879,28 +2895,17 @@ function calcWhatIf() {
       const spPct=(SP500_SECTORS[ns.name]||0)/100;
       const vssp=ns.pct-spPct;
       const changed=Math.abs(change)>0.0001;
-      return `<div style="display:grid;grid-template-columns:155px 1fr 60px 60px 60px 60px 60px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);${changed?'background:rgba(101,163,255,.10);margin:0 -4px;padding:5px 4px;border-radius:4px;':''}">
+      const bDelta=(Number.isFinite(ns.beta)&&os&&Number.isFinite(os.beta))?ns.beta-os.beta:0;
+      return `<div style="display:grid;grid-template-columns:150px 1fr 56px 56px 56px 76px 56px 56px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);${changed?'background:rgba(101,163,255,.10);margin:0 -4px;padding:5px 4px;border-radius:4px;':''}">
       <div style="font-size:11px;font-weight:${changed?700:600};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ns.name}</div>
       <div style="height:12px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:${changed?'#3b82f6':'var(--navy)'};width:${(ns.pct/maxPct*100).toFixed(1)}%;border-radius:3px"></div></div>
       <div style="text-align:right;font-size:11px;color:var(--gray)">${(oldPct*100).toFixed(1)}%</div>
       <div style="text-align:right;font-size:11px;font-weight:${changed?700:400};color:${changed?'var(--blue)':'var(--text)'}">${(ns.pct*100).toFixed(1)}%</div>
       <div style="text-align:right;font-size:11px;font-weight:600;color:${change>0.001?'#ff8f8f':change<-0.001?'#4ade80':'var(--gray)'} ">${change>=0?'+':''}${(change*100).toFixed(2)}%</div>
+      <div style="text-align:right;font-size:10px" title="Value-weighted sector beta before → after. Beta covers ${((ns.betaCoverage||0)*100).toFixed(0)}% of this sector's value; holdings with no published beta are left out of the average entirely.">${os&&Number.isFinite(os.beta)?fmtBeta(os.beta):'—'}<span style="color:var(--gold)"> → </span><strong style="color:${bDelta>0.005?'#ff8f8f':bDelta<-0.005?'#4ade80':'var(--text)'}">${Number.isFinite(ns.beta)?fmtBeta(ns.beta):'—'}</strong></div>
       <div style="text-align:right;font-size:11px;color:var(--gray)">${(spPct*100).toFixed(1)}%</div>
       <div style="text-align:right;font-size:11px;font-weight:600;color:${vssp>0.01?'#9fc4ff':vssp<-0.01?'#ff8f8f':'var(--gray)'} ">${vssp>=0?'+':''}${(vssp*100).toFixed(1)}%</div></div>`;
     }).join('')}`;
-  // Sector beta before → after (only sectors your trades touched)
-  (function(){
-    const _rows=newSectors.map(ns=>{
-      const os=typeof oldSectors!=='undefined'?oldSectors.find(s=>s.name===ns.name):null;
-      if(!os)return '';
-      const _d=(ns.beta||0)-(os.beta||0);
-      if(Math.abs(_d)<0.005)return '';
-      const _col=_d>0?'#ff8f8f':'#4ade80';
-      return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="font-weight:600">'+ns.name+'</span><span>β'+os.beta.toFixed(2)+' → <strong style="color:'+_col+'">β'+ns.beta.toFixed(2)+'</strong> <span style="font-size:10px;color:'+_col+'">('+(_d>=0?'+':'')+_d.toFixed(2)+')</span></span></div>';
-    }).filter(Boolean).join('');
-    if(_rows)document.getElementById('wiSectorImpact').innerHTML+='<div style="margin-top:14px"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Sector Beta Changes</div>'+_rows+'</div>';
-  })();
-
   document.getElementById('wiResults').classList.add('show');
 }
 
@@ -3825,15 +3830,16 @@ async function renderSCChart(sectorName, view, period) {
   const BENCH_BETAS={XLK:1.42,XLI:1.05,XLF:1.00,XLV:0.65,XLE:0.95,XLY:1.15,XLC:1.00,XLP:0.55,XLU:0.70,XLB:1.05,VNQ:1.00,SMH:1.60,IYG:1.05,IYJ:1.05,NLR:0.95};
   const _bh=ALL_HOLDINGS().find(h=>h.ticker===benchmark);
   const benchBeta=_bh&&_bh.beta?_bh.beta:(BENCH_BETAS[benchmark]||1.00);
-  const betaDiff=sec.beta-benchBeta;
+  const _secBeta=Number.isFinite(sec.beta)?sec.beta:null;
+  const betaDiff=_secBeta!==null?_secBeta-benchBeta:null;
   document.getElementById('scKpis').innerHTML=`
     <div class="perf-card" style="border-left:3px solid var(--gold)"><div class="perf-label">Sector Total (${period})</div><div class="perf-value">${fr(sectorTotalReturn)}</div><div class="perf-sub">Eq+ETF combined</div></div>
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${eqClick}"><div class="perf-label">Equities (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(eqReturn)}</div><div class="perf-sub">${equities.length} stocks</div></div>
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${etfClick}"><div class="perf-label">ETFs (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(etfReturn)}</div><div class="perf-sub">${etfs.length} ETFs</div></div>
     <div class="perf-card"><div class="perf-label">${benchmark} (${period})</div><div class="perf-value">${fr(benchReturn)}</div><div class="perf-sub">Sector benchmark</div></div>
     <div class="perf-card"><div class="perf-label" title="Sector ETF return minus benchmark return. This is not Jensen's alpha.">Excess Return vs ${benchmark}</div><div class="perf-value">${sectorTotalReturn!==null&&benchReturn!==null?fr(sectorTotalReturn-benchReturn):'<span style="color:var(--muted)">—</span>'}</div><div class="perf-sub">Sector vs benchmark</div></div>
-    <div class="perf-card"><div class="perf-label">Sector β vs ${benchmark} β</div><div class="perf-value"><span class="${betaDiff>0.05?'neg':betaDiff<-0.05?'pos':''}">β${sec.beta.toFixed(2)}</span> <span style="font-size:13px;color:var(--muted)">vs β${benchBeta.toFixed(2)}</span></div><div class="perf-sub">${betaDiff>=0?'+':''}${betaDiff.toFixed(2)} vs ${benchmark} — ${Math.abs(betaDiff)<0.05?'in line with':betaDiff>0?'riskier than':'more defensive than'} its benchmark</div></div>
-    <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of ${S.fundName} · β${sec.beta.toFixed(2)}</div></div>`;
+    <div class="perf-card"><div class="perf-label">Sector β vs ${benchmark} β</div><div class="perf-value"><span class="${betaDiff===null?'':betaDiff>0.05?'neg':betaDiff<-0.05?'pos':''}">β${fmtBeta(_secBeta)}</span> <span style="font-size:13px;color:var(--muted)">vs β${benchBeta.toFixed(2)}</span></div><div class="perf-sub">${betaDiff===null?'No published beta for this sector’s holdings':(betaDiff>=0?'+':'')+betaDiff.toFixed(2)+' vs '+benchmark+' — '+(Math.abs(betaDiff)<0.05?'in line with':betaDiff>0?'riskier than':'more defensive than')+' its benchmark'}</div></div>
+    <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of ${S.fundName} · β${fmtBeta(_secBeta)}</div></div>`;
 
   document.getElementById('scChartTitle').textContent=`${sectorName} — ${period} vs ${benchmark}`;
   document.getElementById('sectorCompareDetail').style.display='block';
@@ -4188,6 +4194,41 @@ function openSectorThesis(sectorName) {
   const equities = sec.holdings.filter(h => h.type === 'equity');
   const etfs = sec.holdings.filter(h => h.type === 'etf');
   const totalMV = sec.holdings.reduce((s,h) => s+(h.marketValue||0), 0);
+
+  // Sector beta, and the split between the equities and the ETFs inside it.
+  // Holdings with no beta are left out of both sides rather than counted as 0.
+  const wBeta = list => {
+    const ok = list.filter(hasValidEquityBeta);
+    const v = ok.reduce((a,h) => a + (h.marketValue||0), 0);
+    return v > 0 ? ok.reduce((a,h) => a + Number(h.beta)*(h.marketValue||0), 0)/v : null;
+  };
+  const secBeta = sec.beta, eqBeta = wBeta(equities), etfBeta = wBeta(etfs);
+  const covered = totalMV * (sec.betaCoverage || 0);
+  // Whether this sector adds or removes risk relative to the fund as a whole is
+  // the number that actually drives a buy/sell decision, so show it alongside.
+  const fundBeta = calculateFundBeta(S.holdings, S.cash).beta;
+  const bench = SECTOR_BENCHMARKS[sectorName];
+  const statsEl = document.getElementById('thesisSectorStats');
+  if (statsEl) {
+    const chip = (label, v, tip) => v == null ? '' :
+      '<span title="' + tip + '" style="display:inline-block;margin-right:12px">' + label +
+      ' <strong style="color:var(--text)">' + fmtBeta(v) + '</strong></span>';
+    statsEl.innerHTML =
+      chip('Sector β', secBeta, 'Value-weighted beta of every holding in this sector') +
+      chip('Equities β', eqBeta, 'Value-weighted beta of the equities only') +
+      chip('ETFs β', etfBeta, 'Value-weighted beta of the ETFs only') +
+      '<span style="margin-right:12px">$' + fmt(totalMV) + '</span>' +
+      '<span>' + (S.total ? (totalMV/S.total*100).toFixed(1) : '0') + '% of ' + S.fundName + '</span>' +
+      (bench ? '<span style="margin-left:12px;color:var(--gray)">benchmark ' + bench + '</span>' : '') +
+      (secBeta != null && Number.isFinite(fundBeta)
+        ? '<span title="A sector above the fund beta raises overall risk when you add to it; one below lowers it."'
+          + ' style="margin-left:12px;color:' + (secBeta > fundBeta ? '#ff8f8f' : '#4ade80') + '">'
+          + (secBeta > fundBeta ? '+' : '') + (secBeta - fundBeta).toFixed(2) + ' vs fund β' + fmtBeta(fundBeta)
+          + '</span>' : '') +
+      (covered < totalMV - 0.5
+        ? '<span style="margin-left:12px;color:var(--gold)">β covers ' +
+          (totalMV ? (covered/totalMV*100).toFixed(0) : '0') + '% of value</span>' : '');
+  }
 
   // Pie chart
   if (sectorPieRef) sectorPieRef.destroy();
