@@ -121,15 +121,15 @@ function loadPositions(p){
 
 (async()=>{
  // Anchor = the as-of date carried in the positions export filenames.
- const ANCHOR='2026-08-03';
+ const ANCHOR='2026-09-02';
  const DL='C:\\Users\\Wmaxe\\Downloads\\';
  const FUNDS=[
   {name:'CEE Fund',key:'ceeFund',
    file:DL+'CEE_Fund_Portfolio_XXX948_Transactions_20260812-085629.csv',
-   pos:DL+'CEE Fund Portfolio-Positions-2026-08-03-113807.csv'},
+   pos:DL+'CEE Fund Portfolio-Positions-2026-09-02-140153.csv'},
   {name:'Endowment',key:'endowment',
    file:DL+'CEE_Fund_Mngd_Endow_XXX047_Transactions_20260812-085807.csv',
-   pos:DL+'CEE Fund Mngd Endow-Positions-2026-08-03-113757.csv'}];
+   pos:DL+'CEE Fund Mngd Endow-Positions-2026-09-02-140132.csv'}];
 
  // Sector labels stay with the dashboard holdings, where the committee maintains
  // them; the positions export supplies share counts and cash.
@@ -140,7 +140,16 @@ function loadPositions(p){
   (lf.etfs||[]).forEach(h=>{sectorOf[h.ticker]=h.sector||'Other';typeOf[h.ticker]='etf'});}
 
  const universe=new Set();
+ // Transactions after the last CSV export, reconstructed from the August
+ // statements and validated to reproduce the 9/2 positions exactly.
+ const extraPath=path.join(__dirname,'new_tx.json');
+ const extra=fs.existsSync(extraPath)?JSON.parse(fs.readFileSync(extraPath,'utf8')):[];
  for(const f of FUNDS){ f.tx=load(f.file,f.name); f.positions=loadPositions(f.pos);
+  for(const [d,fund,t,a,q,pr,amt] of extra){
+   if(fund!==f.name) continue;
+   f.tx.push({date:d,action:a,sym:norm(t||''),qty:q||0,price:pr||0,fee:0,amt:amt||0,fund:f.name});
+  }
+  f.tx.sort((x,y)=>x.date.localeCompare(y.date));
   f.tx.forEach(t=>{if(t.sym&&!IS_CUSIP(t.sym))universe.add(t.sym)});
   Object.keys(f.positions.shares).forEach(t=>{ if(!IS_CUSIP(t)) universe.add(t);
    if(!typeOf[t]) typeOf[t]=f.positions.type[t]||'equity';

@@ -15,10 +15,10 @@ from datetime import datetime
 import openpyxl   # read-only, for locating rows by their cached ticker
 
 DL   = r"C:\Users\Wmaxe\Downloads"
-SRC  = os.path.join(DL, "CEE Fund Portfolios 4.12.26 (5).xlsx")
-OUT  = os.path.join(DL, "CEE Fund Portfolios 8.3.26 LIVE.xlsx")
-POS  = {"Endowment": os.path.join(DL, "CEE Fund Mngd Endow-Positions-2026-08-03-113757.csv"),
-        "CEE Fund":  os.path.join(DL, "CEE Fund Portfolio-Positions-2026-08-03-113807.csv")}
+SRC  = os.path.join(DL, "CEE Fund Portfolios 8.3.26 LIVE.xlsx")
+OUT  = os.path.join(DL, "CEE Fund Portfolios 9.2.26.xlsx")
+POS  = {"Endowment": os.path.join(DL, "CEE Fund Mngd Endow-Positions-2026-09-02-140132.csv"),
+        "CEE Fund":  os.path.join(DL, "CEE Fund Portfolio-Positions-2026-09-02-140153.csv")}
 TXF  = {"Endowment": os.path.join(DL, "CEE_Fund_Mngd_Endow_XXX047_Transactions_20260812-085807.csv"),
         "CEE Fund":  os.path.join(DL, "CEE_Fund_Portfolio_XXX948_Transactions_20260812-085629.csv")}
 
@@ -99,6 +99,16 @@ for fund, path in TXF.items():
         txs.append((iso(row["Date"]), fund, tkr(row["Symbol"] or ""), row["Action"].strip(),
                     num(row["Quantity"]), num(row["Price"]), num(row["Amount"]),
                     num(row["Fees & Comm"]), (row["Description"] or "").strip()))
+# Transactions after the last CSV export, taken from the August statements and
+# the 09/01 settlements, validated to reproduce the 9/2 positions exactly.
+import json as _json
+_extra = os.path.join(os.path.dirname(os.path.abspath(__file__)), "new_tx.json")
+if os.path.exists(_extra):
+    _seen = {(t[0], t[1], t[2], t[3], round(t[4], 4)) for t in txs}
+    for d, fund, t, a, q, pr, amt in _json.load(open(_extra)):
+        key = (d, fund, t, a, round(q, 4))
+        if key in _seen: continue
+        txs.append((d, fund, t, a, q, pr, amt, 0.0, ""))
 txs.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
 
 # ---- rewrite the package ---------------------------------------------------
@@ -195,6 +205,27 @@ sheet_xml = (
     '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
     '</worksheet>'
 ) % (len(txs) + 1, "".join(rows_xml), len(txs) + 1)
+
+# If a Transactions sheet already exists, overwrite that part in place. Adding
+# a second one leaves the workbook with two sheets of the same name, and only
+# the stale first copy is ever read.
+if "Transactions" in sheet_part:
+    parts[sheet_part["Transactions"]] = sheet_xml.encode("utf-8")
+    with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
+        for n in names:
+            z.writestr(n, parts.pop(n, zin.read(n)))
+        for n, data in parts.items():
+            z.writestr(n, data)
+    zin.close()
+    print("WROTE " + OUT + "   (Transactions sheet replaced in place)")
+    for f, r in report.items():
+        print("  %-10s positions updated=%d  cash=%s -> $%s  %s"
+              % (f, r["updated"], r["cash_ref"], format(r["cash"], ",.2f"),
+                 ("NEEDS MANUAL ROW: " + ", ".join(r["missing"])) if r["missing"] else ""))
+    print("  constants rewritten : %d   cached refreshed : %d" % (applied, refreshed))
+    print("  failures            : %s" % (failed or "none"))
+    print("  Transactions rows   : %d  (%s -> %s)" % (len(txs), txs[-1][0], txs[0][0]))
+    raise SystemExit(0)
 
 # register the new sheet
 wbxml_new = wbxml.replace("</sheets>",

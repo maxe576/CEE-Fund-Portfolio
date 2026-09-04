@@ -116,5 +116,28 @@ growth looks far larger than the fund earned.
   (`30231G102` old Exxon, `50187A107` LHC Group) cannot be priced. Their value
   is excluded from the days they were held.
 - The Treasury note is carried near par rather than marked to market.
-- `MBGL` (Mobility Global, spun off from ExxonMobil 07/01/2026) is defaulted to
-  the Energy sector. Change it in the workbook if the committee prefers another.
+- `MBGL` (Mobility Global, spun off from ExxonMobil 07/01/2026) is classified
+  under Financials in the workbook.
+
+## Transactions newer than the CSV export
+
+The Schwab transaction CSVs lag the position exports. Anything in between is
+reconstructed from the monthly statement — the Transaction Details section, the
+Pending section for trades that settle after month end, and position deltas for
+dividends that settle in the gap and appear in neither. Those rows live in
+`tools/new_tx.json`, are folded into both the workbook and the rebuild, and
+`tools/statement-transactions.py` re-validates them: applying them to the prior
+positions must reproduce the new positions exactly.
+
+Clear `new_tx.json` once a CSV export covers the same period, or the rows will
+be counted twice.
+
+## Open question on the CEE Fund
+
+On 2026-09-02 the CEE Fund's cash reads $169.92. The 08/31 sales settled 09/01
+and raised $3,893.67 on an opening balance of $1,276.24, which should leave
+$5,169.91. The gap is exactly $5,000.00. Nothing in the August statement
+accounts for it and the Endowment did not receive it, so it is recorded as a
+wire out dated 09/02 to keep the ledger balanced. **This needs confirming** — if
+it was a purchase that settles later, or a transfer, the entry should be
+corrected.
