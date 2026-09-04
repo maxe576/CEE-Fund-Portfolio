@@ -4573,7 +4573,12 @@ function renderThesisMasterTable(filter, sort) {
   else if (thesisSortCol==='return') holdings=[...holdings].sort((a,b)=>_dir*((a.glPct||0)-(b.glPct||0)));
   else holdings=[...holdings].sort((a,b)=>_dir*((b.marketValue||0)-(a.marketValue||0)));
 
-  document.getElementById('thesisCount').textContent = `(${holdings.length} equities)`;
+  // Total alongside the count, so a filtered view answers "what would this
+  // raise if we sold all of it" without adding the rows up by hand.
+  const _shownMV = holdings.reduce((s, h) => s + (h.marketValue || 0), 0);
+  document.getElementById('thesisCount').innerHTML =
+    `(${holdings.length} equities &middot; <strong style="color:var(--text)">$${Math.round(_shownMV).toLocaleString()}</strong> combined` +
+    (S.total ? ` &middot; ${(_shownMV / S.total * 100).toFixed(1)}% of ${S.fundName}` : '') + `)`;
   document.getElementById('thesisMasterTable').innerHTML = `
     <tr>
   <th>Ticker</th><th>Company</th><th>Sector</th><th>Market Cap</th><th>Tag</th>
@@ -4582,6 +4587,7 @@ function renderThesisMasterTable(filter, sort) {
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('ytd')">YTD ↕</th>
   <th style="cursor:pointer;user-select:none" title="Annualized intercept of the 36-month regression vs SPY" onclick="thesisSortBy('alpha')">3Y Alpha ↕</th>
   <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('weight')" title="Weight within this fund (Endowment or CEE), not the combined total">% of ${S.fundName} ↕</th>
+  <th style="cursor:pointer;user-select:none" onclick="thesisSortBy('weight')" title="What the position is worth today — the cash it would raise if sold in full, before costs or tax">Market Value ↕</th>
   <th>Price</th><th>Base Target</th><th style="cursor:pointer;user-select:none" onclick="thesisSortBy('upside')">Upside ↕</th><th style="cursor:pointer;user-select:none" onclick="thesisSortBy('return')" title="Gain since the fund purchased this position — NOT year-to-date">Since Purch. ↕</th><th>Thesis</th>
 </tr>
     ${holdings.map(h => {
@@ -4607,6 +4613,7 @@ function renderThesisMasterTable(filter, sort) {
         <td class="${_ytdCls}" title="${_ytdTip}" style="cursor:help">${_ytdTxt}</td>
         <td class="${stats3y[h.ticker]?.alpha!=null?(stats3y[h.ticker].alpha>=0?'pos':'neg'):''}" style="font-weight:700" title="Annualized 36-month regression alpha vs SPY">${stats3y[h.ticker]?.alpha!=null?((stats3y[h.ticker].alpha>=0?'+':'')+stats3y[h.ticker].alpha.toFixed(1)+'%'):'—'}</td>
         <td style="font-size:11px">${(h.marketValue/S.total*100).toFixed(1)}%</td>
+        <td style="font-weight:700;white-space:nowrap" title="Cash this position would raise if sold in full, before costs or tax">$${Math.round(h.marketValue||0).toLocaleString()}</td>
         <td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
         <td style="font-weight:600">${td.base?'$'+td.base.toFixed(2):'—'}</td>
         <td class="${upside===null?'':upside>=0?'pos':'neg'}" style="font-weight:700">${upside!==null?(upside>=0?'+':'')+upside.toFixed(1)+'%':'—'}</td>
