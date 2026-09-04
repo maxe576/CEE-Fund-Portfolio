@@ -1,1 +1,5 @@
-﻿pxcache/
+pxcache/
+perf.json
+perf.min.json
+ledger.json
+__pycache__/

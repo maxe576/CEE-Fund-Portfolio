@@ -18,7 +18,7 @@ const num=s=>{if(!s)return 0;const n=parseFloat(String(s).replace(/,/g,''));retu
 const iso=s=>{const m=String(s).split(' as of ');const d=(m[1]||m[0]).trim().split('/');
  return d.length===3?`${d[2]}-${d[0].padStart(2,'0')}-${d[1].padStart(2,'0')}`:null};
 
-const ALIAS={BRKB:'BRK.B', RGI:'RSPN'};              // Schwab symbol -> dashboard ticker
+const ALIAS={BRKB:'BRK.B', 'BRK/B':'BRK.B', RGI:'RSPN'};              // Schwab symbol -> dashboard ticker
 const YF   ={'BRK.B':'BRK-B'};                       // dashboard ticker -> Yahoo symbol
 const norm=s=>ALIAS[s]||s;
 const IS_CUSIP=s=>/^[0-9][0-9A-Z]{8}$/.test(s);
@@ -94,27 +94,57 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  return (lo+hi)/2;
 }
 
+/* Positions export -> the anchor the reconstruction is pinned to.
+   Reading the dated Schwab file rather than the holdings node means the anchor
+   date is never in doubt. The earlier version trusted Firebase, whose as-of date
+   had to be recovered by matching prices because a workbook filename said April
+   while its contents were actually July. */
+function loadPositions(p){
+ const rows=parseCSV(fs.readFileSync(p,'utf8'));
+ const h=rows.findIndex(r=>r[0]==='Symbol');
+ const hdr=rows[h].map(x=>x.trim());
+ const ix=n=>hdr.findIndex(c=>c.startsWith(n));
+ const iQty=ix('Qty'), iMv=ix('Mkt Val'), iType=ix('Asset Type');
+ const out={shares:{},cash:0,type:{}};
+ for(let i=h+1;i<rows.length;i++){
+  const r=rows[i]; if(!r||!r[0]) continue;
+  const sym=r[0].trim();
+  if(sym==='Positions Total') continue;
+  if(sym.startsWith('Cash')){ out.cash=money(r[iMv]); continue; }
+  const tk=norm(sym), q=num(r[iQty]), at=(r[iType]||'').trim();
+  if(!q) continue;
+  out.shares[tk]=q;
+  out.type[tk]=at.startsWith('ETF')?'etf':at.startsWith('Fixed')?'bond':'equity';
+ }
+ return out;
+}
+
 (async()=>{
- // True as-of date of the holdings snapshot, determined by matching its stored
- // prices against daily closes: exact (0.00% error) on 2026-07-07. The workbook
- // filename says 4.12.26 but its prices and post-split share counts are July.
- const ANCHOR='2026-07-07';
- const live=await get('https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeHoldings.json');
-
+ // Anchor = the as-of date carried in the positions export filenames.
+ const ANCHOR='2026-08-03';
+ const DL='C:\\Users\\Wmaxe\\Downloads\\';
  const FUNDS=[
-  {name:'CEE Fund',key:'ceeFund',file:"C:\\Users\\Wmaxe\\Downloads\\CEE_Fund_Portfolio_XXX948_Transactions_20260812-085629.csv"},
-  {name:'Endowment',key:'endowment',file:"C:\\Users\\Wmaxe\\Downloads\\CEE_Fund_Mngd_Endow_XXX047_Transactions_20260812-085807.csv"}];
+  {name:'CEE Fund',key:'ceeFund',
+   file:DL+'CEE_Fund_Portfolio_XXX948_Transactions_20260812-085629.csv',
+   pos:DL+'CEE Fund Portfolio-Positions-2026-08-03-113807.csv'},
+  {name:'Endowment',key:'endowment',
+   file:DL+'CEE_Fund_Mngd_Endow_XXX047_Transactions_20260812-085807.csv',
+   pos:DL+'CEE Fund Mngd Endow-Positions-2026-08-03-113757.csv'}];
 
- // ticker universe + sector/type map
+ // Sector labels stay with the dashboard holdings, where the committee maintains
+ // them; the positions export supplies share counts and cash.
+ const live=await get('https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeHoldings.json');
  const sectorOf={}, typeOf={};
- for(const f of FUNDS){const lf=live[f.key];
+ for(const f of FUNDS){const lf=live[f.key]||{};
   (lf.equities||[]).forEach(h=>{sectorOf[h.ticker]=h.sector||'Other';typeOf[h.ticker]='equity'});
   (lf.etfs||[]).forEach(h=>{sectorOf[h.ticker]=h.sector||'Other';typeOf[h.ticker]='etf'});}
 
  const universe=new Set();
- for(const f of FUNDS){ f.tx=load(f.file,f.name);
+ for(const f of FUNDS){ f.tx=load(f.file,f.name); f.positions=loadPositions(f.pos);
   f.tx.forEach(t=>{if(t.sym&&!IS_CUSIP(t.sym))universe.add(t.sym)});
-  const lf=live[f.key];[...(lf.equities||[]),...(lf.etfs||[])].forEach(h=>universe.add(h.ticker)); }
+  Object.keys(f.positions.shares).forEach(t=>{ if(!IS_CUSIP(t)) universe.add(t);
+   if(!typeOf[t]) typeOf[t]=f.positions.type[t]||'equity';
+   if(!sectorOf[t]) sectorOf[t]='Other'; }); }
  const BENCH=['SPY','QQQ','VTI','VOO','XLK','XLF','XLV','XLY','XLC','XLI','XLP','XLE','XLU','XLB','XLRE','AGG'];
  BENCH.forEach(b=>universe.add(b));
  const tickers=[...universe].sort();
@@ -136,13 +166,12 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const OUT={generatedAt:new Date().toISOString(),anchor:ANCHOR,dates:calendar,funds:{},meta:{}};
 
  for(const f of FUNDS){
-  const lf=live[f.key];
-  // anchor positions in ADJUSTED share space
+  // anchor positions in ADJUSTED share space, taken from the positions export
   const anchorAdj={};
-  [...(lf.equities||[]),...(lf.etfs||[])].forEach(h=>{
-   anchorAdj[h.ticker]=(h.shares||0)*splitFactor(h.ticker,ANCHOR);});
-  if(f.key==='endowment') anchorAdj[BOND_CUSIP]=25000;   // Treasury held as par, priced at cost
-  let anchorCash=lf.cash||0;
+  for(const [tk,q] of Object.entries(f.positions.shares)){
+   anchorAdj[tk]=IS_CUSIP(tk)?q:q*splitFactor(tk,ANCHOR);
+  }
+  let anchorCash=f.positions.cash||0;
 
   // transactions in adjusted space (Stock Split rows dropped - factor handles them)
   const tx=f.tx.filter(t=>t.action!==SPLIT_ROW).map(t=>{

@@ -3625,6 +3625,10 @@ function handleExcelUpload(input){
       if(blocking.length){errEl.innerHTML='Upload aborted — blocking errors:<br>• '+blocking.join('<br>• ');errEl.style.display='block';return;}
       RAW.endowment.equities=endR.equities;RAW.endowment.etfs=endR.etfs;RAW.endowment.cash=endR.cash;
       RAW.ceeFund.equities=ceeR.equities;RAW.ceeFund.etfs=ceeR.etfs;RAW.ceeFund.cash=ceeR.cash;
+      // Fixed income only refreshes when the sheet actually carries a bond line,
+      // so a workbook without one cannot silently erase the holding.
+      if(endR.bonds&&endR.bonds.length)RAW.endowment.bond=endR.bonds.length===1?endR.bonds[0]:endR.bonds;
+      if(ceeR.bonds&&ceeR.bonds.length)RAW.ceeFund.bond=ceeR.bonds.length===1?ceeR.bonds[0]:ceeR.bonds;
       // Only replace transaction history when the upload actually contains a Transactions sheet —
       // a holdings-only upload must never wipe previously saved transactions.
       if(txR!==null){ TRANSACTIONS.length=0; txR.forEach(t=>TRANSACTIONS.push(t)); }
@@ -3669,33 +3673,55 @@ function validateParsedFund(parsed, fundName){
   return {errors, warnings};
 }
 
+// A 9-character CUSIP identifies a fixed-income line (the Treasury note). It is
+// held separately from equities and ETFs, and the length guard below would
+// otherwise discard it — which silently dropped $24k from the Endowment.
+const CUSIP_RE=/^[0-9][0-9A-Z]{8}$/;
 function parsePortfolioSheet(rows,fundName){
-  const equities=[],etfs=[];let cash=0,inEtf=false;
+  const equities=[],etfs=[],bonds=[];let cash=0,inEtf=false;
   for(let i=0;i<rows.length;i++){
     const row=rows[i];if(!row||!row[1])continue;const cell=String(row[1]).trim();
     if(cell.toLowerCase().includes('etf')){inEtf=true;continue;}
     if(cell==='Cash'&&row[2]&&typeof row[2]==='number'){cash=row[2];continue;}
     if(cell==='Ticker'||!row[3]||typeof row[3]!=='number')continue;
+    if(CUSIP_RE.test(cell)){
+      bonds.push({ticker:cell,company:String(row[2]||cell),shares:row[3]||0,costBasis:row[4]||0,
+        avgCost:row[5]||0,price:row[6]||0,marketValue:row[7]||0,sector:'Fixed Income',
+        beta:null,type:'bond',fund:fundName});
+      continue;
+    }
     if(cell.length>8&&!cell.match(/^[A-Z.]+$/))continue;
     const tk=cell.replace('BRK/B','BRK.B');
     // Missing beta stays null (never silently 1.0) — the beta engine reports coverage instead.
     const h={ticker:tk,company:COMPANY_NAMES[tk]||tk,shares:row[3]||0,costBasis:row[4]||0,avgCost:row[5]||0,price:row[6]||0,marketValue:row[7]||(row[3]||0)*(row[6]||0),dayPct:row[8]||0,dayDollar:row[9]||0,glDollar:row[10]||0,glPct:row[11]||0,sector:normalizeSector(tk,inEtf?(ETF_SECTORS[tk]||'ETF'):(typeof row[12]==='string'?row[12]:null)),beta:inEtf?(ETF_BETAS[tk]??null):(typeof row[13]==='number'?row[13]:null),type:inEtf?'etf':'equity',fund:fundName};
     if(inEtf)etfs.push(h);else equities.push(h);
   }
-  return{equities,etfs,cash,total:[...equities,...etfs].reduce((s,h)=>s+(h.marketValue||0),0)+cash};
+  return{equities,etfs,bonds,cash,
+    total:[...equities,...etfs,...bonds].reduce((s,h)=>s+(h.marketValue||0),0)+cash};
 }
 
+/* Reads the workbook's Transactions tab.
+   Columns: A date, B fund, C ticker, D action, E shares, F price, G amount, H fees.
+   Rows without a share count are kept — dividends, interest and wire transfers
+   carry their value in Amount, and dropping them lost the cash side of the
+   record entirely. Anything whose first cell is not a date (the title line, the
+   header row) is skipped. */
 function parseTransactionsXLS(rows){
   const tx=[];
-  for(let i=1;i<rows.length;i++){
-    const row=rows[i];if(!row||!row[0]||!row[2])continue;
+  const nz=v=>typeof v==='number'?v:(parseFloat(v)||0);
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i];if(!row||!row[0])continue;
     let dateVal=row[0],dateStr='';
     if(dateVal instanceof Date)dateStr=dateVal.toISOString().split('T')[0];
     else if(typeof dateVal==='number')dateStr=new Date((dateVal-25569)*86400*1000).toISOString().split('T')[0];
     else dateStr=String(dateVal).split('T')[0];
-    tx.push({date:dateStr,fund:String(row[1]||'').trim(),ticker:String(row[2]||'').trim().replace('BRK/B','BRK.B'),action:String(row[3]||'').trim(),shares:typeof row[4]==='number'?row[4]:parseFloat(row[4])||0,price:typeof row[5]==='number'?row[5]:parseFloat(row[5])||0});
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(dateStr))continue;
+    tx.push({date:dateStr,fund:String(row[1]||'').trim(),
+      ticker:String(row[2]||'').trim().replace('BRK/B','BRK.B'),
+      action:String(row[3]||'').trim(),shares:nz(row[4]),price:nz(row[5]),
+      amount:nz(row[6]),fees:nz(row[7])});
   }
-  return tx.filter(t=>t.ticker&&t.shares>0).sort((a,b)=>a.date.localeCompare(b.date));
+  return tx.filter(t=>t.ticker||t.amount).sort((a,b)=>a.date.localeCompare(b.date));
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
