@@ -14,21 +14,43 @@ practically fetch.
 
 ## Updating the workbook (the usual case)
 
-1. In Schwab, export **Positions** for both accounts to CSV.
-2. Export **Transactions** for both accounts to CSV (History → Export).
-3. Run `python tools/build-workbook.py` (paths are at the top of that file) to
-   produce a fresh workbook, or edit the existing one by hand.
-4. Upload it through the dashboard: type `ceeadmin`, enter the master code and
-   upload password, choose the file.
+**Do not rebuild this workbook with openpyxl or any similar library.** Price,
+Beta, Ticker and Day change are driven by Excel linked data types — the `_FV`
+formulas that read the Stocks entity sitting in the Company column. A
+load-and-save through openpyxl silently drops every `xl/richData` part,
+`xl/metadata.xml` and all 103 rich-value cell markers, which turns every live
+formula into an error while still producing a file that opens.
+
+`tools/update-workbook.py` edits the workbook as a zip of XML parts instead. It
+changes only the constants — Shares, Cost Basis, Cash and the Treasury market
+value — refreshes the cached result of each formula cell so the file is accurate
+before Excel recalculates, appends the Transactions sheet, and copies every
+other part through byte for byte.
+
+```bash
+python tools/update-workbook.py      # paths are at the top of the file
+```
+
+Then:
+
+1. **Open it in Excel** so the Stocks data types refresh. The formulas
+   recalculate to live prices and betas at that point; the cached values written
+   by the script are only a correct starting snapshot.
+2. **Add any brand-new position by hand.** A Stocks data type cannot be created
+   programmatically. Copy an existing row, type the company into the Company
+   column, and use Data → Stocks to convert it. The `_FV` formulas fill in
+   Ticker, Price, Beta and Day change automatically.
+3. Save, then upload through the dashboard: type `ceeadmin`, enter the master
+   code and upload password, choose the file.
 
 ### Sheet layout the upload expects
 
 Three tabs: **Endowment**, **CEE Fund**, **Transactions**.
 
-On the two position tabs, column **A must not be empty** — leave the title there.
-Excel's used range starts at the first non-empty column, so an empty column A
-shifts every column left by one and the parser reads company names as tickers.
-That failure is quiet and produces "No equities parsed".
+On the two position tabs, column **A must not be empty** — leave the title
+there. Excel's used range starts at the first non-empty column, so an empty
+column A shifts every column left by one and the parser reads company names as
+tickers. That failure is quiet and reports "No equities parsed".
 
 Columns, starting in **B**: Ticker · Company · Shares · Cost Basis · Avg Price ·
 Market Price · Market Value · Day % · Day $ · G/L $ · G/L % · Sector · Beta.
@@ -37,7 +59,9 @@ Market Price · Market Value · Day % · Day $ · G/L $ · G/L % · Sector · Be
 - A section header containing the letters "etf" switches following rows to the
   ETF sleeve. `Endowment ETF's` does this.
 - A row with `Cash` in column B and a number in C sets the cash balance.
-- A 9-character CUSIP (the Treasury note) is read as fixed income.
+- The Treasury block runs its own header — Ticker · Name · Amount · Cost Basis ·
+  Purchase Price · **Market Value in column G**, one to the left of where a
+  holdings row keeps it. A 9-character CUSIP is read as fixed income.
 
 The Transactions tab starts in column **A**: Date · Fund · Ticker · Action ·
 Shares · Price · Amount · Fees · Description. Rows without a share count are

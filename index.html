@@ -3685,8 +3685,12 @@ function parsePortfolioSheet(rows,fundName){
     if(cell==='Cash'&&row[2]&&typeof row[2]==='number'){cash=row[2];continue;}
     if(cell==='Ticker'||!row[3]||typeof row[3]!=='number')continue;
     if(CUSIP_RE.test(cell)){
+      // The Treasury block runs its own header — Ticker | Name | Amount | Cost
+      // Basis | Purchase Price | Market Value — so market value is in G, one
+      // column left of where a holdings row keeps it.
+      const mv=(typeof row[7]==='number'&&row[7])?row[7]:(row[6]||0);
       bonds.push({ticker:cell,company:String(row[2]||cell),shares:row[3]||0,costBasis:row[4]||0,
-        avgCost:row[5]||0,price:row[6]||0,marketValue:row[7]||0,sector:'Fixed Income',
+        avgCost:row[5]||0,price:0,marketValue:mv,sector:'Fixed Income',
         beta:null,type:'bond',fund:fundName});
       continue;
     }
