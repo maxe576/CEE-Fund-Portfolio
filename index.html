@@ -1115,7 +1115,7 @@ function renderRiskExposure() {
     cEl.innerHTML=top.map(h=>{
       const w=(h.marketValue||0)/(S.total||1);
       const clickable=h.type!=='bond';
-      return `<div class="sbr" ${clickable?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}><div class="sl">${h.ticker}${clickable?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</div>
+      return `<div class="sbr" ${clickable?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="openTicker('${h.ticker}')"`:''}><div class="sl">${h.ticker}${clickable?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</div>
         <div class="st"><div class="sf" style="width:${maxW>0?(w/maxW*100).toFixed(1):0}%;background:${w>0.08?'var(--warning)':'#3b62c9'}"></div></div>
         <div class="sp_">${(w*100).toFixed(1)}%</div><div class="sv">${fmtK(h.marketValue||0)}</div></div>`;
     }).join('')+`<div style="font-size:10px;color:var(--muted);margin-top:6px">Gold bars exceed an 8% single-position weight. Click a position to open its thesis.</div>`;
@@ -1133,56 +1133,65 @@ function renderRiskExposure() {
   }
 }
 
-// ── ETF LOOK-THROUGH (Yahoo topHoldings: each ETF's top-10 constituents + weights) ──────
-let etfHoldings = {};        // etfTicker -> {holdings:[{symbol,name,pct}], src:'fmp'|'sa'} | null | undefined
+// ── ETF LOOK-THROUGH (each ETF's constituents + weights) ─────────────────────
+// Source: the StockAnalysis holdings page, parsed out of the server-rendered HTML.
+// Two earlier sources are gone and should not be reinstated without re-testing:
+//   • stockanalysis.com/api/symbol/e/<TK>/holdings — now 404s on every ticker.
+//   • Vanguard's portfolio-holding JSON — now answers with the SPA HTML shell.
+// Both failed silently, which is why every ETF showed "0 of N decomposed".
+let etfHoldings = {};        // etfTicker -> {holdings:[{symbol,name,pct}], src, bond} | null | undefined
 let _ltLoading = false;
-(function(){ try{ const c=JSON.parse(localStorage.getItem('cee_etf_hold_v4')||'null');
-  if(c && Date.now()-c.ts < 30*86400e3) etfHoldings=c.data||{}; }catch(e){} })();
+(function(){ try{ const c=JSON.parse(localStorage.getItem('cee_etf_hold_v5')||'null');
+  if(c && Date.now()-c.ts < 7*86400e3) etfHoldings=c.data||{}; }catch(e){} })();
 
 function reloadEtfLookThrough(){
   etfHoldings={};
-  try{ localStorage.removeItem('cee_etf_hold_v4'); }catch(e){}
+  try{ localStorage.removeItem('cee_etf_hold_v5'); localStorage.removeItem('cee_etf_hold_v4'); }catch(e){}
   loadEtfLookThrough();
 }
 
-async function _fetchJsonWithProxyFallback(url){
+async function _fetchTextWithProxyFallback(url){
   // Direct first (fast); if blocked (file:// origin, CORS, network), retry via the CF proxy.
-  try{ const r=await fetch(url); if(r.ok) return await r.json(); }catch(e){}
-  try{ const r2=await fetch(CF_PROXY+'?url='+encodeURIComponent(url)); if(r2.ok) return await r2.json(); }catch(e){}
+  try{ const r=await fetch(url); if(r.ok) return await r.text(); }catch(e){}
+  try{ const r2=await fetch(CF_PROXY+'?url='+encodeURIComponent(url)); if(r2.ok) return await r2.text(); }catch(e){}
   return null;
 }
-// Issuer-direct FULL holdings (free, no key). Vanguard publishes JSON, which survives the
-// CF proxy. (SPDR's daily .xlsx was tried and dropped: the proxy text-decodes bodies, which
-// corrupts binary zip files — verified via replacement-character analysis. If the worker is
-// ever updated to stream bytes, an xlsx parser can be reinstated for full SPDR lists.)
-async function _vanguardHoldings(tk){
-  const d=await _fetchJsonWithProxyFallback('https://investor.vanguard.com/investment-products/etfs/profile/api/'+encodeURIComponent(tk)+'/portfolio-holding/stock');
-  const ent=d?.fund?.entity||[];
-  const rows=ent.map(e=>({
-    symbol:String(e.ticker||'').toUpperCase(),
-    name:e.longName||e.shortName||'',
-    pct:(parseFloat(e.percentWeight)||0)/100
-  })).filter(h=>h.symbol&&h.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,150);
-  return rows.length?{holdings:rows,src:'vanguard'}:null;
+
+// Pull the holdings table out of the page. Matching on the header text rather than
+// a CSS class keeps this working when the site reshuffles its generated class names.
+function _parseHoldingsTable(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const table of doc.querySelectorAll('table')) {
+    const heads = [...table.querySelectorAll('thead th')].map(th=>th.textContent.trim().toLowerCase());
+    const iSym = heads.findIndex(h=>h.includes('symbol'));
+    const iPct = heads.findIndex(h=>h.includes('weight'));
+    const iName= heads.findIndex(h=>h==='name');
+    if (iSym<0 || iPct<0) continue;
+    const rows = [...table.querySelectorAll('tbody tr')].map(tr=>{
+      const td=[...tr.children];
+      return {
+        symbol:(td[iSym]?.textContent||'').trim().toUpperCase(),
+        name:(iName>=0?(td[iName]?.textContent||''):'').trim(),
+        pct:parseFloat((td[iPct]?.textContent||'').replace(/[^0-9.\-]/g,''))/100
+      };
+    }).filter(h=>h.symbol && h.symbol!=='N/A' && h.pct>0);
+    if (rows.length) return rows;
+  }
+  return [];
 }
-const _VANGUARD_RX=/^V[A-Z]{1,4}$/;                       // VOO, VTI, VGT, VUG, VHT, VFH, …
 
 async function fetchEtfHoldings(ticker){
-  if(etfHoldings[ticker]!==undefined) return etfHoldings[ticker];
   const tk=String(ticker).toUpperCase();
-  // Bond ETFs have no equity constituents to look through — go straight to the FI panel.
+  if(etfHoldings[tk]!==undefined) return etfHoldings[tk];
   const etfObj=[...RAW.endowment.etfs,...RAW.ceeFund.etfs].find(e=>e.ticker===tk);
-  if(etfObj&&etfObj.sector==='Fixed Income') return (etfHoldings[tk]=null);
-  // 1) Issuer-direct FULL lists (free): Vanguard JSON.
-  if(_VANGUARD_RX.test(tk)){ const v=await _vanguardHoldings(tk); if(v) return (etfHoldings[tk]=v); }
-  // 2) StockAnalysis — open endpoint, largest 25 constituents (Invesco/VanEck/Fidelity/iShares…).
-  const d2=await _fetchJsonWithProxyFallback('https://stockanalysis.com/api/symbol/e/'+encodeURIComponent(tk)+'/holdings');
-  const rows2=(d2?.data?.holdings||[]).map(h=>({
-    symbol:String(h.s||'').replace(/^\$/,'').toUpperCase(),
-    name:h.n||'',
-    pct:parseFloat(String(h.as||'').replace('%',''))/100||0
-  })).filter(h=>h.symbol&&h.pct>0).slice(0,25);
-  return (etfHoldings[tk]=rows2.length?{holdings:rows2,src:'sa'}:null);
+  const isBond=etfObj&&etfObj.sector==='Fixed Income';
+  const html=await _fetchTextWithProxyFallback('https://stockanalysis.com/etf/'+tk.toLowerCase()+'/holdings/');
+  if(!html) return (etfHoldings[tk]=null);
+  const rows=_parseHoldingsTable(html);
+  // Bond ETFs list individual Treasury/credit issues, not tickers. Worth showing on
+  // the fund's own page, but they are not equity exposure, so they stay out of the
+  // stock-overlap aggregate below.
+  return (etfHoldings[tk]=rows.length?{holdings:rows,src:'sa',bond:!!isBond}:null);
 }
 
 async function loadEtfLookThrough(){
@@ -1196,7 +1205,7 @@ async function loadEtfLookThrough(){
       await Promise.all(todo.slice(i,i+4).map(t=>fetchEtfHoldings(t)));
       if(i+4<todo.length) await new Promise(r=>setTimeout(r,300));
     }
-    try{ localStorage.setItem('cee_etf_hold_v4',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
+    try{ localStorage.setItem('cee_etf_hold_v5',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
     renderLookThrough();
   } finally { _ltLoading=false; }
 }
@@ -1204,18 +1213,19 @@ async function loadEtfLookThrough(){
 function renderLookThrough(){
   const aggEl=document.getElementById('ltAgg'); if(!aggEl) return;
   const okEtfs=S.etfs.filter(e=>etfHoldings[e.ticker]&&etfHoldings[e.ticker].holdings&&etfHoldings[e.ticker].holdings.length);
+  // Bond ETFs decompose into individual debt issues, so they add nothing to a
+  // stock-overlap table — they are listed on their own page instead.
+  const eqEtfs=okEtfs.filter(e=>!etfHoldings[e.ticker].bond);
   const st=document.getElementById('ltStatus');
   if(st){
-    const fullN=okEtfs.filter(e=>etfHoldings[e.ticker].src==='vanguard').length;
-    st.textContent = okEtfs.length+' of '+S.etfs.length+' ETFs decomposed · '
-      + (fullN===okEtfs.length&&fullN>0 ? 'FULL constituent lists (issuer data)'
-         : fullN>0 ? fullN+' full (issuer data) + '+(okEtfs.length-fullN)+' top-25'
-         : 'top-25 each');
+    const nBond=okEtfs.length-eqEtfs.length;
+    st.textContent = okEtfs.length+' of '+S.etfs.length+' ETFs decomposed · top 25 holdings each'
+      + (nBond?' · '+nBond+' bond ETF'+(nBond>1?'s':'')+' excluded from stock overlap':'');
   }
   // Aggregate: combined exposure per stock = direct weight + Σ(ETF fund-weight × stock weight in ETF)
   const agg={};
   S.equities.forEach(h=>{ const k=h.ticker; agg[k]=agg[k]||{sym:k,direct:0,via:0,parts:[]}; agg[k].direct+=(h.marketValue||0)/(S.total||1); });
-  okEtfs.forEach(e=>{
+  eqEtfs.forEach(e=>{
     const w=(e.marketValue||0)/(S.total||1);
     etfHoldings[e.ticker].holdings.forEach(c=>{
       const k=String(c.symbol).toUpperCase().replace('-','.');
@@ -1258,6 +1268,79 @@ function renderLtEtfDetail(ticker){
       <td style="text-align:right">${(h.pct*fundW*100).toFixed(3)}%</td></tr>`).join('')+
     `<tr><td></td><td colspan="2" style="color:var(--muted);font-size:11px">Top ${data.holdings.length} shown cover ${(covered*100).toFixed(0)}% of ${ticker}</td>
       <td colspan="2" style="text-align:right;color:var(--muted);font-size:11px">${ticker} is ${(fundW*100).toFixed(1)}% of ${S.fundName}</td></tr>`;
+}
+
+/* ETF holdings pop-up. Clicking an ETF anywhere in the dashboard answers
+   "what am I actually holding through this fund?" rather than opening a thesis
+   note — the thesis is still one button away, so no saved research is stranded. */
+let _etfModalTicker=null, _etfModalAll=false;
+
+function closeEtfHoldings(){ document.getElementById('etfModal').style.display='none'; }
+
+function toggleEtfHoldingsAll(){ _etfModalAll=!_etfModalAll; _renderEtfModalBody(); }
+
+async function openEtfHoldings(ticker){
+  const tk=String(ticker).toUpperCase();
+  _etfModalTicker=tk; _etfModalAll=false;
+  const etf=ALL_HOLDINGS().find(h=>h.ticker===tk);
+  document.getElementById('etfModalTicker').textContent=tk;
+  document.getElementById('etfModalName').textContent=etf?.company||'';
+  document.getElementById('etfModalThesisBtn').onclick=()=>{ closeEtfHoldings(); goToThesis(tk); };
+  document.getElementById('etfModal').style.display='block';
+  document.getElementById('etfModalBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">Loading '+tk+' holdings…</div>';
+  try{
+    await fetchEtfHoldings(tk);
+    try{ localStorage.setItem('cee_etf_hold_v5',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
+  }catch(e){}
+  if(_etfModalTicker===tk) _renderEtfModalBody();
+}
+
+function _renderEtfModalBody(){
+  const tk=_etfModalTicker, data=etfHoldings[tk];
+  const bodyEl=document.getElementById('etfModalBody'), subEl=document.getElementById('etfModalSub');
+  const etf=S.etfs.find(e=>e.ticker===tk)||ALL_HOLDINGS().find(h=>h.ticker===tk);
+  const etfMV=etf?.marketValue||0;
+  const fundW=S.total?etfMV/S.total:0;
+  if(!data||!data.holdings||!data.holdings.length){
+    subEl.textContent='';
+    bodyEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted)">No constituent data available for '+tk+' right now.<div style="font-size:11px;margin-top:6px">The holdings source may be unreachable — try again in a moment.</div></div>';
+    return;
+  }
+  const rows=data.holdings;
+  const shown=_etfModalAll?rows:rows.slice(0,10);
+  const top10=rows.slice(0,10).reduce((a,h)=>a+h.pct,0);
+  const covered=rows.reduce((a,h)=>a+h.pct,0);
+  subEl.innerHTML = (etf
+      ? '$'+fmt(etfMV)+' held · '+(fundW*100).toFixed(1)+'% of '+S.fundName+' · '
+      : '')
+    + 'top 10 = '+(top10*100).toFixed(1)+'% of the fund'
+    + (data.bond?' · bond fund — individual debt issues, not stocks':'');
+  const maxPct=rows[0].pct||1;
+  // Flag names the portfolio also owns outright: that is where a single company
+  // quietly becomes a bigger bet than the holdings table alone suggests.
+  const direct={}; S.equities.forEach(h=>{ direct[h.ticker]=(h.marketValue||0)/(S.total||1); });
+  bodyEl.innerHTML=
+    '<div style="display:grid;grid-template-columns:28px 74px 1fr 120px 64px 78px;gap:8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:6px;border-bottom:1px solid var(--border)">'
+    + '<span>#</span><span>Symbol</span><span>Name</span><span>Weight</span><span style="text-align:right">% of '+tk+'</span>'
+    + '<span style="text-align:right" title="What this single company is worth inside your '+tk+' position">Your $</span></div>'
+    + shown.map((h,i)=>{
+        const dw=direct[h.symbol];
+        return '<div style="display:grid;grid-template-columns:28px 74px 1fr 120px 64px 78px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">'
+        + '<span style="color:var(--muted)">'+(i+1)+'</span>'
+        + '<span class="ticker-cell" style="font-weight:700">'+h.symbol+(dw?' <span title="Also held directly — '+(dw*100).toFixed(2)+'% of the fund" style="font-size:9px;color:var(--gold)">◆</span>':'')+'</span>'
+        + '<span style="font-size:11px;color:var(--gray);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(h.name||'')+'</span>'
+        + '<span style="height:10px;background:var(--bg);border-radius:3px;overflow:hidden"><span style="display:block;height:100%;width:'+(h.pct/maxPct*100).toFixed(1)+'%;background:'+(dw?'var(--gold)':'#3b62c9')+';border-radius:3px"></span></span>'
+        + '<span style="text-align:right;font-weight:600">'+(h.pct*100).toFixed(2)+'%</span>'
+        + '<span style="text-align:right;color:var(--gray)">$'+fmt(h.pct*etfMV)+'</span></div>';
+      }).join('')
+    + (rows.length>10
+        ? '<div style="text-align:center;margin-top:10px"><button onclick="toggleEtfHoldingsAll()" style="padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg-alt);color:var(--text);cursor:pointer;font-weight:600;font-size:12px">'
+          + (_etfModalAll?'Show top 10 only':'Show all '+rows.length)+'</button></div>'
+        : '')
+    + '<div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">'
+    + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+'.'
+    + (Object.keys(direct).some(k=>rows.some(r=>r.symbol===k))?' ◆ marks a company the fund also owns directly.':'')
+    + '</div>';
 }
 
 function updateDataQuality() {
@@ -2485,7 +2568,7 @@ function renderTop10() {
   const sorted=[...S.holdings].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0)).slice(0,10);
   document.getElementById('top10Table').innerHTML=`
     <tr><th>#</th><th>Ticker</th><th>Company</th><th>Type</th><th>Sector</th><th>Price</th><th>Market Value</th><th>Weight</th><th>Return</th><th>Beta</th></tr>
-    ${sorted.map((h,i)=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}><td style="color:var(--muted)">${i+1}</td>
+    ${sorted.map((h,i)=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="${h.type==='etf'?`See what ${h.ticker} holds`:`Open investment thesis for ${h.ticker}`}" onclick="openTicker('${h.ticker}')"`:''}><td style="color:var(--muted)">${i+1}</td>
     <td class="ticker-cell" style="white-space:nowrap"><a href="${irLink(h.ticker,h.company)}" target="_blank" rel="noopener" title="Open Investor Relations" onclick="event.stopPropagation()">${logoImg(h.ticker)}</a>${h.ticker}</td><td>${h.company} ${h.type!=='bond'?'<span style="font-size:10px;color:var(--gold)">📋</span>':''}</td>
     <td><span class="badge type-${h.type}">${h.type.toUpperCase()}</span></td>
     <td>${h.sector}</td><td>${h.price?'$'+h.price.toFixed(2):'—'}</td>
@@ -2538,8 +2621,8 @@ function renderHoldings(filter) {
     <th style="cursor:pointer;user-select:none" onclick="holdingsSortBy('dayPct')">Day % ↕</th>
     <th style="cursor:pointer;user-select:none" title="36-month regression beta vs SPY (monthly returns)" onclick="holdingsSortBy('beta')">3Y Beta ↕</th>
     </tr>
-    ${sorted.map(h=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="Open investment thesis for ${h.ticker}" onclick="goToThesis('${h.ticker}')"`:''}>
-    <td class="ticker-cell">${h.ticker}${h.type!=='bond'?' <span style="font-size:9px;color:var(--gold)">📋</span>':''}</td><td>${h.company}</td>
+    ${sorted.map(h=>`<tr ${h.type!=='bond'?`style="cursor:pointer" title="${h.type==='etf'?`See what ${h.ticker} holds`:`Open investment thesis for ${h.ticker}`}" onclick="openTicker('${h.ticker}')"`:''}>
+    <td class="ticker-cell">${h.ticker}${h.type!=='bond'?' <span style="font-size:9px;color:var(--gold)">'+(h.type==='etf'?'🔍':'📋')+'</span>':''}</td><td>${h.company}</td>
     <td><span class="badge type-${h.type}">${h.type.toUpperCase()}</span></td>
     <td>${h.sector||'—'}</td><td>${h.shares?h.shares.toFixed(3):'—'}</td>
     <td>${h.avgCost?'$'+h.avgCost.toFixed(2):'—'}</td>
@@ -3988,6 +4071,12 @@ try{
 const IR_PAGES={AAPL:'https://investor.apple.com',ABBV:'https://investors.abbvie.com',ADI:'https://investor.analog.com',AMZN:'https://ir.aboutamazon.com','BRK.B':'https://www.berkshirehathaway.com',BX:'https://ir.blackstone.com',CAT:'https://investors.caterpillar.com',CEG:'https://investors.constellationenergy.com',COF:'https://investor.capitalone.com',COST:'https://investor.costco.com',CRWD:'https://ir.crowdstrike.com',DAR:'https://ir.darlingii.com',DIS:'https://thewaltdisneycompany.com/investor-relations/',DLR:'https://investor.digitalrealty.com',ET:'https://ir.energytransfer.com',FSLR:'https://investor.firstsolar.com',GD:'https://investorrelations.gd.com',GOOG:'https://abc.xyz/investor/',GOOGL:'https://abc.xyz/investor/',GRMN:'https://www.garmin.com/en-US/company/investors/',HCA:'https://investor.hcahealthcare.com',HD:'https://ir.homedepot.com',HOOD:'https://investors.robinhood.com',HWM:'https://ir.howmet.com',IREN:'https://investors.iren.com',ISRG:'https://isrg.intuitive.com',KO:'https://investors.coca-colacompany.com',LLY:'https://investor.lilly.com',MA:'https://investor.mastercard.com',META:'https://investor.atmeta.com',MSFT:'https://www.microsoft.com/en-us/investor',NFLX:'https://ir.netflix.net',NUE:'https://www.nucor.com/investors',NVDA:'https://investor.nvidia.com',ORCL:'https://investor.oracle.com',PANW:'https://investors.paloaltonetworks.com',PFE:'https://investors.pfizer.com',PLTR:'https://investors.palantir.com',SBGSF:'https://www.se.com/ww/en/about-us/investor-relations/',SOFI:'https://investors.sofi.com',SOUN:'https://investors.soundhound.com',SPGI:'https://investor.spglobal.com',SYK:'https://investors.stryker.com',TKO:'https://investor.tkogrp.com',TMUS:'https://investor.t-mobile.com',TSM:'https://investor.tsmc.com',TTWO:'https://ir.take2games.com',V:'https://investor.visa.com',VMC:'https://ir.vulcanmaterials.com',WM:'https://investors.wm.com',WMT:'https://stock.walmart.com',XOM:'https://investor.exxonmobil.com'};
 const irLink=(tk,company)=>IR_PAGES[tk]||'https://www.google.com/search?q='+encodeURIComponent((company||tk)+' investor relations');
 function logoImg(t,sz){sz=sz||18;return '<img src="https://financialmodelingprep.com/image-stock/'+String(t).replace('.','-')+'.png" alt="" style="width:'+sz+'px;height:'+sz+'px;border-radius:4px;vertical-align:-4px;margin-right:7px;object-fit:contain;background:#fff;border:1px solid #ececec" loading="lazy" onerror="this.style.display=\'none\'">';}
+/* Every ticker click in the dashboard goes through here: an ETF opens its
+   constituent list, anything else opens its investment thesis. */
+function openTicker(tk){
+  const h=ALL_HOLDINGS().find(x=>x.ticker===tk);
+  if(h&&h.type==='etf') openEtfHoldings(tk); else goToThesis(tk);
+}
 function goToThesis(tk){
   const btn=[...document.querySelectorAll('.nav-tab')].find(b=>(b.getAttribute('onclick')||'').includes("'thesis'"));
   if(btn)showTab('thesis',btn);
@@ -4283,7 +4372,7 @@ function openSectorThesis(sectorName) {
     const td = thesisData[h.ticker];
     const tag = td?.tag;
     const hasThesis = td && (td.thesis || td.base);
-    return `<div onclick="openThesisDetail('${h.ticker}')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='#0d223b'" onmouseout="this.style.background=''">
+    return `<div onclick="${h.type==='etf'?`openEtfHoldings('${h.ticker}')`:`openThesisDetail('${h.ticker}')`}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px;transition:background 0.15s" onmouseover="this.style.background='#0d223b'" onmouseout="this.style.background=''">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-weight:700;color:var(--navy);width:50px">${logoImg(h.ticker)}${h.ticker}</span>
         <span style="font-size:12px;color:var(--gray)">${h.company}</span>
@@ -4647,8 +4736,8 @@ function renderThesisMasterTable(filter, sort) {
       const _ytdTxt = _ytdV != null ? (_ytdV >= 0 ? '+' : '') + _ytdV.toFixed(1) + '%' : '—';
       const _ym = (window.ytdMeta||{})[h.ticker];
       const _ytdTip = _ym ? 'YTD math: $'+_ym.base+' (close '+_ym.baseDt+') → $'+_ym.last+' = '+_ym.pct+'%. Prices are split-adjusted.' : 'YTD vs prior-year close';
-      return `<tr onclick="openThesisDetail('${h.ticker}')" style="cursor:pointer" onmouseover="this.style.background='#0d223b'" onmouseout="this.style.background=''">
-        <td class="ticker-cell" style="white-space:nowrap">${logoImg(h.ticker)}${h.ticker}</td>
+      return `<tr onclick="${h.type==='etf'?`openEtfHoldings('${h.ticker}')`:`openThesisDetail('${h.ticker}')`}" style="cursor:pointer" title="${h.type==='etf'?`See what ${h.ticker} holds`:'Open thesis'}" onmouseover="this.style.background='#0d223b'" onmouseout="this.style.background=''">
+        <td class="ticker-cell" style="white-space:nowrap">${logoImg(h.ticker)}${h.ticker}${h.type==='etf'?' <span style="font-size:9px;color:var(--gold)">🔍</span>':''}</td>
         <td>${h.company}</td>
         <td style="font-size:11px">${h.sector||'—'}</td>
         <td><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${tierColor}22;color:${tierColor}">${tier}</span></td>
@@ -4937,6 +5026,21 @@ window.addEventListener('load', () => {
     <div id="tcStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
     <div style="height:260px"><canvas id="tcCanvas"></canvas></div>
     <div id="tcNews" style="margin-top:16px"></div>
+  </div>
+</div>
+<div id="etfModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;padding:20px;box-sizing:border-box" onclick="if(event.target===this)closeEtfHoldings()">
+  <div style="background:var(--card-bg-alt);border-radius:12px;padding:24px;max-width:820px;margin:40px auto;max-height:82vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">
+      <div>
+        <div><span id="etfModalTicker" style="font-size:22px;font-weight:800;color:var(--navy)"></span><span id="etfModalName" style="font-size:14px;color:var(--gray);margin-left:10px"></span></div>
+        <div id="etfModalSub" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+        <button id="etfModalThesisBtn" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg-alt);color:var(--text);cursor:pointer;font-weight:600;font-size:12px">Investment Thesis</button>
+        <button onclick="closeEtfHoldings()" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg-alt);color:var(--text);cursor:pointer;font-weight:600">✕</button>
+      </div>
+    </div>
+    <div id="etfModalBody"></div>
   </div>
 </div>
 </body>
