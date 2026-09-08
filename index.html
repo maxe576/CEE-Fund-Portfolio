@@ -4157,6 +4157,10 @@ async function loadThesisFromStorage() {
     const r = await fetch(FB_DB_URL + FB_NODE + '.json');
     if (r.ok) {
       const d = await r.json();
+      // Reaching the node at all is what licenses us to write back to it. A PUT
+      // replaces the whole node, so saving on top of a failed read would push a
+      // stale or empty local copy over everyone's saved research.
+      thesisCloudLoaded = true;
       if (d) {
         thesisData = restoreKeysFromFirebase(d.thesis || {});
         sectorThesis = d.sectorThesis || {};
@@ -4172,15 +4176,37 @@ async function loadThesisFromStorage() {
 }
 
 let fbSaveTimer=null, fbSavePending=false, fbSaving=false, fbLastSaveOk=false;
+let thesisCloudLoaded=false, fbRetries=0, _saveStatusElId=null;
+
+// Whichever box you are typing in owns the status line, so a failed write is
+// reported under that box instead of in a panel you cannot see.
+function _setSaveStatus(txt, color, clearAfter) {
+  const el = _saveStatusElId && document.getElementById(_saveStatusElId);
+  if (!el) return;
+  el.textContent = txt;
+  el.style.color = color || 'var(--muted)';
+  if (clearAfter) setTimeout(() => { if (el.textContent === txt) el.textContent = ''; }, clearAfter);
+}
 
 function scheduleSave() {
   localStorage.setItem('cee_thesis_data', JSON.stringify(thesisData));
   localStorage.setItem('cee_sector_thesis', JSON.stringify(sectorThesis));
   localStorage.setItem('cee_etf_notes', JSON.stringify(etfNotes));
-  fbSavePending = true;
+  if (!thesisCloudLoaded) {
+    // Never PUT over the shared node from a session that could not read it.
+    _setSaveStatus('⚠️ Saved on this computer only — cloud unreachable, reload before writing more', '#f0b429');
+    return;
+  }
+  fbSavePending = true; fbRetries = 0;
   clearTimeout(fbSaveTimer);
-  fbSaveTimer = setTimeout(flushToFirebase, 2000);
+  fbSaveTimer = setTimeout(flushToFirebase, 1200);
 }
+
+// A pending write lives entirely in this tab. Closing it inside that window
+// would leave the note on this machine and nowhere else.
+window.addEventListener('beforeunload', e => {
+  if (fbSavePending || fbSaving) { e.preventDefault(); e.returnValue = ''; return ''; }
+});
 
 function sanitizeFirebaseKeys(obj) {
   if (!obj || typeof obj !== 'object') return obj;
@@ -4206,20 +4232,30 @@ async function flushToFirebase() {
       })
     });
     if (res.ok) {
-      fbLastSaveOk = true;
+      fbLastSaveOk = true; fbRetries = 0;
+      _setSaveStatus('✅ Saved to cloud', '#4ade80', 2500);
       console.log('✅ Firebase saved');
     } else {
       const err = await res.text();
       console.warn('Firebase save failed:', res.status, err);
-      const el = document.getElementById('equityThesisSaved');
-      if (el) { el.textContent = '❌ Save error: ' + res.status; el.style.color='#ff8f8f'; }
+      _retryOrReport('Save rejected (' + res.status + ')');
     }
   } catch(e) {
     console.warn('Firebase error:', e.message);
-    const el = document.getElementById('equityThesisSaved');
-    if (el) { el.textContent = '❌ Network error'; el.style.color='#ff8f8f'; }
+    _retryOrReport('Network error');
   }
   fbSaving = false;
+}
+
+function _retryOrReport(why) {
+  if (fbRetries < 3) {
+    fbRetries++; fbSavePending = true;
+    _setSaveStatus('↻ ' + why + ' — retrying (' + fbRetries + '/3)…', '#f0b429');
+    clearTimeout(fbSaveTimer);
+    fbSaveTimer = setTimeout(flushToFirebase, 4000);
+  } else {
+    _setSaveStatus('❌ ' + why + ' — NOT saved to cloud. Your text is on this computer; keep this tab open.', '#ff8f8f');
+  }
 }
 
 async function saveThesisToStorage() { scheduleSave(); }
@@ -4398,10 +4434,10 @@ function autoSaveSectorThesis() {
   sectorThesisSaveTimer = setTimeout(async () => {
     if (!currentThesisSector) return;
     sectorThesis[currentThesisSector] = document.getElementById('sectorThesisText').value;
+    // Claim nothing until flushToFirebase confirms the write; it owns this line now.
+    _saveStatusElId = 'sectorThesisSaved';
+    _setSaveStatus('⏳ Saving…', 'var(--muted)');
     await saveSectorThesisToStorage();
-    const el = document.getElementById('sectorThesisSaved');
-    el.textContent = '✅ Saved';
-    setTimeout(() => el.textContent = '', 2000);
     renderThesisSectorCards();
   }, 800);
 }
@@ -4625,9 +4661,9 @@ async function saveThesisNow() {
   td.thesis = document.getElementById('thesisText').value;
   td.catalysts = document.getElementById('catalystsText').value;
   td.risks = document.getElementById('risksText').value;
+  _saveStatusElId = 'equityThesisSaved';
+  _setSaveStatus('⏳ Saving…', 'var(--muted)');
   await saveThesisToStorage();
-  const el = document.getElementById('equityThesisSaved');
-  if (el) { el.textContent = '✅ Saved for everyone'; setTimeout(() => el.textContent = '', 2000); }
   renderThesisMasterTable(thesisFilter);
 }
 
@@ -4637,9 +4673,9 @@ function autoSaveEtfNote() {
   etfAutoSaveTimer = setTimeout(async () => {
     if (!currentThesisTicker) return;
     etfNotes[currentThesisTicker] = document.getElementById('etfNoteText').value;
+    _saveStatusElId = 'etfNoteSaved';
+    _setSaveStatus('⏳ Saving…', 'var(--muted)');
     await saveEtfNotesToStorage();
-    const el = document.getElementById('etfNoteSaved');
-    if (el) { el.textContent = '✅ Saved'; setTimeout(() => el.textContent = '', 2000); }
   }, 800);
 }
 
