@@ -813,6 +813,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
   <div class="wi-results" id="wiResults">
     <div class="wi-grid" id="wiGrid"></div>
     <div class="card"><div class="card-title">Sector Weight Impact</div><div id="wiSectorImpact"></div></div>
+    <div class="card"><div class="card-title">Look-Through Concentration <span style="font-weight:400;font-size:11px;color:var(--muted)">— counting the stocks you own inside your ETFs</span></div><div id="wiLookThrough"></div></div>
   </div>
 </div>
 <!-- AI -->
@@ -933,6 +934,13 @@ function loadSavedFund() {
 
 function buildState() {
   const fund = activeFund === 'endowment' ? RAW.endowment : RAW.ceeFund;
+  // COMPANY_NAMES is the single source of truth for display names. The RAW and
+  // JAN1 snapshots carry whatever string was baked in when they were generated,
+  // so a correction to the map has to be applied on the way out or it never
+  // reaches the screen. (SBGSF was showing Safran SA rather than Schneider.)
+  // Both funds, not just the active one: ALL_HOLDINGS, the What-If autofill and the
+  // combined-AUM tab all read the other fund's rows straight out of RAW.
+  applyCompanyNames(RAW.endowment); applyCompanyNames(RAW.ceeFund);
   const bonds = getNormalizedBondPositions(fund);   // direct Treasuries as first-class holdings
   const all = [...fund.equities, ...fund.etfs, ...bonds];
   const total = all.reduce((s,h) => s+(h.marketValue||0), 0) + (fund.cash||0);
@@ -944,6 +952,19 @@ function buildState() {
     bond: activeFund==='endowment'?fund.bond:null, total, equityTotal, fund:activeFund,
     fundName: activeFund==='endowment'?'Endowment':'CEE Fund',
     beta: betaRes.beta, betaCoverage: betaRes.coverage };
+}
+
+// Overwrite snapshot names with the corrected map, in place, once per fund.
+function applyCompanyNames(fund) {
+  // COMPANY_NAMES is declared further down the file; `typeof` on a const still in
+  // its temporal dead zone throws rather than returning 'undefined', so guard by
+  // catching instead of testing.
+  let names; try { names = COMPANY_NAMES; } catch (e) { return; }
+  if (!names) return;
+  for (const h of [...(fund.equities||[]), ...(fund.etfs||[])]) {
+    const n = names[h.ticker];
+    if (n) h.company = n;
+  }
 }
 
 // ── RISK / SECTOR / CONCENTRATION ENGINE ────────────────────────────────────────
@@ -1150,9 +1171,14 @@ function reloadEtfLookThrough(){
   loadEtfLookThrough();
 }
 
+const _NO_CORS_HOSTS=['stockanalysis.com'];
 async function _fetchTextWithProxyFallback(url){
   // Direct first (fast); if blocked (file:// origin, CORS, network), retry via the CF proxy.
-  try{ const r=await fetch(url); if(r.ok) return await r.text(); }catch(e){}
+  // Hosts known to send no Access-Control-Allow-Origin skip the direct attempt: it can
+  // only fail, and it cost one console error per ETF on every load.
+  if(!_NO_CORS_HOSTS.some(h=>url.includes(h))){
+    try{ const r=await fetch(url); if(r.ok) return await r.text(); }catch(e){}
+  }
   try{ const r2=await fetch(CF_PROXY+'?url='+encodeURIComponent(url)); if(r2.ok) return await r2.text(); }catch(e){}
   return null;
 }
@@ -1341,6 +1367,117 @@ function _renderEtfModalBody(){
     + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+'.'
     + (Object.keys(direct).some(k=>rows.some(r=>r.symbol===k))?' ◆ marks a company the fund also owns directly.':'')
     + '</div>';
+}
+
+/* LOOK-THROUGH EXPOSURE
+   Headline concentration counts only what the fund holds directly, so selling a
+   stock and buying an ETF that holds it reads as a cut in that position when the
+   exposure barely moved. This builds combined exposure per company:
+
+       direct weight  +  SUM over ETFs (ETF weight in fund x stock weight in ETF)
+
+   Constituent lists come from the same source as the Risk & Exposure tab, so an
+   ETF the fund does not yet own still resolves once its holdings are fetched. */
+function buildLookThrough(holdings, total) {
+  const agg = {};
+  const add = (sym, w, via) => {
+    if (!(w > 0)) return;
+    agg[sym] = agg[sym] || { sym, direct: 0, via: 0, parts: [] };
+    if (via) { agg[sym].via += w; if (!agg[sym].parts.includes(via)) agg[sym].parts.push(via); }
+    else agg[sym].direct += w;
+  };
+  let resolved = 0, unresolvedMV = 0;
+  for (const h of holdings) {
+    const w = (h.marketValue || 0) / (total || 1);
+    if (h.type === 'etf') {
+      const d = etfHoldings[h.ticker];
+      if (d && d.holdings && d.holdings.length && !d.bond) {
+        // Scale to the slice actually listed, so a fund whose top 25 cover 50%
+        // does not silently lose the other half of its weight.
+        const cov = d.holdings.reduce((a, c) => a + c.pct, 0) || 1;
+        d.holdings.forEach(c => add(String(c.symbol).toUpperCase().replace('-', '.'), w * c.pct, h.ticker));
+        if (cov < 0.995) add(h.ticker, w * (1 - cov), null);   // undecomposed remainder stays as the ETF
+        resolved++;
+      } else { add(h.ticker, w, null); unresolvedMV += (h.marketValue || 0); }
+    } else if (h.type !== 'bond') {
+      add(h.ticker, w, null);
+    }
+  }
+  const rows = Object.values(agg).map(a => ({ ...a, total: a.direct + a.via })).sort((a, b) => b.total - a.total);
+  const largest = rows.length ? rows[0].total : 0;
+  const topFive = rows.slice(0, 5).reduce((a, r) => a + r.total, 0);
+  return { rows, largest, topFive, resolved, unresolvedMV };
+}
+
+// Make sure every ETF on either side of the scenario has its constituents loaded.
+async function ensureEtfDataFor(holdingsArrays) {
+  const need = new Set();
+  holdingsArrays.forEach(arr => arr.forEach(h => {
+    if (h.type === 'etf' && etfHoldings[h.ticker] === undefined) need.add(h.ticker);
+  }));
+  if (!need.size) return false;
+  const list = [...need];
+  for (let i = 0; i < list.length; i += 4) await Promise.all(list.slice(i, i + 4).map(t => fetchEtfHoldings(t).catch(() => null)));
+  try { localStorage.setItem('cee_etf_hold_v5', JSON.stringify({ ts: Date.now(), data: etfHoldings })); } catch (e) {}
+  return true;
+}
+
+async function renderWiLookThrough(oldH, oldTotal, newH, newTotal) {
+  const el = document.getElementById('wiLookThrough'); if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12px">Loading ETF constituents\u2026</div>';
+  await ensureEtfDataFor([oldH, newH]);
+  const before = buildLookThrough(oldH, oldTotal), after = buildLookThrough(newH, newTotal);
+  const beforeMap = {}; before.rows.forEach(r => beforeMap[r.sym] = r);
+  const moved = after.rows.map(r => {
+    const b = beforeMap[r.sym] || { total: 0, direct: 0, via: 0, parts: [] };
+    return { ...r, wasTotal: b.total, delta: r.total - b.total };
+  });
+  before.rows.forEach(b => {
+    if (!after.rows.some(r => r.sym === b.sym))
+      moved.push({ sym: b.sym, direct: 0, via: 0, parts: [], total: 0, wasTotal: b.total, delta: -b.total });
+  });
+  // Show the biggest combined positions, plus anything the trades actually moved.
+  const shown = [...moved].sort((a, b) => Math.max(b.total, b.wasTotal) - Math.max(a.total, a.wasTotal))
+    .filter(r => Math.max(r.total, r.wasTotal) > 0.004 || Math.abs(r.delta) > 0.001).slice(0, 12);
+  const pc = x => (x * 100).toFixed(2) + '%';
+  const kpi = (l, was, now, tip) => {
+    const d = now - was, col = Math.abs(d) < 0.0001 ? 'var(--text)' : d > 0 ? '#ff8f8f' : '#4ade80';
+    return '<div class="wi-row" title="' + tip + '"><span class="lbl">' + l + '</span><span class="val">' + pc(was)
+      + ' <span style="color:var(--gold)">\u2192</span> <strong style="color:' + col + '">' + pc(now) + '</strong></span></div>';
+  };
+  const oldC = calculateConcentration(oldH, oldTotal), newC = calculateConcentration(newH, newTotal);
+  const unresolvedNote = after.unresolvedMV > 0.5
+    ? '<div style="font-size:10px;color:var(--gold);margin-top:8px">$' + fmt(after.unresolvedMV)
+      + ' of ETFs could not be decomposed and are counted as themselves.</div>' : '';
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:12px">'
+    + '<div class="wi-card"><div class="wi-card-label">Direct only (headline)</div>'
+    + kpi('Largest Position', oldC.largest, newC.largest, 'Counts only positions held outright')
+    + kpi('Top-5 Concentration', oldC.topFive, newC.topFive, 'Counts only positions held outright')
+    + '</div>'
+    + '<div class="wi-card" style="border-color:var(--gold)"><div class="wi-card-label">Look-through (incl. ETF holdings)</div>'
+    + kpi('Largest Position', before.largest, after.largest, 'Direct plus the same company held inside your ETFs')
+    + kpi('Top-5 Concentration', before.topFive, after.topFive, 'Direct plus ETF holdings, five largest combined')
+    + '</div></div>'
+    + '<div style="display:grid;grid-template-columns:74px 1fr 92px 92px 78px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border)">'
+    + '<span>Stock</span><span>Held via (after)</span><span style="text-align:right">Combined before</span><span style="text-align:right">Combined after</span><span style="text-align:right">Change</span></div>'
+    + shown.map(r => {
+        const mv = Math.abs(r.delta) > 0.0005;
+        const col = !mv ? 'var(--gray)' : r.delta > 0 ? '#ff8f8f' : '#4ade80';
+        return '<div style="display:grid;grid-template-columns:74px 1fr 92px 92px 78px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px'
+        + (mv ? ';background:rgba(101,163,255,.10);margin:0 -4px;padding:5px 4px;border-radius:4px' : '') + '">'
+        + '<span class="ticker-cell" style="font-weight:' + (mv ? 700 : 600) + '">' + r.sym + '</span>'
+        + '<span style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+        + (r.direct > 0 ? 'Direct' : '') + (r.direct > 0 && r.parts.length ? ' + ' : '') + r.parts.join(', ') + '</span>'
+        + '<span style="text-align:right;color:var(--gray)">' + pc(r.wasTotal) + '</span>'
+        + '<span style="text-align:right;font-weight:' + (mv ? 700 : 400) + '">' + pc(r.total) + '</span>'
+        + '<span style="text-align:right;font-weight:600;color:' + col + '">' + (r.delta >= 0 ? '+' : '') + (r.delta * 100).toFixed(2) + '%</span></div>';
+      }).join('')
+    + '<div style="font-size:10px;color:var(--muted);margin-top:8px;line-height:1.5">'
+    + after.resolved + ' ETF' + (after.resolved === 1 ? '' : 's') + ' decomposed into constituents. '
+    + 'Bond ETFs and cash are excluded. Sector weights above remain on a direct basis \u2014 '
+    + 'a constituent\u2019s sector is only known for companies the fund also holds outright.</div>'
+    + unresolvedNote;
 }
 
 function updateDataQuality() {
@@ -2830,6 +2967,11 @@ function renderWiRows() {
         <input type="number" value="${t.price}" placeholder="e.g. 200.00" min="0" step="0.01"
           oninput="updateWiTrade(${t.id},'price',this.value)">
       </div>
+      <div class="fg"><label title="Left blank, a security with no beta is left out of the average entirely rather than counted as zero">Beta</label>
+        <input type="number" value="${t.beta===''||t.beta==null?'':t.beta}" placeholder="auto" step="0.01"
+          oninput="updateWiTrade(${t.id},'beta',this.value)">
+        <div id="wibeta-${t.id}" style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.3">${t.betaNote||''}</div>
+      </div>
       <div class="fg"><label>Sector</label>
         <select onchange="updateWiTrade(${t.id},'sector',this.value)" style="font-size:11px;padding:7px 4px;width:100%">
           <option value="">${t.sector?'':'-- Select Sector --'}</option>
@@ -2846,16 +2988,57 @@ function updateWiTrade(id, field, val) {
   if(t) t[field] = val;
 }
 
-function wiAutoFill(id) {
+async function wiAutoFill(id) {
   const t = wiTrades.find(t=>t.id===id);
   if(!t || !t.ticker) return;
   const h = ALL_HOLDINGS().find(x=>x.ticker===t.ticker);
   if(h) {
     if(!t.sector) {t.sector=h.sector; updateWiTrade(id,'sector',h.sector);}
-    if(!t.beta) {t.beta=h.beta; updateWiTrade(id,'beta',h.beta);}
+    if(t.beta===''||t.beta==null) {t.beta=h.beta; updateWiTrade(id,'beta',h.beta);}
     if(!t.price&&h.price) {t.price=h.price.toFixed(2); updateWiTrade(id,'price',h.price.toFixed(2));}
+    t.betaNote='from holdings';
     renderWiRows();
+    return;
   }
+  // Not held in either fund. Estimate a beta rather than leaving it blank, since a
+  // blank one drops the position out of the average and makes the trade look
+  // risk-free. Errs toward saying where the number came from.
+  if(t.beta!==''&&t.beta!=null) return;
+  t.betaNote='looking up…'; renderWiRows();
+  const est = await estimateBeta(t.ticker);
+  const cur = wiTrades.find(x=>x.id===id);
+  if(!cur || cur.ticker!==t.ticker) return;
+  if(est && est.beta!=null){ cur.beta=+est.beta.toFixed(3); cur.betaNote=est.note; cur.isEtf=est.isEtf; }
+  else cur.betaNote='no beta found — enter one';
+  renderWiRows();
+}
+
+/* Beta for a ticker the fund does not own.
+   1. the same 36-month regression vs SPY used everywhere else, when it has the history
+   2. for a fund too young for that, a holdings-weighted beta built from its
+      constituents' 36-month betas - same measure, so it is comparable
+   A young fund's own daily beta was deliberately not used: over a few months it is
+   both noisy and on a different basis from every other beta on the dashboard. */
+async function estimateBeta(ticker){
+  const tk=String(ticker).toUpperCase();
+  try{
+    const st=await fetch3YStats(tk);
+    if(st && st.beta!=null && isFinite(st.beta)) return {beta:st.beta, note:'3Y regression vs SPY', isEtf:false};
+  }catch(e){}
+  try{
+    const data=await fetchEtfHoldings(tk);
+    if(data && data.holdings && data.holdings.length && !data.bond){
+      let num=0, den=0;
+      for(let i=0;i<data.holdings.length;i+=5){
+        const batch=data.holdings.slice(i,i+5);
+        const st=await Promise.all(batch.map(c=>fetch3YStats(c.symbol).catch(()=>null)));
+        batch.forEach((c,j)=>{ const b=st[j]?.beta; if(b!=null&&isFinite(b)){ num+=b*c.pct; den+=c.pct; } });
+      }
+      if(den>0.2) return {beta:num/den, isEtf:true,
+        note:'weighted from '+data.holdings.length+' holdings ('+(den*100).toFixed(0)+'% of fund) — too new for a 3Y beta'};
+    }
+  }catch(e){}
+  return null;
 }
 
 function calcWhatIf() {
@@ -2898,7 +3081,11 @@ function calcWhatIf() {
     if(t.action==='buy'){
       const pos=newHoldings.find(h=>h.ticker===t.ticker);
       if(pos){ pos.shares=(pos.shares||0)+shares; pos.marketValue=(pos.marketValue||0)+value; }   // add to existing, no duplicate row
-      else newHoldings.push({ticker:t.ticker,sector,marketValue:value,shares,beta,type:existing?.type||'equity'});
+      else newHoldings.push({ticker:t.ticker,sector,marketValue:value,shares,beta,
+        // A ticker held in neither fund defaults to 'equity'; wiAutoFill flags it as
+        // an ETF when its constituent list resolves, which is what lets the
+        // look-through decompose a fund the portfolio does not own yet.
+        type:existing?.type||(t.isEtf?'etf':'equity')});
       newCash-=value; grossPurchases+=value;
       tradesSummary.push(`BUY ${t.ticker} ${shares} @ $${price.toFixed(2)} = $${fmt(value)}`);
     } else {
@@ -2955,7 +3142,7 @@ function calcWhatIf() {
         <div class="wi-row"><span class="lbl">Turnover</span><span class="val">${(turnover*100).toFixed(1)}%</span></div>
       </div>
     </div>
-    <div class="wi-card"><div class="wi-card-label">Portfolio Beta Impact (Total Fund)</div>
+    <div class="wi-card"><div class="wi-card-label" title="This scenario covers the active portfolio only. Bonds and cash are included at beta 0.">Portfolio Beta Impact — ${S.fundName} only</div>
       <div class="wi-row"><span class="lbl">Current Beta</span><span class="val">${fmtBeta(oldBeta)}</span></div>
       <div class="wi-row"><span style="color:var(--gold);font-size:14px">→</span><span class="val" style="color:${(betaChange||0)>0?'var(--red)':'var(--green)'}">${fmtBeta(newBeta)}</span></div>
       <div style="font-size:11px;font-weight:600;margin-top:6px;color:${(betaChange||0)>0?'var(--red)':'var(--green)'}">${betaChange==null?'Beta change unavailable (insufficient beta data)':'Beta '+(betaChange>0?'increases':'decreases')+' by '+Math.abs(betaChange).toFixed(2)}</div>
@@ -2990,6 +3177,11 @@ function calcWhatIf() {
       <div style="text-align:right;font-size:11px;font-weight:600;color:${vssp>0.01?'#9fc4ff':vssp<-0.01?'#ff8f8f':'var(--gray)'} ">${vssp>=0?'+':''}${(vssp*100).toFixed(1)}%</div></div>`;
     }).join('')}`;
   document.getElementById('wiResults').classList.add('show');
+  // Async: needs constituent lists, so it fills in a moment after the rest.
+  renderWiLookThrough(S.holdings, S.total, newHoldings, newTotal).catch(e=>{
+    const el=document.getElementById('wiLookThrough');
+    if(el) el.innerHTML='<div style="padding:14px;color:var(--muted);font-size:12px">Could not load ETF constituents: '+e.message+'</div>';
+  });
 }
 
 // ── PRICE TARGETS ─────────────────────────────────────────────────────────────
@@ -3687,7 +3879,7 @@ function verifyUploadPw(){const stored=localStorage.getItem('cee_upload_pw');con
 function resetToEmbedded(){if(confirm('Reset to original embedded data?'))location.reload();}
 
 // ── EXCEL UPLOAD ──────────────────────────────────────────────────────────────
-const COMPANY_NAMES={'GOOG':'Alphabet Inc.','META':'Meta Platforms','NFLX':'Netflix','TKO':'TKO Group','AMZN':'Amazon','HD':'Home Depot','COST':'Costco','KO':'Coca-Cola','WMT':'Walmart','XOM':'ExxonMobil','BRK.B':'Berkshire Hathaway','BX':'Blackstone','MA':'Mastercard','SPGI':'S&P Global','V':'Visa','TMUS':'T-Mobile','HCA':'HCA Healthcare','LLY':'Eli Lilly','PFE':'Pfizer','SYK':'Stryker','CAT':'Caterpillar','HWM':'Howmet Aerospace','SBGSF':'Safran SA','WM':'Waste Management','AAPL':'Apple','CRWD':'CrowdStrike','MSFT':'Microsoft','NVDA':'NVIDIA','ORCL':'Oracle','TSM':'TSMC','NUE':'Nucor','DLR':'Digital Realty','CEG':'Constellation Energy','ABBV':'AbbVie','ADI':'Analog Devices','COF':'Capital One','DAR':'Darling Ingredients','DIS':'Walt Disney','ET':'Energy Transfer','FSLR':'First Solar','GD':'General Dynamics','GOOGL':'Alphabet Inc.','GRMN':'Garmin','HOOD':'Robinhood','IREN':'Iris Energy','ISRG':'Intuitive Surgical','PANW':'Palo Alto Networks','PLTR':'Palantir','SOFI':'SoFi Technologies','SOUN':'SoundHound AI','TTWO':'Take-Two Interactive','VMC':'Vulcan Materials','FDIS':'Fidelity MSCI Consumer Disc ETF','FTEC':'Fidelity MSCI Info Tech ETF','IGV':'iShares Expanded Tech-Software ETF','NLR':'VanEck Uranium+Nuclear Energy ETF','PSCT':'Invesco S&P SmallCap IT ETF','QQQ':'Invesco QQQ (Nasdaq-100)','RSPN':'Invesco S&P 500 Equal Wt Industrials','SMH':'VanEck Semiconductor ETF','VCSH':'Vanguard Short-Term Corp Bond ETF','VFH':'Vanguard Financials ETF','VHT':'Vanguard Health Care ETF','VIS':'Vanguard Industrials ETF','VOO':'Vanguard S&P 500 ETF','VTI':'Vanguard Total Stock Market ETF','VUG':'Vanguard Growth ETF','XLB':'Materials Select Sector SPDR','XLC':'Communication Services SPDR','XLE':'Energy Select Sector SPDR','XLF':'Financial Select Sector SPDR','XLP':'Consumer Staples SPDR','XLU':'Utilities Select Sector SPDR','BILS':'SPDR Bloomberg 3-6 Mo T-Bill ETF','IYG':'iShares U.S. Financial Services ETF','IYJ':'iShares U.S. Industrials ETF','VGLT':'Vanguard Long-Term Treasury ETF','VGT':'Vanguard Information Technology ETF','VNQ':'Vanguard Real Estate ETF','XLV':'Health Care Select SPDR','XLY':'Consumer Discretionary SPDR'};
+const COMPANY_NAMES={'GOOG':'Alphabet Inc.','META':'Meta Platforms','NFLX':'Netflix','TKO':'TKO Group','AMZN':'Amazon','HD':'Home Depot','COST':'Costco','KO':'Coca-Cola','WMT':'Walmart','XOM':'ExxonMobil','BRK.B':'Berkshire Hathaway','BX':'Blackstone','MA':'Mastercard','SPGI':'S&P Global','V':'Visa','TMUS':'T-Mobile','HCA':'HCA Healthcare','LLY':'Eli Lilly','PFE':'Pfizer','SYK':'Stryker','CAT':'Caterpillar','HWM':'Howmet Aerospace','SBGSF':'Schneider Electric SE','WM':'Waste Management','AAPL':'Apple','CRWD':'CrowdStrike','MSFT':'Microsoft','NVDA':'NVIDIA','ORCL':'Oracle','TSM':'TSMC','NUE':'Nucor','DLR':'Digital Realty','CEG':'Constellation Energy','ABBV':'AbbVie','ADI':'Analog Devices','COF':'Capital One','DAR':'Darling Ingredients','DIS':'Walt Disney','ET':'Energy Transfer','FSLR':'First Solar','GD':'General Dynamics','GOOGL':'Alphabet Inc.','GRMN':'Garmin','HOOD':'Robinhood','IREN':'IREN Limited','ISRG':'Intuitive Surgical','PANW':'Palo Alto Networks','PLTR':'Palantir','SOFI':'SoFi Technologies','SOUN':'SoundHound AI','TTWO':'Take-Two Interactive','VMC':'Vulcan Materials','MBGL':'Mobility Global','FDIS':'Fidelity MSCI Consumer Disc ETF','FTEC':'Fidelity MSCI Info Tech ETF','IGV':'iShares Expanded Tech-Software ETF','NLR':'VanEck Uranium and Nuclear ETF','PSCT':'Invesco S&P SmallCap IT ETF','QQQ':'Invesco QQQ (Nasdaq-100)','RSPN':'Invesco S&P 500 Equal Wt Industrials','SMH':'VanEck Semiconductor ETF','VCSH':'Vanguard Short-Term Corp Bond ETF','VFH':'Vanguard Financials ETF','VHT':'Vanguard Health Care ETF','VIS':'Vanguard Industrials ETF','VOO':'Vanguard S&P 500 ETF','VTI':'Vanguard Total Stock Market ETF','VUG':'Vanguard Growth ETF','XLB':'Materials Select Sector SPDR','XLC':'Communication Services SPDR','XLE':'Energy Select Sector SPDR','XLF':'Financial Select Sector SPDR','XLP':'Consumer Staples SPDR','XLU':'Utilities Select Sector SPDR','BILS':'SPDR Bloomberg 3-12 Mo T-Bill ETF','IYG':'iShares U.S. Financial Services ETF','IYJ':'iShares U.S. Industrials ETF','VGLT':'Vanguard Long-Term Treasury ETF','VGT':'Vanguard Information Technology ETF','VNQ':'Vanguard Real Estate ETF','XLV':'Health Care Select SPDR','XLY':'Consumer Discretionary SPDR'};
 const ETF_SECTORS={'FDIS':'Consumer Discretionary','FTEC':'Information Technology','IGV':'Information Technology','NLR':'Energy','PSCT':'Information Technology','QQQ':'Information Technology','RSPN':'Industrials','SMH':'Information Technology','VCSH':'Fixed Income','VFH':'Financials','VHT':'Health Care','VIS':'Industrials','VOO':'Broad Market','VTI':'Broad Market','VUG':'Broad Market','XLB':'Materials','XLC':'Communication Services','XLE':'Energy','XLF':'Financials','XLP':'Consumer Staples','XLU':'Utilities','BILS':'Fixed Income','IYG':'Financials','IYJ':'Industrials','VGLT':'Fixed Income','VGT':'Information Technology','VNQ':'Real Estate','XLV':'Health Care','XLY':'Consumer Discretionary'};
 const ETF_BETAS={'FDIS':0.9624,'FTEC':0.9793,'IGV':1.0154,'NLR':0.9375,'PSCT':0.5955,'QQQ':0.9525,'RSPN':1.0296,'SMH':1.5004,'VCSH':0.6346,'VFH':1.0567,'VHT':1.0063,'VIS':1.0457,'VOO':1.0001,'VTI':1.0016,'VUG':1.0208,'XLB':0.9859,'XLC':0.9451,'XLE':1.1061,'XLF':0.9984,'XLP':0.9908,'XLU':0.9976,'BILS':1.5414,'IYG':1.0856,'IYJ':0.9427,'VGLT':0.9988,'VGT':0.9815,'VNQ':1.0147,'XLV':1.0054,'XLY':0.9435};
 
@@ -4027,6 +4219,9 @@ async function fetchMcapsForThesis() {
 setTimeout(fetchMcapsForThesis, 2000);
 
 function renderMcapBreakdown() {
+  // initThesisTab can reach here before buildState has run, and S.holdings is then
+  // undefined -- the throw aborted the rest of the caller silently.
+  if (!S || !Array.isArray(S.holdings)) return;
   const tiers = {'Mega Cap':{color:'#7c3aed',bg:'rgba(101,163,255,.12)',holdings:[],value:0},'Large Cap':{color:'#9fc4ff',bg:'rgba(101,163,255,.10)',holdings:[],value:0},'Mid Cap':{color:'#047857',bg:'rgba(74,222,128,.12)',holdings:[],value:0},'Small Cap':{color:'#b45309',bg:'rgba(247,185,40,.10)',holdings:[],value:0}};
   S.holdings.filter(h=>h.type==='equity').forEach(h=>{
     const mcap=mcapCache[h.ticker];
