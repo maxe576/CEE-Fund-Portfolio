@@ -73,6 +73,10 @@ kept — dividends, interest and wires carry their value in **Amount**.
 node tools/build-performance.js && node tools/publish-performance.js
 ```
 
+Daily prices are cached in `tools/pxcache/` and re-fetched once a file is more
+than 18 hours old, so rebuilding on a later day picks up the new closes. Before
+2026-09-13 the cache never expired, which froze the series at 2026-09-04.
+
 Update the four file paths and `ANCHOR` at the top of `build-performance.js`
 when new exports arrive. `ANCHOR` is the as-of date printed in the positions
 filename. Prices are cached in `tools/pxcache/`; delete it to force a refresh.

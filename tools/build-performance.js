@@ -5,6 +5,10 @@
 const fs=require('fs'), https=require('https'), path=require('path');
 const CACHE=path.join(__dirname,'pxcache');
 if(!fs.existsSync(CACHE)) fs.mkdirSync(CACHE);
+// Daily closes are cached per ticker, but only for 18 hours. The cache used to
+// never expire, so a rebuild on a later day silently reused the old files and the
+// performance series stayed frozen at the date the cache was first filled.
+const CACHE_MAX_AGE_MS=18*3600e3;
 
 /* ---------- csv ---------- */
 function parseCSV(t){const rows=[];let row=[],cell='',q=false;
@@ -52,7 +56,7 @@ function fetchJSON(url){return new Promise((res,rej)=>{
 
 async function getSeries(tk){
  const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
- if(fs.existsSync(f)) return JSON.parse(fs.readFileSync(f,'utf8'));
+ if(fs.existsSync(f) && Date.now()-fs.statSync(f).mtimeMs < CACHE_MAX_AGE_MS) return JSON.parse(fs.readFileSync(f,'utf8'));
  const y=YF[tk]||tk.replace('.','-');
  let out={px:{},splits:[],ok:false};
  try{
