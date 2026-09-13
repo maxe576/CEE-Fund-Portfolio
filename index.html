@@ -876,6 +876,10 @@ async function init() {
   if (window.Chart) { Chart.defaults.color = '#9fb0c5'; Chart.defaults.borderColor = 'rgba(29,54,82,.7)'; }
   loadSavedFund();
   await loadHoldingsFromFirebase();
+  // Holdings stored in Firebase carry upload-time betas (for ETFs, the fallback
+  // table). Swap in the cached 36-month regression before anything is drawn, so
+  // the first screen shows the same beta the page settles on.
+  apply3YBetas();
   buildState();
   updateFundSelector();
   renderAll();
@@ -3832,6 +3836,20 @@ async function fetch3YStats(ticker){
   }catch(e){ return (stats3y[ticker]=null); }
 }
 
+/* Copy the 36-month regression beta onto every holding in both funds. Holdings
+   arrive from Firebase or an Excel upload carrying whatever beta the workbook or
+   the ETF fallback table held; this is what replaces it. Returns how many changed. */
+function apply3YBetas(){
+  let applied=0;
+  [RAW.endowment,RAW.ceeFund].forEach(src=>{
+    [...(src.equities||[]),...(src.etfs||[])].forEach(h=>{
+      const s=stats3y[h.ticker];
+      if(s&&Number.isFinite(s.beta)&&h.beta!==s.beta){ h.beta=s.beta; applied++; }
+    });
+  });
+  return applied;
+}
+
 async function load3YStatsAll(){
   if(_stats3yLoading) return; _stats3yLoading=true;
   try{
@@ -3842,15 +3860,13 @@ async function load3YStatsAll(){
       if(i+6<todo.length) await new Promise(r=>setTimeout(r,250));
     }
     // Apply the 3Y beta to every holding so buildState/S.beta/sector betas all use it.
-    let applied=0;
-    ['endowment','ceeFund'].forEach(f=>{
-      const src=f==='endowment'?RAW.endowment:RAW.ceeFund;
-      [...src.equities,...src.etfs].forEach(h=>{
-        const s=stats3y[h.ticker];
-        if(s&&Number.isFinite(s.beta)){ h.beta=s.beta; applied++; }
-      });
-    });
-    try{ localStorage.setItem('cee_3y_stats_v2',JSON.stringify({ts:Date.now(),data:stats3y})); }catch(e){}
+    const applied=apply3YBetas();
+    // Cache successes only. A failed fetch (rate limit, outage) used to be cached as
+    // null for 7 days, leaving that ticker on its imported beta for a week.
+    try{
+      const ok={}; Object.entries(stats3y).forEach(([k,v])=>{ if(v) ok[k]=v; });
+      localStorage.setItem('cee_3y_stats_v2',JSON.stringify({ts:Date.now(),data:ok}));
+    }catch(e){}
     if(applied){ buildState(); renderAll(); if(currentTab==='thesis') initThesisTab(); }
     console.log('3Y beta/alpha loaded: '+Object.keys(stats3y).filter(k=>stats3y[k]).length+' of '+tks.length+' tickers (36-mo regression vs SPY)');
   } finally { _stats3yLoading=false; }
@@ -3890,7 +3906,11 @@ function resetToEmbedded(){if(confirm('Reset to original embedded data?'))locati
 // ── EXCEL UPLOAD ──────────────────────────────────────────────────────────────
 const COMPANY_NAMES={'GOOG':'Alphabet Inc.','META':'Meta Platforms','NFLX':'Netflix','TKO':'TKO Group','AMZN':'Amazon','HD':'Home Depot','COST':'Costco','KO':'Coca-Cola','WMT':'Walmart','XOM':'ExxonMobil','BRK.B':'Berkshire Hathaway','BX':'Blackstone','MA':'Mastercard','SPGI':'S&P Global','V':'Visa','TMUS':'T-Mobile','HCA':'HCA Healthcare','LLY':'Eli Lilly','PFE':'Pfizer','SYK':'Stryker','CAT':'Caterpillar','HWM':'Howmet Aerospace','SBGSF':'Schneider Electric SE','WM':'Waste Management','AAPL':'Apple','CRWD':'CrowdStrike','MSFT':'Microsoft','NVDA':'NVIDIA','ORCL':'Oracle','TSM':'TSMC','NUE':'Nucor','DLR':'Digital Realty','CEG':'Constellation Energy','ABBV':'AbbVie','ADI':'Analog Devices','COF':'Capital One','DAR':'Darling Ingredients','DIS':'Walt Disney','ET':'Energy Transfer','FSLR':'First Solar','GD':'General Dynamics','GOOGL':'Alphabet Inc.','GRMN':'Garmin','HOOD':'Robinhood','IREN':'IREN Limited','ISRG':'Intuitive Surgical','PANW':'Palo Alto Networks','PLTR':'Palantir','SOFI':'SoFi Technologies','SOUN':'SoundHound AI','TTWO':'Take-Two Interactive','VMC':'Vulcan Materials','MBGL':'Mobility Global','FDIS':'Fidelity MSCI Consumer Disc ETF','FTEC':'Fidelity MSCI Info Tech ETF','IGV':'iShares Expanded Tech-Software ETF','NLR':'VanEck Uranium and Nuclear ETF','PSCT':'Invesco S&P SmallCap IT ETF','QQQ':'Invesco QQQ (Nasdaq-100)','RSPN':'Invesco S&P 500 Equal Wt Industrials','SMH':'VanEck Semiconductor ETF','VCSH':'Vanguard Short-Term Corp Bond ETF','VFH':'Vanguard Financials ETF','VHT':'Vanguard Health Care ETF','VIS':'Vanguard Industrials ETF','VOO':'Vanguard S&P 500 ETF','VTI':'Vanguard Total Stock Market ETF','VUG':'Vanguard Growth ETF','XLB':'Materials Select Sector SPDR','XLC':'Communication Services SPDR','XLE':'Energy Select Sector SPDR','XLF':'Financial Select Sector SPDR','XLP':'Consumer Staples SPDR','XLU':'Utilities Select Sector SPDR','BILS':'SPDR Bloomberg 3-12 Mo T-Bill ETF','IYG':'iShares U.S. Financial Services ETF','IYJ':'iShares U.S. Industrials ETF','VGLT':'Vanguard Long-Term Treasury ETF','VGT':'Vanguard Information Technology ETF','VNQ':'Vanguard Real Estate ETF','XLV':'Health Care Select SPDR','XLY':'Consumer Discretionary SPDR'};
 const ETF_SECTORS={'FDIS':'Consumer Discretionary','FTEC':'Information Technology','IGV':'Information Technology','NLR':'Energy','PSCT':'Information Technology','QQQ':'Information Technology','RSPN':'Industrials','SMH':'Information Technology','VCSH':'Fixed Income','VFH':'Financials','VHT':'Health Care','VIS':'Industrials','VOO':'Broad Market','VTI':'Broad Market','VUG':'Broad Market','XLB':'Materials','XLC':'Communication Services','XLE':'Energy','XLF':'Financials','XLP':'Consumer Staples','XLU':'Utilities','BILS':'Fixed Income','IYG':'Financials','IYJ':'Industrials','VGLT':'Fixed Income','VGT':'Information Technology','VNQ':'Real Estate','XLV':'Health Care','XLY':'Consumer Discretionary'};
-const ETF_BETAS={'FDIS':0.9624,'FTEC':0.9793,'IGV':1.0154,'NLR':0.9375,'PSCT':0.5955,'QQQ':0.9525,'RSPN':1.0296,'SMH':1.5004,'VCSH':0.6346,'VFH':1.0567,'VHT':1.0063,'VIS':1.0457,'VOO':1.0001,'VTI':1.0016,'VUG':1.0208,'XLB':0.9859,'XLC':0.9451,'XLE':1.1061,'XLF':0.9984,'XLP':0.9908,'XLU':0.9976,'BILS':1.5414,'IYG':1.0856,'IYJ':0.9427,'VGLT':0.9988,'VGT':0.9815,'VNQ':1.0147,'XLV':1.0054,'XLY':0.9435};
+// Fallback only, used until the live 36-month regression vs SPY loads (it replaces these
+// on every page open). Values are that same regression as of 2026-09-10. The previous
+// table was not measured against SPY at all: it had a T-bill fund at 1.54 and
+// Utilities and Staples near 1.00.
+const ETF_BETAS={'FDIS':1.238,'FTEC':1.533,'IGV':1.397,'NLR':1.302,'PSCT':1.603,'QQQ':1.274,'RSPN':0.902,'SMH':2.006,'VCSH':0.093,'VFH':0.831,'VHT':0.493,'VIS':1.005,'VOO':1.001,'VTI':1.028,'VUG':1.282,'XLB':0.66,'XLC':0.872,'XLE':-0.026,'XLF':0.747,'XLP':0.336,'XLU':0.282,'BILS':0.005,'IYG':0.88,'IYJ':0.918,'VGLT':0.465,'VGT':1.532,'VNQ':0.843,'XLV':0.431,'XLY':1.169};
 
 function handleExcelUpload(input){
   const file=input.files[0];if(!file)return;
@@ -3925,6 +3945,7 @@ function handleExcelUpload(input){
       // Only replace transaction history when the upload actually contains a Transactions sheet —
       // a holdings-only upload must never wipe previously saved transactions.
       if(txR!==null){ TRANSACTIONS.length=0; txR.forEach(t=>TRANSACTIONS.push(t)); }
+      apply3YBetas();   // the parser stamps fallback ETF betas; replace them before rendering
       buildState();renderAll();
       okEl.innerHTML=`✅ ${endR.equities.length} Endowment equities, ${endR.etfs.length} ETFs | ${ceeR.equities.length} CEE equities, ${ceeR.etfs.length} ETFs | ${txR!==null?txR.length+' transactions':'no Transactions sheet (optional — existing history kept)'}`
         +`<div style="font-size:10px;margin-top:4px">Reconciliation: Endowment ${fmtK(endR.total)} · CEE ${fmtK(ceeR.total)}</div>`
