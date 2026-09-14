@@ -739,8 +739,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <div class="card-title">Endowment vs CEE Fund <span style="font-weight:400;font-size:11px;color:var(--muted)">separate portfolios, separate transaction histories &mdash; same measurement basis</span></div>
     <div class="tbl-wrap"><table id="trkFundCompare"></table></div>
   </div>
-  <div class="grid-2">
-    <div class="card">
+  <div class="card" style="margin-bottom:14px">
       <div class="card-title">
         <span>Equities vs ETFs <span id="trkSplitFund" style="font-weight:400;font-size:11px;color:var(--muted)"></span></span>
         <div style="display:flex;gap:5px;align-items:center">
@@ -750,8 +749,19 @@ tr:hover td{background:rgba(212,167,44,.06)}
       </div>
       <div style="height:190px;margin-bottom:12px"><canvas id="trkSplitChart"></canvas></div>
       <div class="tbl-wrap"><table id="trkSplitTable"></table></div>
-    </div>
+  </div>
+  <div class="grid-2">
     <div class="card"><div class="card-title">Capital Flows <span id="trkFlowFund" style="font-weight:400;font-size:11px;color:var(--muted)"></span></div><div class="tbl-wrap"><table id="trkFlowTable"></table></div></div>
+    <div class="card">
+      <div class="card-title">
+        <span>Top &amp; Bottom Movers <span id="trkMoverLbl" style="font-weight:400;font-size:11px;color:var(--muted)"></span></span>
+        <div style="display:flex;gap:5px;align-items:center">
+          <button class="period-btn active" data-movers="stocks" onclick="setTrkMovers('stocks',this)">Stocks</button>
+          <button class="period-btn" data-movers="all" onclick="setTrkMovers('all',this)">Stocks + ETFs</button>
+        </div>
+      </div>
+      <div id="trkMovers"></div>
+    </div>
   </div>
 </div>
 
@@ -1811,6 +1821,91 @@ async function initTrack() {
   renderTrack();
 }
 
+/* Top and bottom movers for the window on screen, preset or custom. Each
+   position is ranked on what it earned us over the days we held it inside the
+   window - the same figure the sector drill-down shows - so a stock bought
+   halfway through is judged from the price we paid. Stocks by default; ETFs can
+   be included. Bond funds are never "movers" and are left out. */
+let trkMoversMode = 'stocks', _trkMoversToken = 0, _trkMoversWin = null;
+function setTrkMovers(mode, btn) {
+  trkMoversMode = mode;
+  document.querySelectorAll('[data-movers]').forEach(b => b.classList.toggle('active', b === btn));
+  if (_trkMoversWin) renderTrkMovers(_trkMoversWin[0], _trkMoversWin[1]);
+}
+async function renderTrkMovers(s, e) {
+  _trkMoversWin = [s, e];
+  const el = document.getElementById('trkMovers'); if (!el) return;
+  const token = ++_trkMoversToken;
+  if (!PERF_HOLD) el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12px">Loading position history&hellip;</div>';
+  let H;
+  try { H = await loadPerfHoldings(); }
+  catch (err) {
+    if (token === _trkMoversToken) el.innerHTML = '<div style="padding:14px;color:var(--red);font-size:12px">Could not load position history: ' + err.message + '</div>';
+    return;
+  }
+  if (token !== _trkMoversToken) return;   // the period changed while loading
+
+  const fk = perfFundKey(), dates = PERF.dates;
+  const multiYear = dates[s].slice(0, 4) !== dates[e].slice(0, 4);
+  const fmtD = i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
+    multiYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  const signed = g => (g >= 0 ? '+' : '-') + money0(g);
+  const nameOf = tk => {
+    const h = S.holdings.find(x => x.ticker === tk); if (h) return h.company;
+    try { return COMPANY_NAMES[tk] || tk; } catch (_) { return tk; }
+  };
+  // A position held for a day or two can post an eye-catching percentage that
+  // says nothing about the period, so require a minimum stay.
+  const minDays = Math.max(1, Math.min(5, Math.ceil((e - s) / 2)));
+
+  const list = [];
+  let tooShort = 0;
+  for (const [tk, ser] of Object.entries(H.funds[fk] || {})) {
+    const type = PERF.typeOf[tk] || 'equity';
+    if (trkMoversMode === 'stocks' && type === 'etf') continue;
+    if ((PERF.sectorOf[tk] || 'Other') === 'Fixed Income') continue;
+    const r = positionWindow(ser, s, e);
+    if (r.from === null || r.ret == null) continue;
+    if (((r.to ?? e) - r.from) < minDays) { tooShort++; continue; }
+    const px = H.px[tk];
+    list.push({ tk, type, ...r, company: nameOf(tk), cur: S.holdings.some(x => x.ticker === tk),
+      stock: px && px[s] > 0 && px[e] > 0 ? (px[e] / px[s] - 1) * 100 : null });
+  }
+  list.sort((a, b) => b.ret - a.ret);
+  const top = list.slice(0, 3);
+  const bottom = list.slice(Math.max(top.length, list.length - 3)).reverse();
+
+  const row = (x, rank) => {
+    const notes = [];
+    if (x.from > s) notes.push('bought ' + fmtD(x.from));
+    if (x.sold !== null) notes.push('sold ' + fmtD(x.sold));
+    return '<tr>' +
+      '<td style="color:var(--muted);width:16px">' + rank + '</td>' +
+      '<td class="ticker-cell" style="white-space:nowrap' + (x.cur ? ';cursor:pointer" title="Open ' + x.tk + '" onclick="openTicker(\'' + x.tk + '\')"' : '"') + '>' + x.tk +
+        (x.type === 'etf' ? ' <span class="badge type-etf" style="font-size:8px">ETF</span>' : '') + '</td>' +
+      '<td style="font-size:11px;color:var(--gray)">' + x.company +
+        (notes.length ? '<div style="font-size:9px;color:var(--muted);font-weight:600">' + notes.join(' &middot; ') + '</div>' : '') + '</td>' +
+      '<td class="' + cls(x.ret) + '" style="font-weight:700;text-align:right;white-space:nowrap">' + pct(x.ret) + '</td>' +
+      '<td class="' + (x.gain >= 0 ? 'pos' : 'neg') + '" style="text-align:right;white-space:nowrap">' + signed(x.gain) + '</td>' +
+      '<td style="text-align:right;color:var(--muted);white-space:nowrap">' + pct(x.stock) + '</td></tr>';
+  };
+  const head = '<tr><th></th><th>Ticker</th><th>Company</th><th style="text-align:right" title="What the position earned us over the days held in this period">Our Return</th>' +
+    '<th style="text-align:right">$ Gain</th><th style="text-align:right" title="What the security itself did over the whole period">Stock&rsquo;s Move</th></tr>';
+  const block = (label, color, rows) =>
+    '<div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:' + color + ';margin:2px 0 4px">' + label + '</div>' +
+    '<div class="tbl-wrap" style="margin-bottom:10px"><table>' + head + rows + '</table></div>';
+
+  document.getElementById('trkMoverLbl').textContent = '· ' + fmtD(s) + ' to ' + fmtD(e);
+  el.innerHTML = !list.length
+    ? '<div style="padding:14px;color:var(--muted);font-size:12px;text-align:center">No positions held long enough in this period to rank</div>'
+    : block('TOP 3', '#4ade80', top.map((x, i) => row(x, i + 1)).join('')) +
+      (bottom.length ? block('BOTTOM 3', '#ff8f8f', bottom.map((x, i) => row(x, i + 1)).join('')) : '') +
+      '<div style="font-size:10px;color:var(--muted);line-height:1.5">Ranked on our return over the days held in this period, out of ' +
+      list.length + ' ' + (trkMoversMode === 'stocks' ? 'stocks' : 'positions') + '. ' +
+      (tooShort ? tooShort + ' held under ' + minDays + ' trading day' + (minDays === 1 ? '' : 's') + ' left out. ' : '') +
+      'Bond funds excluded. Stock&rsquo;s Move is the security over the whole period, whether we held it or not.</div>';
+}
+
 function renderTrack() {
   if (!PERF) return;
   const f = PERF.funds[perfFundKey()];
@@ -2007,6 +2102,7 @@ function renderTrack() {
       '<tr><td>' + d + '</td><td>' + (v > 0 ? 'Capital added' : 'Capital withdrawn') + '</td><td class="' +
       (v > 0 ? 'pos' : 'neg') + '">' + (v > 0 ? '+' : '-') + '$' + fmt(Math.abs(v)) + '</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">No external capital moved in this period</td></tr>');
+  renderTrkMovers(s, e);   // async: needs the per-position series
 
   // Both funds side by side on the selected period. They run different books
   // and different mandates, so the comparison is informative rather than a
