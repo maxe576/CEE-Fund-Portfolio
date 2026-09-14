@@ -77,6 +77,28 @@ Daily prices are cached in `tools/pxcache/` and re-fetched once a file is more
 than 18 hours old, so rebuilding on a later day picks up the new closes. Before
 2026-09-13 the cache never expired, which froze the series at 2026-09-04.
 
+The build also writes `perf_holdings.json` - each position's daily value, its
+purchases and sales, and its daily close - which publishes to
+`/ceePerformanceHoldings`. The Performance tab downloads it only when a sector
+is opened, and uses it to compute every position's figures for exactly the
+dates on screen, preset or custom.
+
+**If the build prints `unpriced tickers`, fix it before publishing.** A holding
+with no price series is left out of the fund's value while it is held, and the
+day it converts or is sold its value lands as a one-day gain. Two tools in
+`build-performance.js` handle this:
+
+- `ALIAS` - a symbol Schwab files under a CUSIP but which is the same security as
+  a live ticker. ExxonMobil's pre-2026-07-02 shares (`30231G102`) are priced as
+  `XOM`; before this, the reorganisation showed up as +$2,384 in one day.
+- `PX_PROXY` - a holding with no history left anywhere, valued at the price the
+  fund exited at: LHC Group (`50187A107`, cash merger at $170.00) and DISH
+  (sold at $13.79).
+
+Actions in `POS_FLOW` (Buy, Sell, Cash Merger) are what move money into or out
+of a position; anything else that changes shares - dividend reinvestment, a
+spin-off - counts as return.
+
 Update the four file paths and `ANCHOR` at the top of `build-performance.js`
 when new exports arrive. `ANCHOR` is the as-of date printed in the positions
 filename. Prices are cached in `tools/pxcache/`; delete it to force a refresh.

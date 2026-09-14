@@ -45,5 +45,10 @@ function put(node,obj){
  const lp=path.join(__dirname,'ledger.json');
  if(fs.existsSync(lp)) await put('ceeTransactions',JSON.parse(fs.readFileSync(lp,'utf8')));
  else console.log('  (no ledger.json - run build-performance.js first)');
+ // Each position's daily value, trades and price, for the sector drill-down. Its own
+ // node, so the Performance tab only downloads it when a sector is opened.
+ const hp=path.join(__dirname,'perf_holdings.json');
+ if(fs.existsSync(hp)) await put('ceePerformanceHoldings',JSON.parse(fs.readFileSync(hp,'utf8')));
+ else console.log('  (no perf_holdings.json - run build-performance.js first)');
  console.log('done');
 })().catch(e=>{console.error('FAILED:',e.message);process.exit(1);});

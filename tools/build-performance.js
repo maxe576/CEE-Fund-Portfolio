@@ -9,6 +9,18 @@ if(!fs.existsSync(CACHE)) fs.mkdirSync(CACHE);
 // never expire, so a rebuild on a later day silently reused the old files and the
 // performance series stayed frozen at the date the cache was first filled.
 const CACHE_MAX_AGE_MS=18*3600e3;
+// A file saved before the most recent close (4:15pm New York, weekdays) may hold an
+// intraday price as its last bar, so it is stale however young it is.
+function lastCloseMs(){
+ const now=new Date(), ny=new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+ const offset=now.getTime()-ny.getTime();
+ const c=new Date(ny); c.setHours(16,15,0,0);
+ if(ny<c) c.setDate(c.getDate()-1);
+ while(c.getDay()===0||c.getDay()===6) c.setDate(c.getDate()-1);
+ return c.getTime()+offset;
+}
+const LAST_CLOSE_MS=lastCloseMs();
+const cacheFresh=f=>{ const m=fs.statSync(f).mtimeMs; return Date.now()-m<CACHE_MAX_AGE_MS && m>=LAST_CLOSE_MS; };
 
 /* ---------- csv ---------- */
 function parseCSV(t){const rows=[];let row=[],cell='',q=false;
@@ -22,11 +34,25 @@ const num=s=>{if(!s)return 0;const n=parseFloat(String(s).replace(/,/g,''));retu
 const iso=s=>{const m=String(s).split(' as of ');const d=(m[1]||m[0]).trim().split('/');
  return d.length===3?`${d[2]}-${d[0].padStart(2,'0')}-${d[1].padStart(2,'0')}`:null};
 
-const ALIAS={BRKB:'BRK.B', 'BRK/B':'BRK.B', RGI:'RSPN'};              // Schwab symbol -> dashboard ticker
+const ALIAS={BRKB:'BRK.B', 'BRK/B':'BRK.B', RGI:'RSPN',          // Schwab symbol -> dashboard ticker
+ // ExxonMobil's 2026-07-02 reorganisation: Schwab now files the pre-reorg shares
+ // under the old CUSIP, which has no price series, so the holding dropped out of NAV
+ // until the exchange and then reappeared as a one-day gain. Same company, same
+ // shares, same XOM price history - so it is priced as XOM.
+ '30231G102':'XOM'};
 const YF   ={'BRK.B':'BRK-B'};                       // dashboard ticker -> Yahoo symbol
 const norm=s=>ALIAS[s]||s;
 const IS_CUSIP=s=>/^[0-9][0-9A-Z]{8}$/.test(s);
 const BOND_CUSIP='91282CLW9';
+// Holdings with no price history left anywhere, valued at the price the fund
+// actually exited at. Left unpriced they are missing from NAV while held and their
+// exit proceeds land as a one-day gain.
+//   50187A107  LHC Group: cash merger into UnitedHealth, $170.00 a share on 2023-02-24
+//   DISH       sold 2022-10-21 at $13.79; Yahoo no longer carries its history
+const PX_PROXY={'50187A107':170.00,'DISH':13.79};
+// Actions that move money into or out of a position. A cash merger is an exit just
+// like a sale: without it the payout reads as a total loss on the position.
+const POS_FLOW=new Set(['Buy','Sell','Cash Merger']);
 
 const SH_IN=new Set(['Buy','Reinvest Shares','Spin-off','Reinvestment Adj']);
 const SH_OUT=new Set(['Sell']);
@@ -56,7 +82,7 @@ function fetchJSON(url){return new Promise((res,rej)=>{
 
 async function getSeries(tk){
  const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
- if(fs.existsSync(f) && Date.now()-fs.statSync(f).mtimeMs < CACHE_MAX_AGE_MS) return JSON.parse(fs.readFileSync(f,'utf8'));
+ if(fs.existsSync(f) && cacheFresh(f)) return JSON.parse(fs.readFileSync(f,'utf8'));
  const y=YF[tk]||tk.replace('.','-');
  let out={px:{},splits:[],ok:false};
  try{
@@ -176,7 +202,18 @@ function loadPositions(p){
   return f;
  }
  const calendar=tradingDays(S['SPY'].px,'2022-08-15','2026-12-31');
+ // A session that has not closed has no close yet: Yahoo reports the latest trade,
+ // and a series built mid-session bakes that in (how 2026-09-04 came to carry
+ // intraday prices). Leave today out until 4:15pm New York time.
+ {
+  const ny=new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const todayNY=ny.getFullYear()+'-'+String(ny.getMonth()+1).padStart(2,'0')+'-'+String(ny.getDate()).padStart(2,'0');
+  if(calendar.length&&calendar[calendar.length-1]===todayNY&&ny.getHours()*60+ny.getMinutes()<16*60+15){
+   calendar.pop(); console.log('  leaving out '+todayNY+': the session has not closed');
+  }
+ }
 
+ const HOLD={funds:{}};   // per-position daily series for the sector drill-down
  const OUT={generatedAt:new Date().toISOString(),anchor:ANCHOR,dates:calendar,funds:{},meta:{}};
 
  for(const f of FUNDS){
@@ -229,6 +266,7 @@ function loadPositions(p){
     if(Math.abs(sh)<1e-6) continue;
     let px;
     if(tk===BOND_CUSIP) px=0.99;                       // Treasury par proxy
+    else if(PX_PROXY[tk]!=null) px=PX_PROXY[tk];      // no history left: exit price
     else { const ser=S[tk]; if(!ser||!ser.ok){missing.add(tk);continue;}
            px=ser.px[d]; if(px==null){ // carry last known close
              const keys=Object.keys(ser.px); let last=null;
@@ -248,7 +286,7 @@ function loadPositions(p){
    const tkFlowDay={};
    for(const t of (byDate[d]||[])){
     if(!t.sym) continue;
-    if(t.action!=='Buy'&&t.action!=='Sell') continue;
+    if(!POS_FLOW.has(t.action)) continue;
     tkFlowDay[t.sym]=(tkFlowDay[t.sym]||0)-t.amt;
    }
    for(const k of Object.keys(tkVal)){
@@ -260,7 +298,7 @@ function loadPositions(p){
    const secFlowDay={};
    for(const t of (byDate[d]||[])){
     if(!t.sym) continue;
-    if(t.action!=='Buy'&&t.action!=='Sell') continue;
+    if(!POS_FLOW.has(t.action)) continue;
     const sname=sectorOf[t.sym]||'Other';
     secFlowDay[sname]=(secFlowDay[sname]||0)-t.amt;   // buy amt is negative -> positive inflow
    }
@@ -269,14 +307,19 @@ function loadPositions(p){
    // same idea for the equity / ETF sleeves so their returns are real returns
    let eqF=0,etF=0;
    for(const t of (byDate[d]||[])){
-    if(!t.sym||(t.action!=='Buy'&&t.action!=='Sell')) continue;
+    if(!t.sym||!POS_FLOW.has(t.action)) continue;
     if((typeOf[t.sym]||'equity')==='etf') etF-=t.amt; else eqF-=t.amt;
    }
    eqFlow.push(+eqF.toFixed(2)); etfFlow.push(+etF.toFixed(2));
    const dayFlow=(byDate[d]||[]).reduce((s,t)=>s+t.ext,0);
    nav.push(+total.toFixed(2)); flows.push(+dayFlow.toFixed(2));
    eqNav.push(+eq.toFixed(2)); etfNav.push(+etf.toFixed(2));
-   for(const [k,v] of Object.entries(sec)){ (secNav[k]=secNav[k]||[]).push(+v.toFixed(2)); }
+   // A sector first held partway through the calendar has to start with zeros for the
+   // days before it existed. Without them its series began at index 0, and the padding
+   // below then added a second entry every day until it caught up, so the early part
+   // of the series was shifted in time (CEE Utilities was misdated through mid-2024;
+   // Endowment Broad Market never lined up at all).
+   for(const [k,v] of Object.entries(sec)){ (secNav[k]=secNav[k]||new Array(nav.length-1).fill(0)).push(+v.toFixed(2)); }
    // pad sectors that had no holdings this day
    for(const k of Object.keys(secNav)) if(secNav[k].length<nav.length) secNav[k].push(0);
   }
@@ -354,6 +397,18 @@ function loadPositions(p){
    for(let i=1;i<series.length;i++){const prev=series[i-1];
     const r=prev>100?((series[i]-(fl[i]||0))-prev)/prev:0;
     idx.push(+(idx[i-1]*(1+r)).toFixed(4));} return idx;};
+  /* Per-position daily value and buy/sell flows, exported so the dashboard can
+     compute any window - preset or custom - from the same numbers the sector
+     totals are built from. Only runs of non-zero days are kept, as [startIdx, values].
+     Negative values stay in: a sale the history cannot match to a purchase leaves a
+     negative position, and it is in the sector totals, so it has to be here too. */
+  const runsOf=vals=>{ const runs=[]; let cur=null;
+   vals.forEach((v,i)=>{ if(Math.abs(v)>0.005){ if(!cur){ cur=[i,[]]; runs.push(cur); } cur[1].push(v); } else cur=null; });
+   return runs; };
+  HOLD.funds[f.key]=Object.entries(tkVal).map(([tk,vals])=>{
+   const fl=(tkFlow[tk]||[]).map((amt,i)=>[i,amt]).filter(x=>Math.abs(x[1])>0.004);
+   return [tk, runsOf(vals), fl];
+  }).filter(r=>r[1].length||r[2].length);
   OUT.funds[f.key]={
    name:f.name, nav, flows, eqNav, etfNav, twr, sectors:secNav, sectorTwr:secTwr,
    eqTwr:sleeveTwr(eqNav,eqFlow), etfTwr:sleeveTwr(etfNav,etfFlow), eqFlow, etfFlow,
@@ -416,6 +471,19 @@ function loadPositions(p){
  fs.writeFileSync(path.join(__dirname,'ledger.json'),JSON.stringify(LEDGER));
  console.log(`ledger.json: ${ledger.length} transactions, ${Object.keys(lastPx).length} last prices ` +
    `(${(fs.statSync(path.join(__dirname,'ledger.json')).size/1024).toFixed(0)} KB)`);
+ // Daily closes for every position we held (last close carried over gaps), so the
+ // drill-down can show what the security itself did over any window.
+ const heldTk=new Set(); Object.values(HOLD.funds).forEach(list=>list.forEach(r=>heldTk.add(r[0])));
+ HOLD.px=[...heldTk].filter(tk=>S[tk]&&S[tk].ok).map(tk=>{
+  const arr=calendar.map(d=>{ const p=S[tk].px[d]; return p??null; });
+  for(let i=1;i<arr.length;i++) if(arr[i]==null) arr[i]=arr[i-1];
+  const o=arr.findIndex(v=>v!=null); if(o<0) return null;
+  return [tk,o,arr.slice(o).map(v=>+v.toFixed(v<10?4:2))];
+ }).filter(Boolean);
+ HOLD.generatedAt=OUT.generatedAt; HOLD.n=calendar.length; HOLD.first=calendar[0]; HOLD.last=calendar[calendar.length-1];
+ fs.writeFileSync(path.join(__dirname,'perf_holdings.json'),JSON.stringify(HOLD));
+ console.log(`perf_holdings.json: ${Object.values(HOLD.funds).map(l=>l.length).join(' + ')} positions, ${HOLD.px.length} price series ` +
+   `(${(fs.statSync(path.join(__dirname,'perf_holdings.json')).size/1024).toFixed(0)} KB)`);
  fs.writeFileSync(path.join(__dirname,'perf.json'),JSON.stringify(OUT));
  const spy=OUT.bench.SPY;
  console.log(`\nSPY over same window: ${((spy[spy.length-1]/spy[0]-1)*100).toFixed(2)}%`);
