@@ -2531,82 +2531,226 @@ function renderSectorPerf() {
   if (spDrillSector) drillSector(spDrillSector, true);
 }
 
-/* Holding-level results inside a sector.
-   "Our return" is what the position earned US over the period, chain-linked only
-   across the days we actually held it. That is deliberately different from the
-   security's own return: NVDA bought in March should not be credited or blamed
-   for January and February. Both are shown so the gap is visible. */
-function drillSector(name) {
+/* Per-position daily series - value while held, purchases and sales, and the
+   security's own closes - published by tools/build-performance.js to its own node,
+   so the Performance tab only downloads it when a sector is opened. */
+let PERF_HOLD = null, perfHoldLoading = null;
+function loadPerfHoldings() {
+  if (PERF_HOLD) return Promise.resolve(PERF_HOLD);
+  if (perfHoldLoading) return perfHoldLoading;
+  perfHoldLoading = (async () => {
+    const r = await fetch(FB_DB_URL + '/ceePerformanceHoldings.json');
+    if (!r.ok) throw new Error('position history unavailable (' + r.status + ')');
+    const d = await r.json();
+    if (!d || !d.funds) throw new Error('position history has not been published yet');
+    const n = PERF.dates.length;
+    // Built alongside the performance series, so the two must share one calendar.
+    if (d.n !== n || d.last !== PERF.dates[n - 1])
+      throw new Error('position history (to ' + d.last + ') is out of step with the performance series (to ' +
+        PERF.dates[n - 1] + ') - republish both');
+    const list = x => Array.isArray(x) ? x : (x ? Object.values(x) : []);   // Firebase can return arrays as objects
+    const out = { funds: {}, px: {} };
+    for (const [fk, rows] of Object.entries(d.funds)) {
+      const m = {};
+      list(rows).forEach(row => {
+        if (!row) return;
+        const v = new Float64Array(n), f = new Float64Array(n);
+        list(row[1]).forEach(run => { if (run) list(run[1]).forEach((x, k) => { if (run[0] + k < n) v[run[0] + k] = x || 0; }); });
+        list(row[2]).forEach(pr => { if (pr && pr[0] < n) f[pr[0]] = pr[1] || 0; });
+        m[row[0]] = { v, f };
+      });
+      out.funds[fk] = m;
+    }
+    list(d.px).forEach(row => {
+      if (!row) return;
+      const a = new Array(n).fill(null);
+      list(row[2]).forEach((x, k) => { if (row[1] + k < n) a[row[1] + k] = x; });
+      out.px[row[0]] = a;
+    });
+    return (PERF_HOLD = out);
+  })();
+  perfHoldLoading.catch(() => {}).finally(() => { perfHoldLoading = null; });
+  return perfHoldLoading;
+}
+
+/* What one position earned us over dates[s] .. dates[e].
+   The return is chain-linked across only the days we held it, with purchases and
+   sales taken out, so a stock bought partway through is judged from the price we
+   paid and one sold partway through up to its proceeds. The dollar gain is exactly
+   value at end - value at start - net buying: the same identity the sector totals
+   are built on, which is why the rows add up to the sector row. */
+function positionWindow(ser, s, e) {
+  const v = ser.v, f = ser.f;
+  let idx = 1, gain = 0, net = 0, from = null, to = null, sold = null, based = false;
+  for (let i = s + 1; i <= e; i++) {
+    const prev = v[i - 1], cur = v[i], fl = f[i] || 0;
+    net += fl;
+    gain += (cur - fl) - prev;
+    if (prev > 0.005) {
+      idx *= 1 + ((cur - fl) - prev) / prev; based = true;
+      if (from === null) from = i - 1;
+      if (cur <= 0.005) sold = i;
+    } else if (cur > 0.005 && fl > 0.005) {
+      idx *= cur / fl; based = true;                 // bought today: measured from the price paid
+      if (from === null) from = i;
+    }
+    if (cur > 0.005) to = i;
+  }
+  return { held: from !== null || Math.abs(gain) > 0.5, v0: v[s], v1: v[e], net, gain,
+           ret: based ? (idx - 1) * 100 : null, from, to: sold !== null ? sold : to, sold };
+}
+
+/* Sector drill-down. Every figure is for the window on screen - a preset or a
+   custom range - except "Overall", which is gain on cost since purchase and is
+   labelled as the one exception. Positions sold during the window are listed, so
+   the rows account for the whole sector result. */
+let _drillToken = 0;
+async function drillSector(name) {
   spDrillSector = name;
   const el = document.getElementById('spDrill');
-  const f = PERF.funds[perfFundKey()];
-  const H = f.holdings || {};
-  const per = spPeriod;
-  const holds = S.holdings.filter(h => h.sector === name);
-  const rec = tk => (H[tk] || {})[per] || null;
+  const token = ++_drillToken;
+  if (!PERF_HOLD) el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12px">Loading position history for ' + name + '&hellip;</div>';
+  let H;
+  try { H = await loadPerfHoldings(); }
+  catch (err) {
+    if (token === _drillToken) el.innerHTML = '<div style="padding:14px;color:var(--red);font-size:12px">Could not load position history: ' + err.message + '</div>';
+    return;
+  }
+  if (token !== _drillToken || spDrillSector !== name) return;   // closed, or another sector opened meanwhile
+  renderDrill(name, H);
+}
 
-  const e = perfEndIdx(), s = perfStartIdx(per);
-  // Headline figures come from the same calculation as the table above, so the
-  // two can never disagree.
-  const w = mdWindow(f.sectors[name] || [], (f.sectorFlows || {})[name], s, e);
+function renderDrill(name, H) {
+  const el = document.getElementById('spDrill');
+  const fk = perfFundKey(), f = PERF.funds[fk], dates = PERF.dates, n = dates.length;
+  const s = perfStartIdx(spPeriod), e = perfEndIdx();
+  const custom = !!(customFrom || customTo);
+  const fmtLong = i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // "bought Mar 31" is ambiguous in a window that spans years, so add the year there.
+  const multiYear = dates[s].slice(0, 4) !== dates[e].slice(0, 4);
+  const fmtShort = i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
+    multiYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  const range = fmtLong(s) + ' to ' + fmtLong(e);
   const bm = SECTOR_BENCHMARKS[name];
-  const bmRet = bm && PERF.bench && PERF.bench[bm] ? idxRet(PERF.bench[bm], s, e) : null;
-
-  const sorted = [...holds].sort((a, b) => ((rec(b.ticker) || {}).r ?? -9999) - ((rec(a.ticker) || {}).r ?? -9999));
-  const eq = sorted.filter(h => h.type === 'equity'), etf = sorted.filter(h => h.type === 'etf');
-  // Equity and ETF figures are built from each position's own held-period
-  // return, so a holding bought partway in (NVDA in March) lifts the sleeve by
-  // what it actually earned us rather than by its full-period price move.
-  const grp = list => {
-    let cap = 0, gain = 0;
-    list.forEach(h => { const r = rec(h.ticker); if (!r) return; gain += r.g; cap += (h.marketValue || 0) - r.g; });
-    return cap > 0 ? { ret: gain / cap * 100, gain } : { ret: null, gain };
+  const bmPx = bm && PERF.bench ? PERF.bench[bm] : null;
+  const bmRet = bmPx ? idxRet(bmPx, s, e) : null;
+  // Sector headline uses the same calculation as the table row above.
+  const w = mdWindow(f.sectors[name] || [], (f.sectorFlows || {})[name], s, e);
+  const nameOf = tk => {
+    const h = S.holdings.find(x => x.ticker === tk); if (h) return h.company;
+    try { return COMPANY_NAMES[tk] || tk; } catch (_) { return tk; }
   };
-  const eqG = grp(eq), etfG = grp(etf);
-  const eqR = eqG.ret, etfR = etfG.ret, allR = w.ourRet;
-  const totalGain = w.gain;
+
+  const series = H.funds[fk] || {};
+  const rows = [];
+  let boughtAfter = 0, unmatched = 0;
+  const unmatchedTk = [];
+  for (const [tk, ser] of Object.entries(series)) {
+    if ((PERF.sectorOf[tk] || 'Other') !== name) continue;
+    const r = positionWindow(ser, s, e);
+    if (!r.held) { if (ser.v[n - 1] > 0.005 && e < n - 1) boughtAfter++; continue; }
+    // Never positive in the window: a sale the transaction history cannot match to a
+    // purchase, which leaves a negative position. It is in the sector total, so it
+    // is reported on its own line rather than hidden or passed off as a holding.
+    if (r.from === null) { unmatched += r.gain; unmatchedTk.push(tk); continue; }
+    const px = H.px[tk];
+    const stock = px && px[s] > 0 && px[e] > 0 ? (px[e] / px[s] - 1) * 100 : null;
+    // Compare against the sector ETF over exactly the days we held the position,
+    // so a stock bought in the last week is not measured against the whole quarter.
+    const bmSame = bmPx && r.to !== null && r.to > r.from ? idxRet(bmPx, r.from, r.to) : null;
+    const cur = S.holdings.find(x => x.ticker === tk);
+    rows.push({ tk, ser, ...r, stock, bmSame,
+      vsBm: r.ret != null && bmSame != null ? r.ret - bmSame : null,
+      type: PERF.typeOf[tk] || (cur && cur.type) || 'equity', company: nameOf(tk), cur });
+  }
+  rows.sort((a, b) => (b.ret ?? -1e9) - (a.ret ?? -1e9));
+
+  // Equity and ETF sleeves: the same Modified Dietz calculation as the sector
+  // row, run on the summed position series.
+  const sleeve = list => {
+    if (!list.length) return null;
+    const V = new Float64Array(n), F = new Float64Array(n);
+    for (const x of list) for (let i = s; i <= e; i++) { V[i] += x.ser.v[i]; F[i] += x.ser.f[i]; }
+    return mdWindow(V, F, s, e);
+  };
+  const eq = rows.filter(r => r.type !== 'etf'), etf = rows.filter(r => r.type === 'etf');
+  const eqW = sleeve(eq), etfW = sleeve(etf);
   const vsEtf = v => (v != null && bmRet != null) ? v - bmRet : null;
+  const signed = g => (g >= 0 ? '+' : '-') + money0(g);
+  const endTotal = rows.reduce((a, r) => a + (r.v1 > 0.005 ? r.v1 : 0), 0);
+  const posGain = rows.reduce((a, r) => a + r.gain, 0) + unmatched;
+  const sleeveCard = (label, W, list) => kpiCard(label, pct(W && W.ourRet),
+    list.length + ' position' + (list.length === 1 ? '' : 's') +
+    (W ? ' &middot; ' + signed(W.gain) : '') +
+    (W && vsEtf(W.ourRet) != null ? ' &middot; ' + pct(vsEtf(W.ourRet)) + ' vs ' + bm : ''), cls(W && W.ourRet), false);
+  const net = w.netFlow || 0;
 
-  const row = h => {
-    const r = rec(h.ticker);
-    if (!r) return '<tr><td class="ticker-cell">' + h.ticker + '</td><td>' + h.company +
-      '</td><td><span class="badge type-' + h.type + '">' + h.type.toUpperCase() + '</span></td>' +
-      '<td>$' + fmt(h.marketValue || 0) + '</td><td colspan="4" style="color:var(--muted);font-size:11px">not held during this period</td></tr>';
-    const a = bmRet != null ? r.r - bmRet : null;
-    const partial = r.from && r.from > PERF.dates[s];
-    return '<tr><td class="ticker-cell">' + h.ticker + '</td><td>' + h.company + '</td>' +
-      '<td><span class="badge type-' + h.type + '">' + h.type.toUpperCase() + '</span></td>' +
-      '<td>$' + fmt(h.marketValue || 0) + '</td>' +
-      '<td class="' + cls(r.r) + '" style="font-weight:700">' + pct(r.r) +
-      (partial ? '<div style="font-size:9px;color:var(--muted);font-weight:600">held from ' + r.from + '</div>' : '') + '</td>' +
-      '<td class="' + (r.g >= 0 ? 'pos' : 'neg') + '">' + (r.g >= 0 ? '+' : '-') + money0(r.g) + '</td>' +
-      '<td style="color:var(--muted)">' + pct(r.s) + '</td>' +
-      '<td class="' + cls(a) + '">' + pct(a) + '</td></tr>';
+  const row = r => {
+    const notes = [];
+    if (r.from > s) notes.push('bought ' + fmtShort(r.from));
+    if (r.sold !== null) notes.push('sold ' + fmtShort(r.sold));
+    const valTxt = (r.v0 > 0.005 ? money0(r.v0) : '<span style="color:var(--muted)">new</span>') + ' &rarr; ' +
+                   (r.v1 > 0.005 ? money0(r.v1) : '<span style="color:var(--muted)">sold</span>');
+    const netTxt = r.net > 0.5 ? '+' + money0(r.net) + ' bought' : r.net < -0.5 ? money0(r.net) + ' sold' : '&mdash;';
+    const overall = r.cur && r.cur.glPct != null
+      ? '<span class="' + cls(r.cur.glPct) + '">' + pct(r.cur.glPct * 100) + '</span>' +
+        (r.cur.glDollar != null ? '<div style="font-size:9px;color:var(--muted)">' + signed(r.cur.glDollar) + ' on cost</div>' : '')
+      : '<span style="color:var(--muted);font-size:11px">' + (r.cur ? '&mdash;' : 'no longer held') + '</span>';
+    return '<tr>' +
+      '<td class="ticker-cell"' + (r.cur ? ' style="cursor:pointer" title="Open ' + r.tk + '" onclick="openTicker(\'' + r.tk + '\')"' : '') + '>' + r.tk + '</td>' +
+      '<td>' + r.company + '</td>' +
+      '<td><span class="badge type-' + r.type + '">' + r.type.toUpperCase() + '</span></td>' +
+      '<td style="white-space:nowrap">' + valTxt + '</td>' +
+      '<td style="white-space:nowrap;color:var(--muted)">' + netTxt + '</td>' +
+      '<td class="' + (r.gain >= 0 ? 'pos' : 'neg') + '" style="white-space:nowrap">' + signed(r.gain) + '</td>' +
+      '<td class="' + cls(r.ret) + '" style="font-weight:700;white-space:nowrap">' + pct(r.ret) +
+        (notes.length ? '<div style="font-size:9px;color:var(--muted);font-weight:600">' + notes.join(' &middot; ') + '</div>' : '') + '</td>' +
+      '<td style="color:var(--muted)">' + pct(r.stock) + '</td>' +
+      '<td class="' + cls(r.vsBm) + '">' + pct(r.vsBm) + '</td>' +
+      '<td>' + (r.v1 > 0.005 && endTotal > 0 ? (r.v1 / endTotal * 100).toFixed(1) + '%' : '&mdash;') + '</td>' +
+      '<td style="white-space:nowrap">' + overall + '</td></tr>';
   };
+  const unmatchedRow = Math.abs(unmatched) > 0.5
+    ? '<tr><td colspan="5" style="color:var(--muted);font-size:11px">Unmatched sales in our records (' + unmatchedTk.join(', ') + ')</td>' +
+      '<td class="' + (unmatched >= 0 ? 'pos' : 'neg') + '">' + signed(unmatched) + '</td>' +
+      '<td colspan="5" style="color:var(--muted);font-size:11px">sales the transaction history cannot tie to a purchase &mdash; included in the sector total</td></tr>'
+    : '';
 
+  const reconciled = Math.abs(posGain - w.gain) <= Math.max(5, Math.abs(w.gain) * 0.002);
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-    '<span style="font-size:12px;font-weight:700;color:var(--navy)">' + name + ' &mdash; our positions (' + per + ')</span>' +
+    '<span style="font-size:12px;font-weight:700;color:var(--navy)">' + name + ' &mdash; our positions, ' + range +
+      ' <span style="font-weight:600;color:var(--gold)">(' + (custom ? 'custom range' : spPeriod) + ')</span></span>' +
     '<button class="filter-btn" onclick="spDrillSector=null;document.getElementById(\'spDrill\').innerHTML=\'\'">&times; Close</button></div>' +
     '<div class="kpi-grid" style="margin-bottom:10px">' +
-      kpiCard('Equities in sector', pct(eqR), eq.length + ' position' + (eq.length === 1 ? '' : 's') +
-        (vsEtf(eqR) != null ? ' &middot; ' + pct(vsEtf(eqR)) + ' vs ' + bm : ''), cls(eqR), false) +
-      kpiCard('ETFs in sector', pct(etfR), etf.length + ' position' + (etf.length === 1 ? '' : 's') +
-        (vsEtf(etfR) != null ? ' &middot; ' + pct(vsEtf(etfR)) + ' vs ' + bm : ''), cls(etfR), false) +
-      kpiCard('Sector combined', pct(allR), 'what our dollars earned here', cls(allR), true) +
+      sleeveCard('Equities in sector', eqW, eq) +
+      sleeveCard('ETFs in sector', etfW, etf) +
+      kpiCard('Sector combined', pct(w.ourRet), 'what our dollars earned here', cls(w.ourRet), true) +
       kpiCard((bm || 'ETF') + ' Return', pct(bmRet), 'what the sector ETF did', cls(bmRet), false) +
-      kpiCard('Alpha', pct(vsEtf(allR)), 'ours minus the sector ETF', cls(vsEtf(allR)), true) +
-      kpiCard('Dollar Gain', (totalGain >= 0 ? '+' : '-') + money0(totalGain), 'earned in this sector', totalGain >= 0 ? 'pos' : 'neg', false) +
+      kpiCard('Alpha', pct(vsEtf(w.ourRet)), 'ours minus the sector ETF', cls(vsEtf(w.ourRet)), true) +
+      kpiCard('Dollar Gain', signed(w.gain), money0(w.V0) + ' &rarr; ' + money0(w.V1) +
+        (Math.abs(net) > 0.5 ? ' &middot; ' + (net > 0 ? 'net bought ' : 'net sold ') + money0(net) : ''), w.gain >= 0 ? 'pos' : 'neg', false) +
     '</div>' +
-    '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th><th>Market Value</th>' +
-    '<th title="What this position earned us over the period, counting only the days we held it">Our Return</th>' +
-    '<th>Dollar Gain</th>' +
-    '<th title="What the security itself did over the full period, whether we owned it or not">Stock ' + per + '</th>' +
-    '<th>vs ' + (bm || 'ETF') + '</th></tr>' + sorted.map(row).join('') + '</table></div>' +
-    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">' +
-    '<strong>Our Return</strong> counts only the days we actually held the position, so a stock bought mid-period is judged from the day we bought it. ' +
-    '<strong>Stock ' + per + '</strong> is the security\'s own move over the whole period. Where the two differ sharply, our entry timing is the reason. ' +
-    'The Equities and ETFs figures above are built from these position returns, so a well-timed holding lifts the sleeve by what it actually earned us.</div>';
+    '<div class="tbl-wrap"><table><tr><th>Ticker</th><th>Company</th><th>Type</th>' +
+    '<th title="Value at the close on the first and last day of the period">Value (start &rarr; end)</th>' +
+    '<th title="Purchases minus sales during the period">Net Bought / Sold</th>' +
+    '<th title="Value change with purchases and sales taken out - what the position earned in dollars">Dollar Gain</th>' +
+    '<th title="What this position earned us, counting only the days we held it during the period">Our Return</th>' +
+    '<th title="What the security itself did over the whole period, whether we owned it or not">Stock&rsquo;s Move</th>' +
+    '<th title="Our return minus ' + (bm || 'the sector ETF') + ' over exactly the days we held the position">vs ' + (bm || 'ETF') + '</th>' +
+    '<th title="Share of the sector&rsquo;s value at the end of the period">Weight</th>' +
+    '<th title="Gain on cost since we first bought it, from Schwab. The one figure here that is NOT limited to the period.">Overall (since purchase)</th></tr>' +
+    (rows.length ? rows.map(row).join('') : '<tr><td colspan="11" style="color:var(--muted)">No positions in this sector during the period.</td></tr>') +
+    unmatchedRow +
+    '</table></div>' +
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.55">' +
+    'Every figure covers <strong>' + range + '</strong> (' + (e - s) + ' trading days) except <strong>Overall</strong>, which is gain on cost since purchase. ' +
+    '<strong>Our Return</strong> counts only the days we held a position: one bought partway through is measured from the price we paid, one sold partway through up to its sale. ' +
+    '<strong>Stock&rsquo;s Move</strong> is the security over the whole period, so the gap between the two is the effect of when we bought or sold. ' +
+    '<strong>vs ' + (bm || 'ETF') + '</strong> compares against the sector ETF over the same days we held the position. ' +
+    'Positions add up to <strong>' + signed(posGain) + '</strong>' + (reconciled ? ', matching the sector&rsquo;s ' + signed(w.gain) + ' above.' : '; the sector row shows ' + signed(w.gain) + '.') +
+    (boughtAfter ? ' ' + boughtAfter + ' current holding' + (boughtAfter === 1 ? ' was' : 's were') + ' bought after this period and ' + (boughtAfter === 1 ? 'is' : 'are') + ' not listed.' : '') +
+    '</div>';
 }
 function showTab(tab, btn) {
   currentTab = tab;
