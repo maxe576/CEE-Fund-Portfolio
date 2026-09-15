@@ -716,6 +716,12 @@ tr:hover td{background:rgba(212,167,44,.06)}
         <button class="period-btn" data-trkmode="bar" onclick="setTrkMode('bar',this)">Bar</button>
       </div>
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-right:2px">FUND</span>
+      <button class="period-btn" data-perffund="endowment" onclick="setPerfFund('endowment')">Endowment</button>
+      <button class="period-btn" data-perffund="cee" onclick="setPerfFund('cee')">CEE Fund</button>
+      <button class="period-btn" data-perffund="combined" onclick="setPerfFund('combined')" title="Both portfolios measured as one fund">Both funds</button>
+    </div>
     <div class="period-row" id="trkPeriodRow"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted)">CUSTOM RANGE</span>
@@ -736,7 +742,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <div id="trkNote" style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5"></div>
   </div>
   <div class="card" style="margin-bottom:14px">
-    <div class="card-title">Endowment vs CEE Fund <span style="font-weight:400;font-size:11px;color:var(--muted)">separate portfolios, separate transaction histories &mdash; same measurement basis</span></div>
+    <div class="card-title">Endowment, CEE Fund &amp; Both Combined <span style="font-weight:400;font-size:11px;color:var(--muted)">same measurement basis &mdash; the combined row treats the two portfolios as one fund</span></div>
     <div class="tbl-wrap"><table id="trkFundCompare"></table></div>
   </div>
   <div class="card" style="margin-bottom:14px">
@@ -775,6 +781,12 @@ tr:hover td{background:rgba(212,167,44,.06)}
         <button class="period-btn active" data-spmode="bar" onclick="setSpMode('bar',this)">Bar</button>
         <button class="period-btn" data-spmode="line" onclick="setSpMode('line',this)">Line</button>
       </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);margin-right:2px">FUND</span>
+      <button class="period-btn" data-perffund="endowment" onclick="setPerfFund('endowment')">Endowment</button>
+      <button class="period-btn" data-perffund="cee" onclick="setPerfFund('cee')">CEE Fund</button>
+      <button class="period-btn" data-perffund="combined" onclick="setPerfFund('combined')" title="Both portfolios measured as one fund">Both funds</button>
     </div>
     <div class="period-row" id="spPeriodRow"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
@@ -1613,7 +1625,84 @@ const TRK_BENCH = [
   { id:'VTI', color:'#3fc9b4', locked:false, on:false },
   { id:'AGG', color:'#9fb0c5', locked:false, on:false }
 ];
-const perfFundKey = () => (activeFund === 'endowment' ? 'endowment' : 'ceeFund');
+// The Performance tabs can also show both funds as one portfolio. That view is
+// local to these tabs: every other tab keeps following the fund switch.
+let perfCombined = false;
+const perfFundKey = () => perfCombined ? 'combined' : (activeFund === 'endowment' ? 'endowment' : 'ceeFund');
+function syncPerfFundButtons() {
+  const cur = perfCombined ? 'combined' : (activeFund === 'endowment' ? 'endowment' : 'cee');
+  document.querySelectorAll('[data-perffund]').forEach(b => b.classList.toggle('active', b.dataset.perffund === cur));
+}
+function rerenderPerf() {
+  if (!PERF) return;
+  if (document.getElementById('tab-track').classList.contains('active')) renderTrack();
+  if (document.getElementById('tab-sectorperf').classList.contains('active')) renderSectorPerf();
+}
+function setPerfFund(k) {
+  if (k === 'combined') { perfCombined = true; syncPerfFundButtons(); rerenderPerf(); return; }
+  switchFund(k, null);   // the normal switch: leaves the combined view and redraws the visible tab
+}
+
+/* Both funds as one portfolio. Values, deposits and withdrawals are added day by
+   day and every return is recomputed from those totals - never averaged from the
+   two funds' own returns, which would weight a $220k fund the same as a $550k one. */
+function buildCombinedFund(P) {
+  const a = P.funds.endowment, b = P.funds.ceeFund;
+  if (!a || !b) return;
+  const n = P.dates.length;
+  const add = (x, y) => { const o = new Array(n); for (let i = 0; i < n; i++) o[i] = ((x && x[i]) || 0) + ((y && y[i]) || 0); return o; };
+  // Same chain-linking as tools/build-performance.js: flows removed each day.
+  const chain = (series, fl, floor) => {
+    const idx = [100];
+    for (let i = 1; i < n; i++) {
+      const prev = series[i - 1];
+      const r = prev > floor ? ((series[i] - ((fl && fl[i]) || 0)) - prev) / prev : 0;
+      idx.push(idx[i - 1] * (1 + r));
+    }
+    return idx;
+  };
+  const nav = add(a.nav, b.nav), flows = add(a.flows, b.flows);
+  const eqNav = add(a.eqNav, b.eqNav), etfNav = add(a.etfNav, b.etfNav);
+  const eqFlow = add(a.eqFlow, b.eqFlow), etfFlow = add(a.etfFlow, b.etfFlow);
+  const sectors = {}, sectorFlows = {}, sectorTwr = {};
+  new Set([...Object.keys(a.sectors || {}), ...Object.keys(b.sectors || {})]).forEach(k => {
+    sectors[k] = add((a.sectors || {})[k], (b.sectors || {})[k]);
+    sectorFlows[k] = add((a.sectorFlows || {})[k], (b.sectorFlows || {})[k]);
+    sectorTwr[k] = chain(sectors[k], sectorFlows[k], 100);
+  });
+  // Money-weighted return over the whole history, built exactly as the builder does.
+  const xf = [{ d: P.dates[0], amt: -nav[0] }];
+  for (let i = 0; i < n; i++) if (flows[i]) xf.push({ d: P.dates[i], amt: -flows[i] });
+  xf.push({ d: P.dates[n - 1], amt: nav[n - 1] });
+  P.funds.combined = {
+    name: 'Both Funds', nav, flows, eqNav, etfNav, eqFlow, etfFlow,
+    twr: chain(nav, flows, 0), eqTwr: chain(eqNav, eqFlow, 100), etfTwr: chain(etfNav, etfFlow, 100),
+    sectors, sectorFlows, sectorTwr, holdings: {},
+    irr: xirrPct(xf), externalFlows: (a.externalFlows || 0) + (b.externalFlows || 0),
+    missingPrices: [...new Set([...(a.missingPrices || []), ...(b.missingPrices || [])])]
+  };
+}
+function xirrPct(flows) {
+  const t0 = new Date(flows[0].d), yrs = f => (new Date(f.d) - t0) / (365.25 * 864e5);
+  const npv = r => flows.reduce((acc, f) => acc + f.amt / Math.pow(1 + r, yrs(f)), 0);
+  let lo = -0.95, hi = 10;
+  if (npv(lo) * npv(hi) > 0) return null;
+  for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; (npv(lo) * npv(mid) <= 0 ? hi = mid : lo = mid); }
+  return +(((lo + hi) / 2) * 100).toFixed(2);
+}
+
+/* Holdings behind the performance view: the active fund's, or both funds' merged
+   by ticker with cost basis and gain added, so "since purchase" is the combined
+   position's rather than one fund's. */
+function perfHoldingsView() {
+  if (!perfCombined) return S.holdings;
+  const m = {};
+  for (const src of [RAW.endowment, RAW.ceeFund]) for (const h of [...(src.equities || []), ...(src.etfs || [])]) {
+    const c = m[h.ticker] || (m[h.ticker] = { ticker: h.ticker, company: h.company, type: h.type, sector: h.sector, marketValue: 0, costBasis: 0, glDollar: 0 });
+    c.marketValue += h.marketValue || 0; c.costBasis += h.costBasis || 0; c.glDollar += h.glDollar || 0;
+  }
+  return Object.values(m).map(c => ({ ...c, glPct: c.costBasis > 0 ? c.glDollar / c.costBasis : null }));
+}
 
 async function loadPerfData() {
   if (PERF) return PERF;
@@ -1631,6 +1720,7 @@ async function loadPerfData() {
         const m = {}; f.holdings.forEach(p => { m[p[0]] = p[1]; }); f.holdings = m;
       }
     });
+    buildCombinedFund(PERF);
     return PERF;
   })();
   return perfLoading;
@@ -1846,12 +1936,13 @@ async function renderTrkMovers(s, e) {
   if (token !== _trkMoversToken) return;   // the period changed while loading
 
   const fk = perfFundKey(), dates = PERF.dates;
+  const PH = perfHoldingsView();
   const multiYear = dates[s].slice(0, 4) !== dates[e].slice(0, 4);
   const fmtD = i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
     multiYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
   const signed = g => (g >= 0 ? '+' : '-') + money0(g);
   const nameOf = tk => {
-    const h = S.holdings.find(x => x.ticker === tk); if (h) return h.company;
+    const h = PH.find(x => x.ticker === tk); if (h) return h.company;
     try { return COMPANY_NAMES[tk] || tk; } catch (_) { return tk; }
   };
   // A position held for a day or two can post an eye-catching percentage that
@@ -1868,7 +1959,7 @@ async function renderTrkMovers(s, e) {
     if (r.from === null || r.ret == null) continue;
     if (((r.to ?? e) - r.from) < minDays) { tooShort++; continue; }
     const px = H.px[tk];
-    list.push({ tk, type, ...r, company: nameOf(tk), cur: S.holdings.some(x => x.ticker === tk),
+    list.push({ tk, type, ...r, company: nameOf(tk), cur: PH.some(x => x.ticker === tk),
       stock: px && px[s] > 0 && px[e] > 0 ? (px[e] / px[s] - 1) * 100 : null });
   }
   list.sort((a, b) => b.ret - a.ret);
@@ -1908,6 +1999,7 @@ async function renderTrkMovers(s, e) {
 
 function renderTrack() {
   if (!PERF) return;
+  syncPerfFundButtons();
   const f = PERF.funds[perfFundKey()];
   if (!f) return;
   const dates = PERF.dates, e = perfEndIdx(), s = perfStartIdx(trkPeriod);
@@ -1957,7 +2049,8 @@ function renderTrack() {
   const labels = idx.map(i => new Date(dates[i] + 'T00:00:00').toLocaleDateString('en-US',
     (e - s) > 400 ? { month: 'short', year: '2-digit' } : { month: 'short', day: 'numeric' }));
   const active = TRK_BENCH.filter(b => b.on && PERF.bench && PERF.bench[b.id]);
-  const otherFund = trkShowOtherFund
+  // "the other fund" has no meaning when both are already in the line
+  const otherFund = trkShowOtherFund && !perfCombined
     ? PERF.funds[perfFundKey() === 'endowment' ? 'ceeFund' : 'endowment'] : null;
   const P = chartPalette();
   const navyC = P.fund;
@@ -2095,11 +2188,12 @@ function renderTrack() {
   }
 
   const flowRows = [];
-  for (let i = s; i <= e; i++) if (f.flows[i]) flowRows.push([dates[i], f.flows[i]]);
+  const flowSrc = perfCombined ? [['Endowment', PERF.funds.endowment], ['CEE Fund', PERF.funds.ceeFund]] : [[null, f]];
+  for (let i = s; i <= e; i++) for (const [nm, g] of flowSrc) if (g && g.flows[i]) flowRows.push([dates[i], g.flows[i], nm]);
   document.getElementById('trkFlowTable').innerHTML =
     '<tr><th>Date</th><th>Type</th><th>Amount</th></tr>' +
-    (flowRows.length ? flowRows.map(([d, v]) =>
-      '<tr><td>' + d + '</td><td>' + (v > 0 ? 'Capital added' : 'Capital withdrawn') + '</td><td class="' +
+    (flowRows.length ? flowRows.map(([d, v, nm]) =>
+      '<tr><td>' + d + '</td><td>' + (v > 0 ? 'Capital added' : 'Capital withdrawn') + (nm ? ' &middot; ' + nm : '') + '</td><td class="' +
       (v > 0 ? 'pos' : 'neg') + '">' + (v > 0 ? '+' : '-') + '$' + fmt(Math.abs(v)) + '</td></tr>').join('')
       : '<tr><td colspan="3" style="color:var(--muted);text-align:center;padding:14px">No external capital moved in this period</td></tr>');
   renderTrkMovers(s, e);   // async: needs the per-position series
@@ -2107,7 +2201,7 @@ function renderTrack() {
   // Both funds side by side on the selected period. They run different books
   // and different mandates, so the comparison is informative rather than a
   // scoreboard — the Endowment carries bonds the CEE Fund does not.
-  const cmpRows = [['endowment', 'Endowment'], ['ceeFund', 'CEE Fund']].map(([k, nm]) => {
+  const cmpRows = [['endowment', 'Endowment'], ['ceeFund', 'CEE Fund'], ['combined', 'Both funds (total)']].map(([k, nm]) => {
     const g = PERF.funds[k]; if (!g) return '';
     const w = mdWindow(g.nav, g.flows, s, e);
     const gVs = (w && w.ourRet != null && spy != null) ? w.ourRet - spy : null;
@@ -2118,7 +2212,8 @@ function renderTrack() {
     const wired = g.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
     const isActive = k === perfFundKey();
     return '<tr style="cursor:pointer' + (isActive ? ';background:rgba(201,168,76,.08)' : '') +
-      '" onclick="switchFund(\'' + (k === 'endowment' ? 'endowment' : 'cee') + '\',null)" title="Click to switch to this fund">' +
+      (k === 'combined' ? ';border-top:2px solid var(--border)' : '') +
+      '" onclick="setPerfFund(\'' + (k === 'endowment' ? 'endowment' : k === 'ceeFund' ? 'cee' : 'combined') + '\')" title="Click to view this ' + (k === 'combined' ? 'combined fund' : 'fund') + '">' +
       '<td style="font-weight:700;color:var(--navy)">' + nm + (isActive ? ' <span style="font-size:9px;color:var(--gold)">&#9679; viewing</span>' : '') + '</td>' +
       '<td>$' + fmt(g.nav[e]) + '</td>' +
       '<td class="' + cls(w && w.ourRet) + '" style="font-weight:700">' + pct(w && w.ourRet) + '</td>' +
@@ -2548,6 +2643,7 @@ function sectorPerfRows() {
 
 function renderSectorPerf() {
   if (!PERF) return;
+  syncPerfFundButtons();
   const f = PERF.funds[perfFundKey()];
   const dates = PERF.dates, e = perfEndIdx(), s = perfStartIdx(spPeriod);
   document.getElementById('spFundLabel').textContent = '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
@@ -2657,6 +2753,16 @@ function loadPerfHoldings() {
       });
       out.funds[fk] = m;
     }
+    // Both funds as one book: a ticker held in each becomes one combined position.
+    const comb = {};
+    for (const m of [out.funds.endowment, out.funds.ceeFund]) {
+      if (!m) continue;
+      for (const [tk, ser] of Object.entries(m)) {
+        const c = comb[tk] || (comb[tk] = { v: new Float64Array(n), f: new Float64Array(n) });
+        for (let i = 0; i < n; i++) { c.v[i] += ser.v[i]; c.f[i] += ser.f[i]; }
+      }
+    }
+    out.funds.combined = comb;
     list(d.px).forEach(row => {
       if (!row) return;
       const a = new Array(n).fill(null);
@@ -2718,6 +2824,7 @@ async function drillSector(name) {
 
 function renderDrill(name, H) {
   const el = document.getElementById('spDrill');
+  const PH = perfHoldingsView();
   const fk = perfFundKey(), f = PERF.funds[fk], dates = PERF.dates, n = dates.length;
   const s = perfStartIdx(spPeriod), e = perfEndIdx();
   const custom = !!(customFrom || customTo);
@@ -2733,7 +2840,7 @@ function renderDrill(name, H) {
   // Sector headline uses the same calculation as the table row above.
   const w = mdWindow(f.sectors[name] || [], (f.sectorFlows || {})[name], s, e);
   const nameOf = tk => {
-    const h = S.holdings.find(x => x.ticker === tk); if (h) return h.company;
+    const h = PH.find(x => x.ticker === tk); if (h) return h.company;
     try { return COMPANY_NAMES[tk] || tk; } catch (_) { return tk; }
   };
 
@@ -2754,7 +2861,7 @@ function renderDrill(name, H) {
     // Compare against the sector ETF over exactly the days we held the position,
     // so a stock bought in the last week is not measured against the whole quarter.
     const bmSame = bmPx && r.to !== null && r.to > r.from ? idxRet(bmPx, r.from, r.to) : null;
-    const cur = S.holdings.find(x => x.ticker === tk);
+    const cur = PH.find(x => x.ticker === tk);
     rows.push({ tk, ser, ...r, stock, bmSame,
       vsBm: r.ret != null && bmSame != null ? r.ret - bmSame : null,
       type: PERF.typeOf[tk] || (cur && cur.type) || 'equity', company: nameOf(tk), cur });
@@ -2875,6 +2982,8 @@ function switchFund(fund, btn) {
   if (!['endowment', 'cee'].includes(fund)) return;
   activeFund = fund;
   activePerfFund = fund;
+  perfCombined = false;   // a single fund was picked, so leave the combined performance view
+  syncPerfFundButtons();
   try { localStorage.setItem('ceeActiveFund', fund); } catch (e) { console.warn('Could not persist active fund', e); }
   updateFundSelector(btn);
   buildState();
