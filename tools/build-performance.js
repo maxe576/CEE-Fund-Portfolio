@@ -80,9 +80,9 @@ function fetchJSON(url){return new Promise((res,rej)=>{
   r.on('end',()=>{try{res(JSON.parse(d))}catch(e){rej(e)}})});
  req.on('error',rej); req.setTimeout(25000,()=>{req.destroy();rej(new Error('timeout'))});});}
 
-async function getSeries(tk){
+async function getSeriesOnce(tk){
  const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
- if(fs.existsSync(f) && cacheFresh(f)) return JSON.parse(fs.readFileSync(f,'utf8'));
+ if(fs.existsSync(f) && cacheFresh(f)){ const c=JSON.parse(fs.readFileSync(f,'utf8')); if(c&&c.ok) return c; }
  const y=YF[tk]||tk.replace('.','-');
  let out={px:{},splits:[],ok:false};
  try{
@@ -99,9 +99,31 @@ async function getSeries(tk){
    out.ok=Object.keys(out.px).length>0;
   }
  }catch(e){ out.err=e.message; }
- fs.writeFileSync(f,JSON.stringify(out));
+ if(out.ok) fs.writeFileSync(f,JSON.stringify(out));   // a refusal is never cached
  return out;
 }
+/* Yahoo refuses a burst of requests, and a refused request used to be written to the
+   cache as if it were the answer - so every rebuild for the next 18 hours reused the
+   failure and left that holding out of NAV (2026-09-22: AAPL, AMZN, BRK.B and 14
+   others, the CEE Fund reading $194k instead of $220k). Now each ticker is retried
+   with backoff, a failure is never cached, and if every attempt fails the last good
+   saved prices are used instead. Holdings valued by hand (PX_PROXY) are not fetched. */
+async function getSeries(tk){
+ if(PX_PROXY[tk]!=null) return {px:{},splits:[],ok:false};
+ const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
+ let prev=null; try{ if(fs.existsSync(f)) prev=JSON.parse(fs.readFileSync(f,'utf8')); }catch(e){}
+ for(let attempt=0;attempt<4;attempt++){
+  const out=await getSeriesOnce(tk);
+  if(out&&out.ok) return out;
+  await new Promise(r=>setTimeout(r,1500*(attempt+1)*(attempt+1)));
+ }
+ if(prev&&prev.ok){
+  console.warn(`  ${tk}: every download refused - using prices saved ${new Date(fs.statSync(f).mtimeMs).toISOString().slice(0,10)}`);
+  return prev;
+ }
+ return {px:{},splits:[],ok:false};
+}
+
 async function pool(items,n,fn){const res=[];let i=0;
  await Promise.all(Array.from({length:n},async()=>{while(i<items.length){const k=i++;res[k]=await fn(items[k],k)}}));
  return res}
@@ -190,7 +212,7 @@ function loadPositions(p){
  const tickers=[...universe].sort();
  console.log(`fetching daily history for ${tickers.length} tickers...`);
 
- const seriesArr=await pool(tickers,8,getSeries);
+ const seriesArr=await pool(tickers,4,getSeries);   // 8 at once is what Yahoo throttled
  const S={}; tickers.forEach((t,i)=>S[t]=seriesArr[i]);
  const failed=tickers.filter(t=>!S[t].ok);
  console.log(`  ok=${tickers.length-failed.length}  failed=${failed.length}${failed.length?' -> '+failed.join(', '):''}`);
@@ -438,7 +460,15 @@ function loadPositions(p){
  }
  OUT.meta.sectorOf=sectorOf; OUT.meta.typeOf=typeOf;
 
- // ── TRANSACTION LEDGER ──────────────────────────────────────────────────────
+ {
+  const unpriced=Object.values(OUT.funds).flatMap(f=>(f.missingPrices||[]).map(t=>f.name+': '+t));
+  if(unpriced.length){
+   console.error('\nNOT WRITTEN - these holdings have no price history, so the fund values would be wrong:\n  '+unpriced.join('\n  '));
+   console.error('Re-run in a few minutes, or add the symbol to ALIAS / PX_PROXY if it will never price.');
+   process.exit(1);
+  }
+ }
+ // \u2500\u2500 TRANSACTION LEDGER ──────────────────────────────────────────────────────
  // Published separately so the Performance tab does not pay to download it.
  // Compact keys: d date, f fund, a action, t ticker, q shares, p price, m amount.
  const DIV_ACTIONS=new Set([...INCOME].filter(a=>a!=='Cash Merger'));

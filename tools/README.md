@@ -99,6 +99,14 @@ Actions in `POS_FLOW` (Buy, Sell, Cash Merger) are what move money into or out
 of a position; anything else that changes shares - dividend reinvestment, a
 spin-off - counts as return.
 
+**If the build prints `NOT WRITTEN`, nothing was changed.** The builder refuses to
+write its output when any holding came back with no price history, because a
+series with a missing holding looks plausible and is wrong (on 2026-09-22 Yahoo
+throttled 17 downloads and the CEE Fund would have read $194k instead of $220k).
+Each download is retried with backoff, a refused download is never cached, and if
+every attempt fails the last good saved prices are used - so re-running a few
+minutes later normally clears it.
+
 Update the four file paths and `ANCHOR` at the top of `build-performance.js`
 when new exports arrive. `ANCHOR` is the as-of date printed in the positions
 filename. Prices are cached in `tools/pxcache/`; delete it to force a refresh.
