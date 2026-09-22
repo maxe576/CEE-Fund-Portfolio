@@ -339,7 +339,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
   </div>
 </div>
 <div id="tab-sectorcompare" class="tab-panel">
-  <div class="card" style="margin-bottom:16px"><div class="card-title">Sector Performance — Click a Sector to Analyze <span style="font-size:10px;font-weight:400;color:var(--muted)">your holdings vs the sector benchmark ETF, by period</span></div><div id="sectorCards"></div></div>
+  <div class="card" style="margin-bottom:16px"><div class="card-title">Sector Performance — Click a Sector to Analyze <span style="font-size:10px;font-weight:400;color:var(--muted)">what our dollars earned &mdash; counting only the days we held each position &mdash; vs the sector ETF</span></div><div id="sectorCards"></div></div>
   <div id="sectorCompareDetail" style="display:none">
     <div class="perf-grid" id="scKpis"></div>
     <div class="card" style="margin-bottom:16px">
@@ -363,6 +363,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <div class="card"><div class="card-title">Equities in Sector</div><div class="tbl-wrap"><table id="scEqTable"></table></div></div>
       <div class="card"><div class="card-title">ETFs in Sector</div><div class="tbl-wrap"><table id="scEtfTable"></table></div></div>
     </div>
+    <div id="scNote" style="font-size:11px;color:var(--muted);line-height:1.55;margin:-6px 0 12px"></div>
   </div>
 </div>
 <!-- BENCHMARK -->
@@ -3669,6 +3670,156 @@ function renderNews(articles){
 }
 
 // ── CALENDAR ──────────────────────────────────────────────────────────────────
+/* ── EARNINGS DATES ──────────────────────────────────────────────────────────
+   "My Portfolio" asks the provider for each holding separately, a full year ahead:
+   that returns every company's next several reports. The market-wide request it
+   used to lean on is capped at 1,500 rows, which in earnings season runs out weeks
+   before the window ends - it was cutting off late October, when most of the
+   portfolio reports. Per-holding answers are cached for a day, so a revisit is
+   instant and the provider's 60-calls-a-minute limit is spared. */
+const EARN_CACHE_KEY = 'cee_earnings_v2';
+let earnShowAll = false, _earnToken = 0, _allEarnCache = null;
+function _earnCacheRead() { try { const c = JSON.parse(localStorage.getItem(EARN_CACHE_KEY) || 'null'); return c && c.data ? c : { data: {} }; } catch (e) { return { data: {} }; } }
+function _earnCacheWrite(c) { try { localStorage.setItem(EARN_CACHE_KEY, JSON.stringify(c)); } catch (e) {} }
+function setEarnShowAll(v) { earnShowAll = v; loadCalendar('portfolio'); }
+function refreshEarnings() { try { localStorage.removeItem(EARN_CACHE_KEY); } catch (e) {} _allEarnCache = null; loadCalendar('portfolio'); }
+const _EARN_BMO = '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(101,163,255,.18);color:#9fc4ff">Before Open</span>';
+const _EARN_AMC = '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(247,185,40,.14);color:#f0b429">After Close</span>';
+const _earnWhen = h => h === 'bmo' ? _EARN_BMO : h === 'amc' ? _EARN_AMC : '<span style="color:var(--muted)">&mdash;</span>';
+function _earnIn(d) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const k = Math.round((new Date(d + 'T00:00:00') - t) / 864e5);
+  return k <= 0 ? 'today' : k === 1 ? 'tomorrow' : 'in ' + k + ' days';
+}
+const _earnMonth = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase();
+const _earnMonthRow = (label, cols) => '<tr><td colspan="' + cols + '" style="padding:12px 0 4px;border:none;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--gold)">' + label + '</td></tr>';
+
+// Market-wide earnings between two dates. A request returns at most 1,500 rows - a
+// few days' worth in season - so a full answer is split in half and each half asked
+// for again until nothing is being cut off.
+async function fetchEarningsRange(from, to, depth = 0) {
+  let rows = [];
+  try {
+    const r = await fetchYF('https://finnhub.io/api/v1/calendar/earnings?from=' + from + '&to=' + to + '&token=' + FINNHUB, 12000);
+    rows = (r && r.earningsCalendar) || [];
+  } catch (e) { return []; }
+  if (rows.length < 1500 || from >= to || depth > 7) return rows;
+  const a = new Date(from + 'T00:00:00Z'), b = new Date(to + 'T00:00:00Z');
+  const mid = new Date((a.getTime() + b.getTime()) / 2), nxt = new Date(mid);
+  nxt.setUTCDate(nxt.getUTCDate() + 1);
+  const midS = mid.toISOString().slice(0, 10), nxtS = nxt.toISOString().slice(0, 10);
+  const left = await fetchEarningsRange(from, midS, depth + 1);
+  const right = nxtS <= to ? await fetchEarningsRange(nxtS, to, depth + 1) : [];
+  return left.concat(right);
+}
+
+async function renderPortfolioEarnings(tableEl, loadEl, allHoldings, portTickers, from) {
+  const token = ++_earnToken;
+  const end = new Date(); end.setDate(end.getDate() + 365);
+  const to = end.toISOString().slice(0, 10);
+  const tickers = [...new Set([...RAW.endowment.equities, ...RAW.ceeFund.equities].map(h => h.ticker))];   // each company once
+  const heldIn = tk => [['Endowment', RAW.endowment], ['CEE', RAW.ceeFund]].filter(([, f]) => (f.equities || []).some(h => h.ticker === tk)).map(([n]) => n).join(' + ');
+  const nameOf = tk => (allHoldings.find(h => h.ticker === tk) || {}).company || tk;
+  const cache = _earnCacheRead();
+  const fresh = tk => cache.data[tk] && Date.now() - cache.data[tk].ts < 86400000;
+  const failed = new Set();
+
+  const draw = (loading) => {
+    if (token !== _earnToken) return;
+    const rows = [], noDate = [];
+    for (const tk of tickers) {
+      const c = cache.data[tk]; if (!c) continue;
+      const up = (c.rows || []).filter(e => e.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+      if (!up.length) { noDate.push(tk); continue; }
+      (earnShowAll ? up : up.slice(0, 1)).forEach((e, k) => rows.push({ tk, ...e, later: k > 0 }));
+    }
+    rows.sort((a, b) => a.date.localeCompare(b.date) || a.tk.localeCompare(b.tk));
+    const pending = tickers.filter(tk => !cache.data[tk] && !failed.has(tk)).length;
+    const btn = (on, label, v) => '<button class="filter-btn' + (on ? ' active' : '') + '" onclick="setEarnShowAll(' + v + ')">' + label + '</button>';
+    let html = '<tr><td colspan="8" style="border:none;padding:4px 0 8px">' +
+      btn(!earnShowAll, 'Next report per holding', false) + ' ' + btn(earnShowAll, 'All reports &middot; next 12 months', true) +
+      ' <button class="filter-btn" onclick="refreshEarnings()" title="Ask the data source again for every holding">&#8635; Refresh</button>' +
+      '<span style="font-size:11px;color:var(--muted);margin-left:10px">' +
+      (loading ? '&#9203; loading ' + (tickers.length - pending) + '/' + tickers.length + ' holdings&hellip;' : tickers.length + ' holdings checked') +
+      (failed.size ? ' &middot; <span style="color:var(--gold)">' + failed.size + ' not reached (rate limit) &mdash; Refresh to retry</span>' : '') +
+      '</span></td></tr>';
+    if (rows.length) {
+      html += '<tr><th>Date</th><th>When</th><th>Ticker</th><th>Company</th><th>Time</th><th>EPS Est.</th><th>Held In</th><th>IR Page</th></tr>';
+      let month = '';
+      for (const r of rows) {
+        const m = _earnMonth(r.date);
+        if (m !== month) { html += _earnMonthRow(m, 8); month = m; }
+        const muted = r.later ? ';color:var(--muted)' : '';
+        html += '<tr style="' + (r.later ? '' : 'background:rgba(74,222,128,.07)') + '">' +
+          '<td style="font-size:12px;font-weight:' + (r.later ? 400 : 700) + muted + '">' + r.date + (r.later ? ' <span style="font-size:9px">(est.)</span>' : '') + '</td>' +
+          '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + _earnIn(r.date) + '</td>' +
+          '<td class="ticker-cell">' + r.tk + '</td><td style="font-size:12px' + muted + '">' + nameOf(r.tk) + '</td>' +
+          '<td>' + _earnWhen(r.hour) + '</td>' +
+          '<td style="font-size:12px">' + (r.eps != null ? '$' + Number(r.eps).toFixed(2) : '&mdash;') + '</td>' +
+          '<td style="font-size:11px;color:var(--gray)">' + heldIn(r.tk) + '</td>' +
+          '<td><a href="' + irLink(r.tk, nameOf(r.tk)) + '" target="_blank" rel="noopener" style="font-size:11px;color:var(--blue);text-decoration:none">&#127970; IR Page</a></td></tr>';
+      }
+    } else if (!loading) {
+      html += '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">No upcoming earnings dates were returned for your holdings.</td></tr>';
+    }
+    html += '<tr><td colspan="8" style="border:none;padding:10px 0 0;font-size:10px;color:var(--muted);line-height:1.5">' +
+      'Dates after each company&rsquo;s next report are the data provider&rsquo;s estimates, marked <em>(est.)</em>, and usually move once the company confirms.' +
+      (noDate.length ? ' No upcoming date on file for: ' + noDate.join(', ') + '.' : '') + '</td></tr>';
+    tableEl.innerHTML = html;
+  };
+
+  draw(true);
+  const todo = tickers.filter(tk => !fresh(tk));
+  for (let i = 0; i < todo.length; i += 3) {
+    if (token !== _earnToken) return false;             // another calendar view was opened
+    await Promise.all(todo.slice(i, i + 3).map(async tk => {
+      try {
+        const r = await fetchYF('https://finnhub.io/api/v1/calendar/earnings?symbol=' + encodeURIComponent(tk) + '&from=' + from + '&to=' + to + '&token=' + FINNHUB, 8000);
+        if (r && Array.isArray(r.earningsCalendar))
+          cache.data[tk] = { ts: Date.now(), rows: r.earningsCalendar.map(e => ({ date: e.date, hour: e.hour || '', eps: e.epsEstimate ?? null })) };
+        else failed.add(tk);
+      } catch (e) { failed.add(tk); }
+    }));
+    _earnCacheWrite(cache);
+    draw(i + 3 < todo.length);
+    if (i + 3 < todo.length) await new Promise(r => setTimeout(r, 3200));   // stay under 60 calls a minute
+  }
+  draw(false);
+  return token === _earnToken;
+}
+
+async function renderAllEarnings(tableEl, loadEl, allHoldings, portTickers, from) {
+  const token = ++_earnToken;
+  if (!_allEarnCache || Date.now() - _allEarnCache.ts > 6 * 3600e3) {
+    if (loadEl) loadEl.textContent = '\u23f3 Fetching the market earnings calendar...';
+    const end = new Date(); end.setDate(end.getDate() + 60);
+    const rows = await fetchEarningsRange(from, end.toISOString().slice(0, 10));
+    if (token !== _earnToken) return false;
+    _allEarnCache = { ts: Date.now(), rows: [...new Map(rows.map(e => [e.symbol + e.date, e])).values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  }
+  const list = _allEarnCache.rows, shown = list.slice(0, 400);
+  let html = shown.length ? '<tr><th>Date</th><th>When</th><th>Ticker</th><th>Company</th><th>Time</th><th>EPS Est.</th><th>In Portfolio</th><th>IR Page</th></tr>' : '';
+  let month = '';
+  for (const e of shown) {
+    const inP = portTickers.has(e.symbol), h = allHoldings.find(x => x.ticker === e.symbol);
+    const m = _earnMonth(e.date);
+    if (m !== month) { html += _earnMonthRow(m, 8); month = m; }
+    html += '<tr style="' + (inP ? 'background:rgba(74,222,128,.10)' : '') + '">' +
+      '<td style="font-size:12px;font-weight:' + (inP ? 700 : 400) + '">' + e.date + '</td>' +
+      '<td style="font-size:11px;color:var(--muted);white-space:nowrap">' + _earnIn(e.date) + '</td>' +
+      '<td class="ticker-cell">' + e.symbol + '</td><td style="font-size:12px">' + ((h && h.company) || e.symbol) + '</td>' +
+      '<td>' + _earnWhen(e.hour) + '</td>' +
+      '<td style="font-size:12px">' + (e.epsEstimate != null ? '$' + Number(e.epsEstimate).toFixed(2) : '&mdash;') + '</td>' +
+      '<td>' + (inP ? '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(74,222,128,.16);color:#4ade80">&#10003; Owned</span>' : '&mdash;') + '</td>' +
+      '<td><a href="' + irLink(e.symbol, h && h.company) + '" target="_blank" rel="noopener" style="font-size:11px;color:var(--blue);text-decoration:none">&#127970; IR Page</a></td></tr>';
+  }
+  html += '<tr><td colspan="8" style="border:none;padding:10px 0 0;font-size:10px;color:var(--muted)">' +
+    (list.length ? list.length.toLocaleString() + ' companies report in the next 60 days; showing the first ' + shown.length + '. ' : 'No market earnings were returned. ') +
+    'Your holdings are highlighted &mdash; <strong>My Portfolio</strong> lists every one of them a full year ahead.</td></tr>';
+  if (token === _earnToken) tableEl.innerHTML = html;
+  return token === _earnToken;
+}
+
 function filterCalendar(type,btn){document.querySelectorAll('#tab-calendar .filter-btn').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');loadCalendar(type);}
 async function loadCalendar(type){
   const loadEl=document.getElementById('calLoading'),tableEl=document.getElementById('calTable');
@@ -3739,8 +3890,9 @@ async function loadCalendar(type){
   if(type==='recent'){
     const pastDate=new Date(nowDate);pastDate.setDate(pastDate.getDate()-30);
     const pastFrom=pastDate.toISOString().split('T')[0];
-    const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${pastFrom}&to=${from}&token=${FINNHUB}`,10000);
-    const recentData=(r?.earningsCalendar||[]).filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
+    // Chunked, so the provider's 1,500-row cap cannot cut off part of the month.
+    const recentAll=await fetchEarningsRange(pastFrom,from);
+    const recentData=recentAll.filter(e=>portTickers.has(e.symbol)).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,30);
     const bmoSpan='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(101,163,255,.18);color:#9fc4ff">Before Open</span>';
     const amcSpan='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(247,185,40,.14);color:#854d0e">After Close</span>';
     tableEl.innerHTML=recentData.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>EPS Actual</th><th>Surprise</th><th>IR Page</th></tr>
@@ -3893,60 +4045,9 @@ async function loadCalendar(type){
     if(loadEl)loadEl.style.display='none'; return;
   }
 
-  // ── UPCOMING EARNINGS (Portfolio + All) — Finnhub primary, Yahoo supplement ──
-  if(!calCache){
-    try{
-      const _ec=JSON.parse(localStorage.getItem('cee_earnings_cache')||'null');
-      if(_ec&&Date.now()-_ec.ts<43200000&&Array.isArray(_ec.data)&&_ec.data.length)calCache=_ec.data;
-    }catch(e){}
-  }
-  if(!calCache){
-    if(loadEl)loadEl.textContent='⏳ Fetching earnings calendar...';
-    let fhList=[];
-    // 1) Per-symbol queries for every portfolio equity — reliable on free tier
-    for(let _i=0;_i<allEquities.length;_i+=4){
-      await Promise.all(allEquities.slice(_i,_i+4).map(async h=>{
-        try{
-          const r=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?symbol=${h.ticker}&from=${from}&to=${to}&token=${FINNHUB}`,7000);
-          (r?.earningsCalendar||[]).forEach(e=>fhList.push(e));
-        }catch(e){}
-      }));
-      if(_i+4<allEquities.length)await new Promise(r=>setTimeout(r,350));
-      if(loadEl)loadEl.textContent=`⏳ ${Math.min(_i+4,allEquities.length)}/${allEquities.length} holdings checked...`;
-    }
-    // 2) Broad market query so the "All" view has the full calendar
-    try{
-      const fhAll=await fetchYF(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB}`,12000);
-      if(fhAll?.earningsCalendar)fhList=fhList.concat(fhAll.earningsCalendar);
-    }catch(e){}
-    calCache=[...new Map(fhList.map(e=>[e.symbol+e.date,e])).values()].sort((a,b)=>a.date.localeCompare(b.date));
-    try{localStorage.setItem('cee_earnings_cache',JSON.stringify({ts:Date.now(),data:calCache}));}catch(e){}
-    if(loadEl)loadEl.textContent='';
-  }
-  if(!calCache||!calCache.length){
-    tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No upcoming earnings found. Try refreshing.</td></tr>';
-    if(loadEl)loadEl.style.display='none'; return;
-  }
-  const bmoS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(101,163,255,.18);color:#9fc4ff">Before Open</span>';
-  const amcS='<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(247,185,40,.14);color:#854d0e">After Close</span>';
-  let filtered=type==='portfolio'?calCache.filter(e=>portTickers.has(e.symbol)):calCache;
-  filtered=[...filtered].sort((a,b)=>a.date.localeCompare(b.date)).slice(0,80);
-  tableEl.innerHTML=filtered.length?`<tr><th>Date</th><th>Ticker</th><th>Company</th><th>When</th><th>EPS Est.</th><th>In Portfolio</th><th>IR Page</th></tr>
-    ${filtered.map(e=>{
-      const inP=portTickers.has(e.symbol);
-      const when=e.hour==='bmo'?bmoS:e.hour==='amc'?amcS:'—';
-      const h=allHoldings.find(x=>x.ticker===e.symbol);
-      return `<tr style="${inP?'background:rgba(74,222,128,.10);':''}">
-        <td style="font-size:12px;font-weight:${inP?'700':'400'}">${e.date}</td>
-        <td class="ticker-cell">${e.symbol}</td>
-        <td>${h?.company||e.name||e.symbol}</td>
-        <td>${when}</td>
-        <td style="font-size:12px">${e.epsEstimate!=null?'$'+Number(e.epsEstimate).toFixed(2):'—'}</td>
-        <td>${inP?'<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(74,222,128,.16);color:#4ade80">✓ Owned</span>':'—'}</td>
-        <td><a href="${irLink(e.symbol,h?.company)}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">🏢 IR Page</a></td>
-      </tr>`;
-    }).join('')}`
-    :`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">${type==='portfolio'?'No upcoming earnings for your holdings in the next 90 days.':'No earnings found.'}</td></tr>`;
+  // ── UPCOMING EARNINGS ── (see renderPortfolioEarnings for why it is per holding)
+  if(type==='all'){ const ok=await renderAllEarnings(tableEl,loadEl,allHoldings,portTickers,from); if(ok&&loadEl)loadEl.style.display='none'; return; }
+  { const ok=await renderPortfolioEarnings(tableEl,loadEl,allHoldings,portTickers,from); if(ok&&loadEl)loadEl.style.display='none'; return; }
   }catch(e){if(tableEl)tableEl.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Could not load calendar data.</td></tr>';}
   if(loadEl)loadEl.style.display='none';
 }
@@ -4253,7 +4354,7 @@ function verifyUploadPw(){const stored=localStorage.getItem('cee_upload_pw');con
 function resetToEmbedded(){if(confirm('Reset to original embedded data?'))location.reload();}
 
 // ── EXCEL UPLOAD ──────────────────────────────────────────────────────────────
-const COMPANY_NAMES={'GOOG':'Alphabet Inc.','META':'Meta Platforms','NFLX':'Netflix','TKO':'TKO Group','AMZN':'Amazon','HD':'Home Depot','COST':'Costco','KO':'Coca-Cola','WMT':'Walmart','XOM':'ExxonMobil','BRK.B':'Berkshire Hathaway','BX':'Blackstone','MA':'Mastercard','SPGI':'S&P Global','V':'Visa','TMUS':'T-Mobile','HCA':'HCA Healthcare','LLY':'Eli Lilly','PFE':'Pfizer','SYK':'Stryker','CAT':'Caterpillar','HWM':'Howmet Aerospace','SBGSF':'Schneider Electric SE','WM':'Waste Management','AAPL':'Apple','CRWD':'CrowdStrike','MSFT':'Microsoft','NVDA':'NVIDIA','ORCL':'Oracle','TSM':'TSMC','NUE':'Nucor','DLR':'Digital Realty','CEG':'Constellation Energy','ABBV':'AbbVie','ADI':'Analog Devices','COF':'Capital One','DAR':'Darling Ingredients','DIS':'Walt Disney','ET':'Energy Transfer','FSLR':'First Solar','GD':'General Dynamics','GOOGL':'Alphabet Inc.','GRMN':'Garmin','HOOD':'Robinhood','IREN':'IREN Limited','ISRG':'Intuitive Surgical','PANW':'Palo Alto Networks','PLTR':'Palantir','SOFI':'SoFi Technologies','SOUN':'SoundHound AI','TTWO':'Take-Two Interactive','VMC':'Vulcan Materials','MBGL':'Mobility Global','FDIS':'Fidelity MSCI Consumer Disc ETF','FTEC':'Fidelity MSCI Info Tech ETF','IGV':'iShares Expanded Tech-Software ETF','NLR':'VanEck Uranium and Nuclear ETF','PSCT':'Invesco S&P SmallCap IT ETF','QQQ':'Invesco QQQ (Nasdaq-100)','RSPN':'Invesco S&P 500 Equal Wt Industrials','SMH':'VanEck Semiconductor ETF','VCSH':'Vanguard Short-Term Corp Bond ETF','VFH':'Vanguard Financials ETF','VHT':'Vanguard Health Care ETF','VIS':'Vanguard Industrials ETF','VOO':'Vanguard S&P 500 ETF','VTI':'Vanguard Total Stock Market ETF','VUG':'Vanguard Growth ETF','XLB':'Materials Select Sector SPDR','XLC':'Communication Services SPDR','XLE':'Energy Select Sector SPDR','XLF':'Financial Select Sector SPDR','XLP':'Consumer Staples SPDR','XLU':'Utilities Select Sector SPDR','BILS':'SPDR Bloomberg 3-12 Mo T-Bill ETF','IYG':'iShares U.S. Financial Services ETF','IYJ':'iShares U.S. Industrials ETF','VGLT':'Vanguard Long-Term Treasury ETF','VGT':'Vanguard Information Technology ETF','VNQ':'Vanguard Real Estate ETF','XLV':'Health Care Select SPDR','XLY':'Consumer Discretionary SPDR'};
+const COMPANY_NAMES={'GOOG':'Alphabet Inc.','META':'Meta Platforms','NFLX':'Netflix','TKO':'TKO Group','AMZN':'Amazon','HD':'Home Depot','COST':'Costco','KO':'Coca-Cola','WMT':'Walmart','XOM':'ExxonMobil','BRK.B':'Berkshire Hathaway','BX':'Blackstone','MA':'Mastercard','SPGI':'S&P Global','V':'Visa','TMUS':'T-Mobile','HCA':'HCA Healthcare','LLY':'Eli Lilly','PFE':'Pfizer','SYK':'Stryker','CAT':'Caterpillar','HWM':'Howmet Aerospace','SBGSF':'Schneider Electric SE','WM':'Waste Management','AAPL':'Apple','CRWD':'CrowdStrike','MSFT':'Microsoft','NVDA':'NVIDIA','ORCL':'Oracle','TSM':'TSMC','NUE':'Nucor','DLR':'Digital Realty','CEG':'Constellation Energy','ABBV':'AbbVie','ADI':'Analog Devices','COF':'Capital One','DAR':'Darling Ingredients','DIS':'Walt Disney','ET':'Energy Transfer','FSLR':'First Solar','GD':'General Dynamics','GOOGL':'Alphabet Inc.','GRMN':'Garmin','HOOD':'Robinhood','IREN':'IREN Limited','ISRG':'Intuitive Surgical','PANW':'Palo Alto Networks','PLTR':'Palantir','SOFI':'SoFi Technologies','SOUN':'SoundHound AI','TTWO':'Take-Two Interactive','VMC':'Vulcan Materials','MBGL':'Mobility Global','AVGO':'Broadcom','FDIS':'Fidelity MSCI Consumer Disc ETF','FTEC':'Fidelity MSCI Info Tech ETF','IGV':'iShares Expanded Tech-Software ETF','NLR':'VanEck Uranium and Nuclear ETF','PSCT':'Invesco S&P SmallCap IT ETF','QQQ':'Invesco QQQ (Nasdaq-100)','RSPN':'Invesco S&P 500 Equal Wt Industrials','SMH':'VanEck Semiconductor ETF','VCSH':'Vanguard Short-Term Corp Bond ETF','VFH':'Vanguard Financials ETF','VHT':'Vanguard Health Care ETF','VIS':'Vanguard Industrials ETF','VOO':'Vanguard S&P 500 ETF','VTI':'Vanguard Total Stock Market ETF','VUG':'Vanguard Growth ETF','XLB':'Materials Select Sector SPDR','XLC':'Communication Services SPDR','XLE':'Energy Select Sector SPDR','XLF':'Financial Select Sector SPDR','XLP':'Consumer Staples SPDR','XLU':'Utilities Select Sector SPDR','BILS':'SPDR Bloomberg 3-12 Mo T-Bill ETF','IYG':'iShares U.S. Financial Services ETF','IYJ':'iShares U.S. Industrials ETF','VGLT':'Vanguard Long-Term Treasury ETF','VGT':'Vanguard Information Technology ETF','VNQ':'Vanguard Real Estate ETF','XLV':'Health Care Select SPDR','XLY':'Consumer Discretionary SPDR'};
 const ETF_SECTORS={'FDIS':'Consumer Discretionary','FTEC':'Information Technology','IGV':'Information Technology','NLR':'Energy','PSCT':'Information Technology','QQQ':'Information Technology','RSPN':'Industrials','SMH':'Information Technology','VCSH':'Fixed Income','VFH':'Financials','VHT':'Health Care','VIS':'Industrials','VOO':'Broad Market','VTI':'Broad Market','VUG':'Broad Market','XLB':'Materials','XLC':'Communication Services','XLE':'Energy','XLF':'Financials','XLP':'Consumer Staples','XLU':'Utilities','BILS':'Fixed Income','IYG':'Financials','IYJ':'Industrials','VGLT':'Fixed Income','VGT':'Information Technology','VNQ':'Real Estate','XLV':'Health Care','XLY':'Consumer Discretionary'};
 // Fallback only, used until the live 36-month regression vs SPY loads (it replaces these
 // on every page open). Values are that same regression as of 2026-09-10. The previous
@@ -4270,10 +4371,18 @@ function handleExcelUpload(input){
     try{
       const data=new Uint8Array(e.target.result);const wb=XLSX.read(data,{type:'array',cellDates:true});
       const sheets=wb.SheetNames;
-      const endSheet=wb.Sheets['Endowment'],ceeSheet=wb.Sheets['CEE Fund'];
+      // Only the two portfolio tabs are read; anything else in the workbook (Total,
+      // To do, notes) is ignored.
+      const pickSheet=re=>sheets.find(n=>re.test(String(n).trim()));
+      const endName=pickSheet(/^endowment/i), ceeName=pickSheet(/^cee\s*fund/i);
+      const endSheet=endName?wb.Sheets[endName]:null, ceeSheet=ceeName?wb.Sheets[ceeName]:null;
       // Transactions sheet is OPTIONAL — holdings-only uploads are fine. When a complete
       // transaction history exists later, including the sheet will feed real performance charts.
-      const txSheetName=sheets.find(s=>s.trim()==='Transactions'||s.trim()==='Transactions ');
+      // The Transactions tab is not read yet. Nothing on the site consumes it: the
+      // Performance and Trades tabs are rebuilt from Schwab's exports by
+      // tools/build-performance.js. Reading it would only overwrite the stored copy,
+      // so a holdings upload leaves stored transactions untouched.
+      const txSheetName=null;
       if(!endSheet||!ceeSheet){errEl.textContent='Missing required sheets: the workbook needs "Endowment" and "CEE Fund" tabs (a "Transactions" tab is optional).';errEl.style.display='block';return;}
       const endR=parsePortfolioSheet(XLSX.utils.sheet_to_json(endSheet,{header:1,defval:null}),'Endowment');
       const ceeR=parsePortfolioSheet(XLSX.utils.sheet_to_json(ceeSheet,{header:1,defval:null}),'CEE Fund');
@@ -4340,7 +4449,91 @@ function validateParsedFund(parsed, fundName){
 // held separately from equities and ETFs, and the length guard below would
 // otherwise discard it — which silently dropped $24k from the Endowment.
 const CUSIP_RE=/^[0-9][0-9A-Z]{8}$/;
+/* Portfolio tabs are read by their headers, not by fixed column positions, so the
+   sheet can gain a column, move a block, or start in a different column without the
+   upload silently misreading it (a sheet whose used range began at column B once
+   shifted every field one place and parsed nothing). Each block starts at a row
+   containing "Ticker"; the section title above it ("... Equities", "... ETF's",
+   "... Treasury ...") says what the block holds; "Cash" in the ticker column with a
+   number beside it is the cash balance. If no header is found at all, the older
+   fixed-column reader is used. */
+const HDR_ALIASES={
+  ticker:['ticker','symbol'], company:['company','etfname','name','description'],
+  shares:['shares','quantity','qty','amount'], costBasis:['costbasis'],
+  avgCost:['avgprice','avgcost','averagecost','purchaseprice'], price:['marketprice','price','lastprice'],
+  marketValue:['marketvalue','mktval'], dayPct:['day%'], dayDollar:['day$'],
+  glDollar:['g/l$','gl$'], glPct:['g/l%','gl%'], sector:['sector'], beta:['beta']
+};
+const _hdrKey=v=>v==null?'':String(v).toLowerCase().replace(/[\s'\u2019._-]/g,'');
+// "BRK B", "BRK/B" and "BRK-B" all mean Berkshire class B.
+function normTicker(v){ return String(v==null?'':v).trim().toUpperCase().replace(/^BRK[\s\/.\-]?B$/,'BRK.B'); }
 function parsePortfolioSheet(rows,fundName){
+  const equities=[],etfs=[],bonds=[];
+  let cash=0,map=null,section='equity',tCol=null,headers=0;
+  const num=v=>typeof v==='number'?v:(v==null||v===''?0:(parseFloat(String(v).replace(/[$,%\s]/g,''))||0));
+  const numOrNull=v=>typeof v==='number'?v:(v==null||v===''||isNaN(parseFloat(v))?null:parseFloat(v));
+  const txtOk=v=>{ const t=v==null?'':String(v).trim(); return t&&!t.startsWith('#')?t:''; };  // '#VALUE!' = an unresolved Stocks data type
+  const at=(row,f)=>map&&map[f]!=null?row[map[f]]:undefined;
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i]||[];
+    const tIdx=row.findIndex(v=>_hdrKey(v)==='ticker');
+    if(tIdx>=0){
+      const m={};
+      for(let j=tIdx;j<row.length;j++){
+        const k=_hdrKey(row[j]); if(!k) break;           // this block's headers only, not the summary to the right
+        for(const [f,al] of Object.entries(HDR_ALIASES)) if(m[f]==null&&al.includes(k)) m[f]=j;
+      }
+      // A holdings header names shares and a price or value. A side table with its own
+      // "Ticker" column (the Daily Movers list beside the CEE Fund equities) does not,
+      // and must not take over the block: it cut the equity read off after 14 rows.
+      if(m.shares!=null&&(m.marketValue!=null||m.price!=null)){
+        map=m; tCol=tIdx; headers++;
+        if(map.company!=null&&_hdrKey(row[map.company])==='etfname') section='etf';
+        if(_hdrKey(row[map.shares])==='amount') section='bond';
+        continue;
+      }
+    }
+    // Cash sits in the ticker column. The summary table to the right repeats the
+    // figure under its own "Cash" label; that copy is not read.
+    if(tCol!=null&&_hdrKey(row[tCol])==='cash'&&typeof row[tCol+1]==='number'){ cash=row[tCol+1]; continue; }
+    const tk=map?normTicker(at(row,'ticker')):'';
+    const shares=map?num(at(row,'shares')):0;
+    const isData=!!(tk&&shares>0);
+    if(!isData){
+      const first=row.find(v=>v!=null&&String(v).trim()!=='');
+      if(typeof first==='string'){
+        const t=first.toLowerCase();
+        if(/etf/.test(t)) section='etf'; else if(/treasur|bond|fixed income/.test(t)) section='bond'; else if(/equit|stock/.test(t)) section='equity';
+      }
+      continue;
+    }
+    if(section==='bond'||CUSIP_RE.test(tk)){
+      bonds.push({ticker:tk,company:txtOk(at(row,'company'))||tk,shares,costBasis:num(at(row,'costBasis')),
+        avgCost:num(at(row,'avgCost')),price:0,marketValue:num(at(row,'marketValue')),sector:'Fixed Income',
+        beta:null,type:'bond',fund:fundName});
+      continue;
+    }
+    if(!/^[A-Z][A-Z0-9.]{0,9}$/.test(tk)) continue;            // stray text in the ticker column
+    const isEtf=section==='etf';
+    const sheetSector=txtOk(at(row,'sector'));
+    // For ETFs the sheet says "Growth", "Market", "Bond" - asset classes, not sectors -
+    // so the dashboard's own ETF map comes first.
+    const etfSheetSector=/^bond/i.test(sheetSector)?'Fixed Income':/^(market|growth)/i.test(sheetSector)?'Broad Market':(sheetSector||'ETF');
+    const price=num(at(row,'price')), sheetBeta=numOrNull(at(row,'beta'));
+    const h={ticker:tk,company:COMPANY_NAMES[tk]||txtOk(at(row,'company'))||tk,shares,
+      costBasis:num(at(row,'costBasis')),avgCost:num(at(row,'avgCost')),price,
+      marketValue:num(at(row,'marketValue'))||shares*price,dayPct:num(at(row,'dayPct')),dayDollar:num(at(row,'dayDollar')),
+      glDollar:num(at(row,'glDollar')),glPct:num(at(row,'glPct')),
+      sector:normalizeSector(tk,isEtf?(ETF_SECTORS[tk]||etfSheetSector):(sheetSector||null)),
+      // Missing beta stays null (never silently 1.0) - the beta engine reports coverage instead.
+      beta:isEtf?(ETF_BETAS[tk]??sheetBeta):sheetBeta,type:isEtf?'etf':'equity',fund:fundName};
+    (isEtf?etfs:equities).push(h);
+  }
+  if(!headers||!equities.length) return parsePortfolioSheetLegacy(rows,fundName);
+  return{equities,etfs,bonds,cash,headerBased:true,
+    total:[...equities,...etfs,...bonds].reduce((s,h)=>s+(h.marketValue||0),0)+cash};
+}
+function parsePortfolioSheetLegacy(rows,fundName){
   const equities=[],etfs=[],bonds=[];let cash=0,inEtf=false;
   for(let i=0;i<rows.length;i++){
     const row=rows[i];if(!row||!row[1])continue;const cell=String(row[1]).trim();
@@ -4358,7 +4551,7 @@ function parsePortfolioSheet(rows,fundName){
       continue;
     }
     if(cell.length>8&&!cell.match(/^[A-Z.]+$/))continue;
-    const tk=cell.replace('BRK/B','BRK.B');
+    const tk=normTicker(cell);
     // Missing beta stays null (never silently 1.0) — the beta engine reports coverage instead.
     const h={ticker:tk,company:COMPANY_NAMES[tk]||tk,shares:row[3]||0,costBasis:row[4]||0,avgCost:row[5]||0,price:row[6]||0,marketValue:row[7]||(row[3]||0)*(row[6]||0),dayPct:row[8]||0,dayDollar:row[9]||0,glDollar:row[10]||0,glPct:row[11]||0,sector:normalizeSector(tk,inEtf?(ETF_SECTORS[tk]||'ETF'):(typeof row[12]==='string'?row[12]:null)),beta:inEtf?(ETF_BETAS[tk]??null):(typeof row[13]==='number'?row[13]:null),type:inEtf?'etf':'equity',fund:fundName};
     if(inEtf)etfs.push(h);else equities.push(h);
@@ -4405,75 +4598,97 @@ async function showSectorComparePeriod(sectorName,cardEl){
   await renderSCChart(sectorName,'top',activeSCPeriod);
 }
 
+// Start of a preset window ending on the last day of the performance history.
+// Unlike perfStartIdx it ignores the Performance tab's custom range.
+function scStartIdx(p) {
+  const d = PERF.dates, last = d[d.length - 1];
+  if (p === 'ALL') return 0;
+  const end = new Date(last + 'T00:00:00'); let from;
+  if (p === 'YTD') from = new Date(end.getFullYear(), 0, 1);
+  else { from = new Date(end); const k = parseInt(p);
+    if (p.endsWith('W')) from.setDate(from.getDate() - 7 * k); else if (p.endsWith('M')) from.setMonth(from.getMonth() - k); else from.setFullYear(from.getFullYear() - k); }
+  const iso = from.toISOString().slice(0, 10);
+  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i;
+  return 0;
+}
+
+/* Sector Analysis. Every figure except 1D is what OUR dollars earned over the period,
+   taking our buying and selling into account: a position counts only from the day we
+   bought it (NVDA bought in March is measured from March) and up to the day we sold
+   it, and the Equities / ETFs / Sector figures are built from those dollars, exactly
+   as on the By Sector tab. This replaces a weighted average of each holding's
+   full-period stock return at today's weights, which credited us with moves we were
+   not invested for. The stock's own move is kept alongside for comparison. */
 async function renderSCChart(sectorName, view, period) {
   activeSCSector = sectorName;
   currentSCView = view;
   const loadEl = document.getElementById('scPeriodLoading');
-  if (loadEl) loadEl.textContent = '⏳ Loading...';
+  if (loadEl) loadEl.textContent = '\u23f3 Loading...';
   const EXCL=['Broad Market','Fixed Income'];
   const filtH=S.holdings.filter(h=>!EXCL.includes(h.sector));
   const filtT=filtH.reduce((s,h)=>s+(h.marketValue||0),0)||1;
   const sectors=calcSectors(filtH,filtT);
   const sec=sectors.find(s=>s.name===sectorName);
   if(!sec){if(loadEl)loadEl.textContent='';return;}
-  const equities=sec.holdings.filter(h=>h.type==='equity');
-  const etfs=sec.holdings.filter(h=>h.type==='etf');
   const benchmark=SECTOR_BENCHMARKS[sectorName]||'SPY';
-  const returns={};
+  const returns={}, stockMove={}, gains={}, notes={};
+  let equities=[], etfs=[], eqReturn=null, etfReturn=null, sectorTotalReturn=null, benchReturn=null;
+  let rangeLabel='', throughLbl='', missing=[];
 
   if(period==='1D'){
-    sec.holdings.forEach(h=>{returns[h.ticker]=h.dayPct!==undefined&&h.dayPct!==null?h.dayPct*100:null;});
-    // Use Yahoo Finance for benchmark 1D (Finnhub candle is paid tier)
+    // Today: live price moves on today's holdings - timing does not come into it.
+    equities=sec.holdings.filter(h=>h.type==='equity'); etfs=sec.holdings.filter(h=>h.type==='etf');
+    sec.holdings.forEach(h=>{ const v=h.dayPct!=null?h.dayPct*100:null; returns[h.ticker]=v; stockMove[h.ticker]=v; gains[h.ticker]=h.dayDollar!=null?h.dayDollar:null; });
     try{
-      const _bUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${benchmark}?interval=1d&range=5d`;
-      const _bData=await fetchYF(_bUrl,5000);
+      const _bData=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${benchmark}?interval=1d&range=5d`,5000);
       const _bCl=(_bData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close||[]).filter(x=>x!=null);
-      returns[benchmark]=_bCl.length>=2?parseFloat(((_bCl[_bCl.length-1]-_bCl[_bCl.length-2])/_bCl[_bCl.length-2]*100).toFixed(2)):null;
-    }catch(e){returns[benchmark]=null;}
-  } else if(period==='YTD'){
-    // TRUE year-to-date for every holding — same engine as the thesis table (Jan-2 anchor)
-    if(loadEl)loadEl.textContent='⏳ Fetching YTD returns...';
-    const _hs=sec.holdings;
-    for(let _i=0;_i<_hs.length;_i+=8){
-      await Promise.all(_hs.slice(_i,_i+8).map(async h=>{
-        if(ytdCache[h.ticker]==null){const v=await fetchCandleReturn(h.ticker,'YTD');if(v!==null)ytdCache[h.ticker]=v;}
-        returns[h.ticker]=ytdCache[h.ticker]!=null?ytdCache[h.ticker]:null;
-      }));
-      if(_i+8<_hs.length)await new Promise(r=>setTimeout(r,250));
-    }
-    const bv2=await fetchCandleReturn(benchmark,'YTD'); returns[benchmark]=bv2;
-    if(loadEl)loadEl.textContent='';
+      benchReturn=_bCl.length>=2?(_bCl[_bCl.length-1]/_bCl[_bCl.length-2]-1)*100:null;
+    }catch(e){benchReturn=null;}
+    const wRet=list=>{ let sw=0,sr=0; list.forEach(h=>{ const v=returns[h.ticker]; if(v!=null){ const w=h.marketValue||0; sr+=v*w; sw+=w; } }); return sw>0?sr/sw:null; };
+    eqReturn=equities.length?wRet(equities):null; etfReturn=etfs.length?wRet(etfs):null; sectorTotalReturn=wRet(sec.holdings);
+    rangeLabel=' (today, live)';
   } else {
-    // Use Finnhub candle data for reliable period returns
-    if(loadEl)loadEl.textContent=`⏳ Fetching ${period} data...`;
-    const benchRet = await fetchCandleReturn(benchmark, period);
-    returns[benchmark] = benchRet;
-    const tks=sec.holdings.map(h=>h.ticker);
-    // Yahoo Finance via proxy - can batch more aggressively
-    for(let i=0;i<tks.length;i+=8){
-      await Promise.all(tks.slice(i,i+8).map(async tk=>{
-        returns[tk] = await fetchCandleReturn(tk, period);
-      }));
-      if(i+8<tks.length)await new Promise(r=>setTimeout(r,300));
-      if(loadEl)loadEl.textContent=`⏳ ${Math.min(i+8,tks.length)}/${tks.length} loaded...`;
+    if(loadEl)loadEl.textContent='\u23f3 Loading position history...';
+    let H;
+    try{ await loadPerfData(); H=await loadPerfHoldings(); }
+    catch(err){ if(loadEl)loadEl.textContent='Could not load position history: '+err.message; return; }
+    if(activeSCSector!==sectorName||activeSCPeriod!==period) return;       // superseded while loading
+    const fk=activeFund==='endowment'?'endowment':'ceeFund', f=PERF.funds[fk], dates=PERF.dates, n=dates.length;
+    const e=n-1, s=scStartIdx(period);
+    const multiYear=dates[s].slice(0,4)!==dates[e].slice(0,4);
+    const fmtD=(i,y)=>new Date(dates[i]+'T00:00:00').toLocaleDateString('en-US',y?{month:'short',day:'numeric',year:'numeric'}:{month:'short',day:'numeric'});
+    rangeLabel=' \u00b7 '+fmtD(s,true)+' to '+fmtD(e,true);
+    throughLbl=fmtD(e,true);
+    const series=H.funds[fk]||{};
+    const held=[];
+    for(const [tk,ser] of Object.entries(series)){
+      if((PERF.sectorOf[tk]||'Other')!==sectorName) continue;
+      const r=positionWindow(ser,s,e);
+      if(r.from===null) continue;                         // not held during the period
+      const cur=S.holdings.find(x=>x.ticker===tk), px=H.px[tk];
+      returns[tk]=r.ret; gains[tk]=r.gain;
+      stockMove[tk]=px&&px[s]>0&&px[e]>0?(px[e]/px[s]-1)*100:null;
+      const nt=[]; if(r.from>s) nt.push('bought '+fmtD(r.from,multiYear)); if(r.sold!==null) nt.push('sold '+fmtD(r.sold,multiYear));
+      notes[tk]=nt.join(' \u00b7 ');
+      let nm=tk; if(cur) nm=cur.company; else { try{ nm=COMPANY_NAMES[tk]||tk; }catch(_){} }
+      held.push({ticker:tk,company:nm,type:PERF.typeOf[tk]||(cur&&cur.type)||'equity',marketValue:cur?cur.marketValue:0,
+        glPct:cur?cur.glPct:null,beta:cur?cur.beta:null,sold:!cur,ser});
     }
+    // Current holdings the performance history has not caught up with yet.
+    sec.holdings.forEach(h=>{ if(!series[h.ticker]) missing.push(h.ticker); });
+    equities=held.filter(x=>x.type!=='etf'); etfs=held.filter(x=>x.type==='etf');
+    const sleeve=list=>{
+      if(!list.length) return null;
+      const V=new Float64Array(n),F=new Float64Array(n);
+      for(const x of list) for(let i=s;i<=e;i++){ V[i]+=x.ser.v[i]; F[i]+=x.ser.f[i]; }
+      const w=mdWindow(V,F,s,e); return w?w.ourRet:null;
+    };
+    eqReturn=sleeve(equities); etfReturn=sleeve(etfs);
+    const sw=mdWindow((f.sectors||{})[sectorName]||[],(f.sectorFlows||{})[sectorName],s,e);
+    sectorTotalReturn=sw?sw.ourRet:null;
+    benchReturn=PERF.bench&&PERF.bench[benchmark]?idxRet(PERF.bench[benchmark],s,e):await fetchCandleReturn(benchmark,period);
   }
   if(loadEl)loadEl.textContent='';
-
-  const eqMV=equities.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const etfMV=etfs.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-  const secTotalMV=sec.holdings.reduce((s,h)=>s+(h.marketValue||0),0)||1;
-
-  function wRet(holdings,totalMV){
-    let sw=0,sr=0;
-    holdings.forEach(h=>{if(returns[h.ticker]!==null&&returns[h.ticker]!==undefined){const w=(h.marketValue||0)/totalMV;sr+=returns[h.ticker]*w;sw+=w;}});
-    return sw>0?sr/sw:null;
-  }
-
-  const eqReturn=equities.length>0?wRet(equities,eqMV):null;
-  const etfReturn=etfs.length>0?wRet(etfs,etfMV):null;
-  const sectorTotalReturn=wRet(sec.holdings,secTotalMV);
-  const benchReturn=returns[benchmark]!==null&&returns[benchmark]!==undefined?returns[benchmark]:null;
 
   const fr=(v,lbl='')=>v!==null&&v!==undefined?`<span class="${v>=0?'pos':'neg'}">${v>=0?'+':''}${v.toFixed(2)}%</span>`:`<span style="color:var(--muted)">—</span>`;
   const frp=(v)=>v!==null&&v!==undefined?`${v>=0?'+':''}${v.toFixed(2)}%`:'—';
@@ -4487,7 +4702,7 @@ async function renderSCChart(sectorName, view, period) {
   const _secBeta=Number.isFinite(sec.beta)?sec.beta:null;
   const betaDiff=_secBeta!==null?_secBeta-benchBeta:null;
   document.getElementById('scKpis').innerHTML=`
-    <div class="perf-card" style="border-left:3px solid var(--gold)"><div class="perf-label">Sector Total (${period})</div><div class="perf-value">${fr(sectorTotalReturn)}</div><div class="perf-sub">Eq+ETF combined</div></div>
+    <div class="perf-card" style="border-left:3px solid var(--gold)"><div class="perf-label">Sector Total (${period})</div><div class="perf-value">${fr(sectorTotalReturn)}</div><div class="perf-sub">what our dollars earned, incl. timing</div></div>
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${eqClick}"><div class="perf-label">Equities (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(eqReturn)}</div><div class="perf-sub">${equities.length} stocks</div></div>
     <div class="perf-card" style="cursor:${view==='top'?'pointer':'default'}" onclick="${etfClick}"><div class="perf-label">ETFs (${period})${view==='top'?' ▶':''}</div><div class="perf-value">${fr(etfReturn)}</div><div class="perf-sub">${etfs.length} ETFs</div></div>
     <div class="perf-card"><div class="perf-label">${benchmark} (${period})</div><div class="perf-value">${fr(benchReturn)}</div><div class="perf-sub">Sector benchmark</div></div>
@@ -4495,26 +4710,31 @@ async function renderSCChart(sectorName, view, period) {
     <div class="perf-card"><div class="perf-label">Sector β vs ${benchmark} β</div><div class="perf-value"><span class="${betaDiff===null?'':betaDiff>0.05?'neg':betaDiff<-0.05?'pos':''}">β${fmtBeta(_secBeta)}</span> <span style="font-size:13px;color:var(--muted)">vs β${benchBeta.toFixed(2)}</span></div><div class="perf-sub">${betaDiff===null?'No published beta for this sector’s holdings':(betaDiff>=0?'+':'')+betaDiff.toFixed(2)+' vs '+benchmark+' — '+(Math.abs(betaDiff)<0.05?'in line with':betaDiff>0?'riskier than':'more defensive than')+' its benchmark'}</div></div>
     <div class="perf-card"><div class="perf-label">Sector Weight</div><div class="perf-value">${(sec.pct*100).toFixed(1)}%</div><div class="perf-sub">of ${S.fundName} · β${fmtBeta(_secBeta)}</div></div>`;
 
-  document.getElementById('scChartTitle').textContent=`${sectorName} — ${period} vs ${benchmark}`;
+  document.getElementById('scChartTitle').textContent=`${sectorName} — ${period}${rangeLabel} vs ${benchmark}`;
   document.getElementById('sectorCompareDetail').style.display='block';
 
   // Equities + ETFs tables populate on EVERY view — including the first sector click —
   // so you never have to click into the Equities/ETFs drill-down to see the members.
   const makeRow=h=>{
-    const rv=returns[h.ticker]!==null&&returns[h.ticker]!==undefined?returns[h.ticker]:null;
-    const tr=h.glPct?h.glPct*100:0;
-    const _ytdV=ytdCache[h.ticker];
-    const _ytdCls=_ytdV!=null?(_ytdV>=0?'pos':'neg'):'';
-    const _ytdTxt=_ytdV!=null?(_ytdV>=0?'+':'')+_ytdV.toFixed(1)+'%':'—';
-    const _ym=(window.ytdMeta||{})[h.ticker];
-    const _ytdTip=_ym?'YTD math: $'+_ym.base+' ('+_ym.baseDt+') → $'+_ym.last+' = '+_ym.pct+'%':'YTD vs prior-year close';
-    return `<tr style="cursor:pointer" onclick="showTickerChart('${h.ticker}','${h.company}')" title="Click for price chart"><td class="ticker-cell">${h.ticker} 📈</td><td>${h.company}</td>
-    <td><strong>$${fmt(h.marketValue||0)}</strong></td>
-    <td class="${rv!==null?(rv>=0?'pos':'neg'):''}">${rv!==null?frp(rv):'—'} <span style="font-size:9px;color:var(--muted)">(${period})</span></td>
-    <td class="${_ytdCls}" title="${_ytdTip}" style="cursor:help">${_ytdTxt} <span style="font-size:9px;color:var(--muted)">(YTD)</span></td>
-    <td class="${tr>=0?'pos':'neg'}">${tr>=0?'+':''}${(tr||0).toFixed(1)}% <span style="font-size:9px;color:var(--muted)">(return)</span></td>
-    <td>${h.beta?h.beta.toFixed(2):'—'}</td></tr>`;};
-  const hdr='<tr><th>Ticker</th><th>Company</th><th>Market Value</th><th>Period Return</th><th>YTD Return</th><th>Return</th><th>Beta</th></tr>';
+    const rv=returns[h.ticker]!=null?returns[h.ticker]:null, sm=stockMove[h.ticker], g=gains[h.ticker];
+    const tr=h.glPct!=null?h.glPct*100:null;
+    return `<tr style="cursor:pointer" onclick="showTickerChart('${h.ticker}','${String(h.company).replace(/'/g,"\\'")}')" title="Click for price chart"><td class="ticker-cell">${h.ticker} \ud83d\udcc8</td>
+    <td>${h.company}${notes[h.ticker]?'<div style="font-size:9px;color:var(--muted);font-weight:600">'+notes[h.ticker]+'</div>':''}</td>
+    <td>${h.sold?'<span style="color:var(--muted);font-size:11px">sold</span>':'<strong>$'+fmt(h.marketValue||0)+'</strong>'}</td>
+    <td class="${rv!=null?(rv>=0?'pos':'neg'):''}" style="font-weight:700">${rv!=null?frp(rv):'\u2014'}</td>
+    <td style="color:var(--muted)">${sm!=null?frp(sm):'\u2014'}</td>
+    <td class="${g!=null?(g>=0?'pos':'neg'):''}">${g!=null?(g>=0?'+':'-')+money0(g):'\u2014'}</td>
+    <td class="${tr!=null?(tr>=0?'pos':'neg'):''}">${tr!=null?(tr>=0?'+':'')+tr.toFixed(1)+'%':'\u2014'}</td>
+    <td>${h.beta?h.beta.toFixed(2):'\u2014'}</td></tr>`;};
+  const hdr='<tr><th>Ticker</th><th>Company</th><th>Value Now</th>'+
+    '<th title="What the position earned us over the period, counting only the days we held it">Our Return</th>'+
+    '<th title="What the security itself did over the whole period, whether we held it or not">Stock&rsquo;s Move</th>'+
+    '<th>$ Gain</th><th title="Gain on cost since purchase">Since Purchase</th><th>Beta</th></tr>';
+  const scNote=document.getElementById('scNote');
+  if(scNote) scNote.innerHTML = period==='1D'
+    ? 'Today&rsquo;s figures are live price moves on current holdings.'
+    : '<strong>Our Return</strong> counts only the days we held each position in the period &mdash; a stock bought partway through is measured from the price we paid &mdash; and the Equities, ETFs and Sector Total figures are built from what our dollars actually earned, so every buy and sell decision is reflected. <strong>Stock&rsquo;s Move</strong> is the security over the whole period, for comparison. Figures run through ' + throughLbl + ', the last update of the performance history.' +
+      (missing.length ? ' <span style="color:var(--gold)">Not in the performance history yet (bought after its last update): ' + missing.join(', ') + '.</span>' : '');
   const eqSorted=[...equities].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
   const etfSorted=[...etfs].sort((a,b)=>(b.marketValue||0)-(a.marketValue||0));
   document.getElementById('scEqTable').innerHTML=eqSorted.length?hdr+eqSorted.map(makeRow).join(''):'<tr><td style="color:var(--muted)">No direct equities in this sector.</td></tr>';
