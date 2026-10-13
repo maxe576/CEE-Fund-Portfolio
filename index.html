@@ -830,6 +830,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <button class="wi-add-btn" onclick="addWiTrade()">+ Add Another Trade</button>
     <div style="display:flex;gap:10px;align-items:center">
       <button class="calc-btn" onclick="calcWhatIf()">Calculate Impact →</button>
+      <button onclick="wiRefreshPrices()" title="Quote every ticker again at the current price" style="padding:9px 16px;border:1px solid var(--border);border-radius:5px;background:var(--card-bg-alt);cursor:pointer;font-size:12px;color:var(--gray)">&#8635; Refresh Prices</button>
       <button onclick="clearWiTrades()" style="padding:9px 16px;border:1px solid var(--border);border-radius:5px;background:var(--card-bg-alt);cursor:pointer;font-size:12px;color:var(--gray)">Clear All</button>
     </div>
   </div>
@@ -1560,6 +1561,7 @@ function runTabHook(tab) {
   else if (tab === 'risk') { renderRiskExposure(); loadEtfLookThrough(); }
   else if (tab === 'track') initTrack();
   else if (tab === 'sectorperf') initSectorPerf();
+  else if (tab === 'whatif') wiRefreshPrices();
   else if (tab === 'trades') initTrades();
   else if (tab === 'dividends') initDividends();
   // The YTD figure here needs the rebuilt series to strip out deposits, so
@@ -3309,6 +3311,9 @@ function clearWiTrades() {
 }
 
 function renderWiRows() {
+  // A quote arriving while you type must not pull the cursor out of the box you are in.
+  const ae=document.activeElement, row=ae&&ae.closest?ae.closest('.wi-trade-row'):null;
+  const keep=row?{id:row.id,idx:[...row.querySelectorAll('input,select')].indexOf(ae),pos:ae.selectionStart}:null;
   document.getElementById('wiTradeRows').innerHTML = wiTrades.map(t=>`
     <div class="wi-trade-row" id="wirow-${t.id}">
       <div class="fg"><label>Action</label>
@@ -3328,7 +3333,8 @@ function renderWiRows() {
       </div>
       <div class="fg"><label>Price ($)</label>
         <input type="number" value="${t.price}" placeholder="e.g. 200.00" min="0" step="0.01"
-          oninput="updateWiTrade(${t.id},'price',this.value)">
+          oninput="updateWiTrade(${t.id},'price',this.value);wiPriceTyped(${t.id})">
+        <div id="wipx-${t.id}" style="font-size:9px;color:var(--muted);margin-top:2px;line-height:1.3">${t.priceNote||''}</div>
       </div>
       <div class="fg"><label title="Left blank, a security with no beta is left out of the average entirely rather than counted as zero">Beta</label>
         <input type="number" value="${t.beta===''||t.beta==null?'':t.beta}" placeholder="auto" step="0.01"
@@ -3344,11 +3350,59 @@ function renderWiRows() {
       <button class="wi-remove" onclick="removeWiTrade(${t.id})" title="Remove">×</button>
     </div>
   `).join('');
+  if(keep){
+    const r=document.getElementById(keep.id);
+    const el=r&&keep.idx>=0?r.querySelectorAll('input,select')[keep.idx]:null;
+    if(el){ el.focus(); try{ if(keep.pos!=null&&el.setSelectionRange) el.setSelectionRange(keep.pos,keep.pos); }catch(e){} }
+  }
 }
 
 function updateWiTrade(id, field, val) {
   const t = wiTrades.find(t=>t.id===id);
   if(t) t[field] = val;
+}
+
+/* A scenario is only as good as the price it is priced at. Holdings carry a price
+   refreshed from Yahoo, but a ticker being considered has none at all, and a row filled
+   in before that refresh finished kept whatever price the workbook was uploaded with.
+   So every row quotes the security directly and says when the quote is from; opening
+   the tab and the Refresh Prices button re-quote; a price typed by hand is left alone. */
+async function wiQuote(tk){
+  try{
+    const d=await fetchYF(`https://query1.finance.yahoo.com/v8/finance/chart/${String(tk).replace('.','-')}?interval=1d&range=1d`,7000);
+    const res=d?.chart?.result?.[0], meta=res?.meta;
+    const px=meta?.regularMarketPrice ?? (res?.indicators?.quote?.[0]?.close||[]).filter(x=>x!=null).pop();
+    if(px>0) return {price:px, at:meta?.regularMarketTime?new Date(meta.regularMarketTime*1000):null, src:'live'};
+  }catch(e){}
+  const h=ALL_HOLDINGS().find(x=>x.ticker===tk);          // last resort: the refreshed holdings price
+  if(h&&h.price>0) return {price:h.price, at:null, src:'holdings'};
+  return null;
+}
+const wiQuoteNote=q=>!q?'':q.src==='live'
+  ? 'live \u00b7 '+(q.at?q.at.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'latest')
+  : 'from holdings';
+function wiPriceTyped(id){ const t=wiTrades.find(x=>x.id===id); if(t){ t.priceAuto=false; t.priceNote='typed in'; } }
+async function wiApplyQuote(id,opts){
+  const force=!!(opts&&opts.force);
+  const t=wiTrades.find(x=>x.id===id);
+  if(!t||!t.ticker) return;
+  if(t.price&&t.priceAuto===false&&!force) return;        // typed by hand
+  t.priceNote='checking price\u2026'; renderWiRows();
+  const q=await wiQuote(t.ticker);
+  const cur=wiTrades.find(x=>x.id===id);
+  if(!cur||cur.ticker!==t.ticker) return;
+  if(q){ cur.price=q.price.toFixed(2); cur.priceAuto=true; cur.priceAt=Date.now(); cur.priceNote=wiQuoteNote(q); }
+  else cur.priceNote='no quote found \u2014 enter a price';
+  renderWiRows();
+}
+// Re-quote every row we filled in (tab opened, or the button). Typed prices stay put.
+async function wiRefreshPrices(){
+  for(const t of wiTrades.filter(t=>t.ticker&&t.priceAuto!==false)) await wiApplyQuote(t.id,{force:true});
+}
+// Before calculating, re-quote anything filled in more than five minutes ago.
+async function wiRefreshStale(maxAgeMs){
+  const max=maxAgeMs||300000;
+  for(const t of wiTrades.filter(t=>t.ticker&&t.priceAuto!==false&&(!t.priceAt||Date.now()-t.priceAt>max))) await wiApplyQuote(t.id,{force:true});
 }
 
 async function wiAutoFill(id) {
@@ -3358,11 +3412,12 @@ async function wiAutoFill(id) {
   if(h) {
     if(!t.sector) {t.sector=h.sector; updateWiTrade(id,'sector',h.sector);}
     if(t.beta===''||t.beta==null) {t.beta=h.beta; updateWiTrade(id,'beta',h.beta);}
-    if(!t.price&&h.price) {t.price=h.price.toFixed(2); updateWiTrade(id,'price',h.price.toFixed(2));}
     t.betaNote='from holdings';
     renderWiRows();
+    await wiApplyQuote(id);        // quote it now rather than trusting the last refresh
     return;
   }
+  await wiApplyQuote(id);          // a ticker we do not own still needs a current price
   // Not held in either fund. Estimate a beta rather than leaving it blank, since a
   // blank one drops the position out of the average and makes the trade look
   // risk-free. Errs toward saying where the number came from.
@@ -3404,7 +3459,8 @@ async function estimateBeta(ticker){
   return null;
 }
 
-function calcWhatIf() {
+async function calcWhatIf() {
+  await wiRefreshStale();   // a row filled in an hour ago must not price the scenario
   // Scenario type + optional external flow (UI selector added in redesign; defaults are safe).
   const scenarioType = (document.getElementById('wiScenarioType')?.value) || 'internal';
   const flowAmount = Math.max(0, parseFloat(document.getElementById('wiFlowAmount')?.value) || 0);
