@@ -1004,7 +1004,10 @@ const SECTOR_OVERRIDES = {
 };
 function normalizeSector(ticker, uploadedSector) {
   const t = String(ticker || '').toUpperCase();
-  return SECTOR_OVERRIDES[t] || uploadedSector || 'Unclassified';
+  // The workbook's Settings sector map is the committee's own classification, so it
+  // outranks the dashboard's built-in corrections.
+  const fromSheet = (typeof SETTINGS !== 'undefined' && SETTINGS.sectorMap) ? SETTINGS.sectorMap[t] : null;
+  return fromSheet || SECTOR_OVERRIDES[t] || uploadedSector || 'Unclassified';
 }
 function isEquityRiskHolding(h) {
   return h.type === 'equity' || (h.type === 'etf' && h.sector !== 'Fixed Income')
@@ -4440,6 +4443,10 @@ function handleExcelUpload(input){
       // so a holdings upload leaves stored transactions untouched.
       const txSheetName=null;
       if(!endSheet||!ceeSheet){errEl.textContent='Missing required sheets: the workbook needs "Endowment" and "CEE Fund" tabs (a "Transactions" tab is optional).';errEl.style.display='block';return;}
+      // A Master workbook (Holdings Snapshot + Transactions + Settings) is read whole;
+      // anything else falls back to the two portfolio tabs.
+      const master=findSheetName(wb,[/^holdings\s*snapshot$/i])?parseMasterWorkbook(wb):null;
+      if(master){ return commitMasterUpload(master,file,okEl,errEl,input); }
       const endR=parsePortfolioSheet(XLSX.utils.sheet_to_json(endSheet,{header:1,defval:null}),'Endowment');
       const ceeR=parsePortfolioSheet(XLSX.utils.sheet_to_json(ceeSheet,{header:1,defval:null}),'CEE Fund');
       const txR=txSheetName?parseTransactionsXLS(XLSX.utils.sheet_to_json(wb.Sheets[txSheetName],{header:1,defval:null})):null;
@@ -4505,6 +4512,223 @@ function validateParsedFund(parsed, fundName){
 // held separately from equities and ETFs, and the length guard below would
 // otherwise discard it — which silently dropped $24k from the Endowment.
 const CUSIP_RE=/^[0-9][0-9A-Z]{8}$/;
+/* ── READING THE MASTER WORKBOOK ─────────────────────────────────────────────
+   The workbook is the single source. Only three tabs are read:
+
+     Holdings Snapshot - fund, ticker, shares, cost basis, cash, snapshot date
+     Transactions      - the whole ledger
+     Settings          - sector per ticker, sector benchmark ETFs, symbol map
+
+   Everything else is worked out here: prices, market values, gains, betas,
+   sectors and (through the published performance series) returns. The sheet
+   never has to carry those, and the other tabs are ignored.
+
+   Nothing is read by position. Tabs are found by name, the header row is found
+   by its labels, and each column is found by its header text, so a column can
+   move, a tab can be added, or a block can shift down the sheet without
+   breaking the read. If a tab is missing the reader falls back: no snapshot ->
+   read the Endowment / CEE Fund tabs; no settings -> the dashboard's own maps. */
+let SETTINGS = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{} };
+
+const _mkey = v => v == null ? '' : String(v).toLowerCase().replace(/[\s'\u2019().,_\-\/]/g, '');
+const _sheetRows = (wb, name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null });
+function findSheetName(wb, res) {
+  for (const re of res) { const n = wb.SheetNames.find(x => re.test(String(x).trim())); if (n) return n; }
+  return null;
+}
+// First row holding all of these labels, with every label's column.
+function findHeaderRow(rows, required, optional) {
+  for (let i = 0; i < Math.min(rows.length, 80); i++) {
+    const row = rows[i] || [], map = {};
+    for (const [field, names] of Object.entries({ ...required, ...(optional || {}) })) {
+      const j = row.findIndex(v => names.includes(_mkey(v)));
+      if (j >= 0 && map[field] == null) map[field] = j;
+    }
+    if (Object.keys(required).every(f => map[f] != null)) return { i, map };
+  }
+  return null;
+}
+// Values under a labelled cell, stopping at the second blank in a row.
+function _colUnder(rows, labels, fromRow) {
+  for (let i = fromRow || 0; i < rows.length; i++) {
+    const j = (rows[i] || []).findIndex(v => labels.includes(_mkey(v)));
+    if (j >= 0) return { row: i, col: j };
+  }
+  return null;
+}
+function _readDown(rows, at, cols) {
+  const out = []; let blanks = 0;
+  for (let i = at.row + 1; i < rows.length; i++) {
+    const row = rows[i] || [], first = row[at.col];
+    if (first == null || String(first).trim() === '') { if (++blanks >= 2) break; continue; }
+    blanks = 0;
+    out.push(cols.map(c => row[at.col + c]));
+  }
+  return out;
+}
+
+function readSettingsTab(rows) {
+  const out = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{} };
+  if (!rows) return out;
+  // Sector map: a "Ticker" column with "Sector" and "Type" beside it.
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const j = row.findIndex(v => _mkey(v) === 'ticker');
+    if (j < 0) continue;
+    if (_mkey(row[j + 1]) === 'sector') {
+      const hasType = _mkey(row[j + 2]) === 'type';
+      _readDown(rows, { row: i, col: j }, hasType ? [0, 1, 2] : [0, 1]).forEach(([tk, sec, ty]) => {
+        const t = normTicker(tk); if (!t) return;
+        if (sec) out.sectorMap[t] = String(sec).trim();
+        if (ty) out.typeMap[t] = /etf|fund/i.test(String(ty)) ? 'etf' : 'equity';
+      });
+    }
+  }
+  const sym = _colUnder(rows, ['ledgertabsymbol', 'ledgersymbol', 'tabsymbol']);
+  if (sym) _readDown(rows, sym, [0, 1]).forEach(([a, b]) => { if (a && b) out.symbolMap[String(a).trim().toUpperCase()] = String(b).trim().toUpperCase(); });
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const j = row.findIndex(v => _mkey(v) === 'sector');
+    if (j >= 0 && _mkey(row[j + 1]) === 'benchmarketf')
+      _readDown(rows, { row: i, col: j }, [0, 1]).forEach(([sec, etf]) => {
+        // "Broad Market ETFs" in the sheet is the dashboard's "Broad Market" sector.
+        if (sec && etf) out.benchmarks[String(sec).trim().replace(/\s*ETFs?$/i, '')] = String(etf).trim().toUpperCase();
+      });
+  }
+  const flow = _colUnder(rows, ['externalflowactions']);
+  if (flow) _readDown(rows, flow, [0]).forEach(([a]) => { const t = String(a || '').trim(); if (t && !/^transactions/i.test(t)) out.flowActions.push(t); });
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const j = row.findIndex(v => _mkey(v) === 'etf');
+    if (j >= 0 && _mkey(row[j + 1]) === 'class')
+      _readDown(rows, { row: i, col: j }, [0, 1]).forEach(([e, c]) => { if (e && c) out.capClasses[normTicker(e)] = String(c).trim(); });
+  }
+  return out;
+}
+
+function readSnapshotTab(rows) {
+  const hdr = findHeaderRow(rows,
+    { fund: ['fund'], ticker: ['ticker', 'tickertab', 'symbol'], shares: ['shares'] },
+    { costBasis: ['costbasis', 'cost'], priceSymbol: ['pricesymbol'] });
+  if (!hdr) return null;
+  const positions = [];
+  for (let i = hdr.i + 1; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const fund = String(row[hdr.map.fund] ?? '').trim(), tk = String(row[hdr.map.ticker] ?? '').trim();
+    const sh = Number(row[hdr.map.shares]);
+    // A row left in the sheet with no shares is a position that has been sold out,
+    // not a holding.
+    if (!fund || !tk || !isFinite(sh) || Math.abs(sh) < 1e-9) continue;
+    if (!/endow|cee/i.test(fund)) continue;
+    positions.push({ fund, ticker: normTicker(row[hdr.map.priceSymbol] ?? tk),
+      shares: sh, costBasis: Number(row[hdr.map.costBasis]) || 0 });
+  }
+  // Cash sits in its own small block: a "Cash at snapshot" column with the fund beside it.
+  const cash = {};
+  const cashAt = _colUnder(rows, ['cashatsnapshot', 'cash']);
+  if (cashAt) _readDown(rows, { row: cashAt.row, col: cashAt.col - 1 }, [0, 1]).forEach(([f, v]) => {
+    if (f && isFinite(Number(v))) cash[String(f).trim()] = Number(v);
+  });
+  let asOf = null;
+  const d = _colUnder(rows, ['snapshotdate']);
+  if (d) { const v = (rows[d.row] || [])[d.col + 1]; asOf = v instanceof Date ? v.toISOString().slice(0, 10) : (v ? String(v).slice(0, 10) : null); }
+  return positions.length ? { positions, cash, asOf } : null;
+}
+
+function readTransactionsTab(rows) {
+  const hdr = findHeaderRow(rows,
+    { date: ['date'], fund: ['fund'], action: ['action'] },
+    { ticker: ['ticker', 'symbol'], shares: ['shares', 'quantity'], price: ['price'], amount: ['amount'], fees: ['fees', 'feescomm'], desc: ['description'] });
+  if (!hdr) return [];
+  const num = v => typeof v === 'number' ? v : (v == null || v === '' ? 0 : (parseFloat(String(v).replace(/[$,\s]/g, '')) || 0));
+  const tx = [];
+  for (let i = hdr.i + 1; i < rows.length; i++) {
+    const row = rows[i] || [], dv = row[hdr.map.date];
+    let ds = '';
+    if (dv instanceof Date) ds = dv.toISOString().slice(0, 10);
+    else if (typeof dv === 'number') ds = new Date((dv - 25569) * 86400000).toISOString().slice(0, 10);
+    else ds = String(dv ?? '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
+    const action = String(row[hdr.map.action] ?? '').trim();
+    if (!action) continue;
+    tx.push({ date: ds, fund: String(row[hdr.map.fund] ?? '').trim(),
+      ticker: normTicker(row[hdr.map.ticker] ?? ''), action,
+      shares: num(row[hdr.map.shares]), price: num(row[hdr.map.price]),
+      amount: num(row[hdr.map.amount]), fees: num(row[hdr.map.fees]),
+      desc: String(row[hdr.map.desc] ?? '').trim() });
+  }
+  return tx.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/* Builds the dashboard's holdings from the snapshot, using the fund tabs only for
+   a starting price (live prices replace it seconds later) and the Treasury line,
+   which the snapshot does not carry. */
+function parseMasterWorkbook(wb) {
+  const settings = readSettingsTab(_sheetRowsSafe(wb, findSheetName(wb, [/^settings$/i])));
+  const snapName = findSheetName(wb, [/^holdings\s*snapshot$/i, /snapshot/i]);
+  const snap = snapName ? readSnapshotTab(_sheetRows(wb, snapName)) : null;
+  if (!snap) return null;
+  const txName = findSheetName(wb, [/^transactions$/i, /^ledger$/i]);
+  const transactions = txName ? readTransactionsTab(_sheetRows(wb, txName)) : [];
+  const tabOf = {};
+  for (const [key, res] of [['endowment', [/^endowment/i]], ['ceeFund', [/^cee\s*fund/i]]]) {
+    const n = findSheetName(wb, res);
+    tabOf[key] = n ? parsePortfolioSheet(_sheetRows(wb, n), key === 'endowment' ? 'Endowment' : 'CEE Fund') : null;
+  }
+  const seedOf = key => {
+    const t = tabOf[key], m = {};
+    if (t) [...t.equities, ...t.etfs].forEach(h => { m[h.ticker] = h; });
+    return m;
+  };
+  const out = { endowment: { equities: [], etfs: [], cash: 0, bond: null }, ceeFund: { equities: [], etfs: [], cash: 0 },
+    transactions, settings, asOf: snap.asOf, warnings: [] };
+  const seeds = { endowment: seedOf('endowment'), ceeFund: seedOf('ceeFund') };
+  for (const pos of snap.positions) {
+    const key = /endow/i.test(pos.fund) ? 'endowment' : 'ceeFund';
+    const fundName = key === 'endowment' ? 'Endowment' : 'CEE Fund';
+    const tk = pos.ticker, seed = seeds[key][tk] || {};
+    const isEtf = (settings.typeMap[tk] || seed.type || (ETF_SECTORS[tk] ? 'etf' : 'equity')) === 'etf';
+    const price = seed.price > 0 ? seed.price : 0;        // live prices overwrite this on load
+    const marketValue = pos.shares * price;
+    // The committee's own sector wins; the built-in map is only a fallback.
+    const sector = settings.sectorMap[tk] || seed.sector || (isEtf ? ETF_SECTORS[tk] : null) || 'Unclassified';
+    const h = { ticker: tk, company: COMPANY_NAMES[tk] || seed.company || tk, shares: pos.shares,
+      costBasis: pos.costBasis, avgCost: pos.shares ? pos.costBasis / pos.shares : 0, price,
+      marketValue, dayPct: seed.dayPct || 0, dayDollar: seed.dayDollar || 0,
+      glDollar: marketValue - pos.costBasis, glPct: pos.costBasis ? (marketValue - pos.costBasis) / pos.costBasis : 0,
+      sector, beta: isEtf ? (ETF_BETAS[tk] ?? seed.beta ?? null) : (seed.beta ?? null),
+      type: isEtf ? 'etf' : 'equity', fund: fundName };
+    (isEtf ? out[key].etfs : out[key].equities).push(h);
+    if (seed.shares != null && Math.abs(seed.shares - pos.shares) > 1e-6)
+      out.warnings.push(`${fundName} ${tk}: snapshot ${pos.shares} vs tab ${seed.shares} shares`);
+  }
+  for (const [key, label] of [['endowment', 'Endowment'], ['ceeFund', 'CEE Fund']]) {
+    const c = Object.entries(snap.cash).find(([f]) => new RegExp(key === 'endowment' ? 'endow' : 'cee', 'i').test(f));
+    out[key].cash = c ? c[1] : (tabOf[key] ? tabOf[key].cash : 0);
+  }
+  const bonds = tabOf.endowment && tabOf.endowment.bonds;   // the Treasury is only on the fund tab
+  if (bonds && bonds.length) out.endowment.bond = bonds.length === 1 ? bonds[0] : bonds;
+  return out;
+}
+function _sheetRowsSafe(wb, name) { try { return name ? _sheetRows(wb, name) : null; } catch (e) { return null; } }
+
+/* Firebase keys cannot contain . # $ [ ] / and tickers do ("BRK.B", "BRK/B"), so the
+   maps travel as [key, value] pairs and are rebuilt on the way back in. */
+const _settingsForFirebase = st => ({
+  sectorMap: Object.entries(st.sectorMap || {}), typeMap: Object.entries(st.typeMap || {}),
+  symbolMap: Object.entries(st.symbolMap || {}), benchmarks: Object.entries(st.benchmarks || {}),
+  flowActions: st.flowActions || [], capClasses: Object.entries(st.capClasses || {})
+});
+const _asMap = v => Array.isArray(v) ? Object.fromEntries(v.filter(p => Array.isArray(p) && p.length >= 2)) : (v || {});
+
+// The committee's own maps take precedence over the dashboard's built-in ones.
+function applySettings(st) {
+  if (!st) return;
+  SETTINGS = { sectorMap: _asMap(st.sectorMap), typeMap: _asMap(st.typeMap), symbolMap: _asMap(st.symbolMap),
+    benchmarks: _asMap(st.benchmarks), flowActions: st.flowActions || [], capClasses: _asMap(st.capClasses) };
+  Object.entries(SETTINGS.benchmarks).forEach(([sec, etf]) => { SECTOR_BENCHMARKS[sec] = etf; });
+}
+
 /* Portfolio tabs are read by their headers, not by fixed column positions, so the
    sheet can gain a column, move a block, or start in a different column without the
    upload silently misreading it (a sheet whose used range began at column B once
@@ -4522,7 +4746,11 @@ const HDR_ALIASES={
 };
 const _hdrKey=v=>v==null?'':String(v).toLowerCase().replace(/[\s'\u2019._-]/g,'');
 // "BRK B", "BRK/B" and "BRK-B" all mean Berkshire class B.
-function normTicker(v){ return String(v==null?'':v).trim().toUpperCase().replace(/^BRK[\s\/.\-]?B$/,'BRK.B'); }
+function normTicker(v){
+  const t=String(v==null?'':v).trim().toUpperCase();
+  const mapped=(typeof SETTINGS!=='undefined'&&SETTINGS.symbolMap)?SETTINGS.symbolMap[t]:null;
+  return mapped||t.replace(/^BRK[\s\/.\-]?B$/,'BRK.B');
+}
 function parsePortfolioSheet(rows,fundName){
   const equities=[],etfs=[],bonds=[];
   let cash=0,map=null,section='equity',tCol=null,headers=0;
@@ -4957,7 +5185,37 @@ const FB_NODE = '/ceeThesis';
 // ── SHARED HOLDINGS SYNC (Firebase) ───────────────────────────────────────────
 const FB_HOLDINGS_NODE = '/ceeHoldings';
 const FB_HOLDINGS_BACKUP = '/ceeHoldingsBackup';
-async function saveHoldingsToFirebase(srcName){
+
+/* Applies a Master workbook upload: holdings from the snapshot, the ledger and the
+   committee's own maps, then live prices and the regression betas on top. */
+function commitMasterUpload(m, file, okEl, errEl, input) {
+  const nEnd = m.endowment.equities.length + m.endowment.etfs.length;
+  const nCee = m.ceeFund.equities.length + m.ceeFund.etfs.length;
+  if (!nEnd || !nCee) {
+    errEl.textContent = 'Upload aborted — the Holdings Snapshot tab produced no positions for one of the funds.';
+    errEl.style.display = 'block'; return;
+  }
+  applySettings(m.settings);
+  RAW.endowment.equities = m.endowment.equities; RAW.endowment.etfs = m.endowment.etfs; RAW.endowment.cash = m.endowment.cash;
+  if (m.endowment.bond) RAW.endowment.bond = m.endowment.bond;
+  RAW.ceeFund.equities = m.ceeFund.equities; RAW.ceeFund.etfs = m.ceeFund.etfs; RAW.ceeFund.cash = m.ceeFund.cash;
+  if (m.transactions.length) { TRANSACTIONS.length = 0; m.transactions.forEach(t => TRANSACTIONS.push(t)); }
+  apply3YBetas(); buildState(); renderAll();
+  const sectors = new Set([...RAW.endowment.equities, ...RAW.endowment.etfs, ...RAW.ceeFund.equities, ...RAW.ceeFund.etfs].map(h => h.sector));
+  okEl.innerHTML = `✅ Read from <strong>${file.name}</strong>` +
+    `<div style="font-size:11px;margin-top:4px">${nEnd} Endowment and ${nCee} CEE Fund positions as of ${m.asOf || 'the snapshot date'} · ` +
+    `${m.transactions.length.toLocaleString()} transactions · ${Object.keys(m.settings.sectorMap).length + sectors.size} sector assignments · ` +
+    `${Object.keys(m.settings.benchmarks).length} benchmark ETFs</div>` +
+    `<div style="font-size:10px;margin-top:4px;color:var(--muted)">Prices, market values, gains and betas are worked out here, not read from the sheet.</div>` +
+    (m.warnings.length ? `<div style="font-size:10px;margin-top:4px;color:var(--warning)">⚠ ${m.warnings.length} share-count difference${m.warnings.length > 1 ? 's' : ''} between the snapshot and the fund tabs: ${m.warnings.slice(0, 4).join('; ')}</div>` : '');
+  okEl.style.display = 'block';
+  document.getElementById('lastUpdate').textContent = `Uploaded: ${file.name}`;
+  input.value = '';
+  saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf });
+  fetchLivePrices().catch(() => {});      // the sheet carries no prices; quote everything now
+}
+
+async function saveHoldingsToFirebase(srcName, extra){
   try{
     // Back up the current live version first (rollback safety)
     try{ const cur=await fetch(FB_DB_URL+FB_HOLDINGS_NODE+'.json'); if(cur.ok){ const d=await cur.json(); if(d) await fetch(FB_DB_URL+FB_HOLDINGS_BACKUP+'.json',{method:'PUT',body:JSON.stringify(d)}); } }catch(e){}
@@ -4966,7 +5224,11 @@ async function saveHoldingsToFirebase(srcName){
       source:srcName||'upload',
       endowment:{equities:RAW.endowment.equities,etfs:RAW.endowment.etfs,cash:RAW.endowment.cash||0,bond:RAW.endowment.bond||null},
       ceeFund:{equities:RAW.ceeFund.equities,etfs:RAW.ceeFund.etfs,cash:RAW.ceeFund.cash||0},
-      transactions:TRANSACTIONS
+      transactions:TRANSACTIONS,
+      // The committee's sector map, benchmarks and symbol map travel with the holdings,
+      // so every visitor and the performance rebuild use the same definitions.
+      settings:_settingsForFirebase((extra&&extra.settings)||SETTINGS),
+      asOf:(extra&&extra.asOf)||null
     };
     const r=await fetch(FB_DB_URL+FB_HOLDINGS_NODE+'.json',{method:'PUT',body:JSON.stringify(payload)});
     if(r.ok){ console.log('✅ Holdings synced to Firebase — all users will see this on refresh'); const ok=document.getElementById('uploadSuccess'); if(ok)ok.textContent+=' · ☁ Synced to all users'; }
@@ -4986,6 +5248,7 @@ async function loadHoldingsFromFirebase(){
     if(d.endowment.bond)RAW.endowment.bond=d.endowment.bond;
     RAW.ceeFund.equities=d.ceeFund.equities; RAW.ceeFund.etfs=d.ceeFund.etfs||[]; RAW.ceeFund.cash=d.ceeFund.cash||0;
     if(Array.isArray(d.transactions)){ TRANSACTIONS.length=0; d.transactions.forEach(t=>TRANSACTIONS.push(t)); }
+    if(d.settings) applySettings(d.settings);
     if(d.updatedAt){ const dt=new Date(d.updatedAt); const lu=document.getElementById('lastUpdate'); if(lu)lu.textContent='Holdings as of '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
     console.log('✅ Shared holdings loaded from Firebase ('+(d.updatedAt||'unknown date')+')');
     return true;
