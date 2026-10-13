@@ -4635,6 +4635,46 @@ function readSnapshotTab(rows) {
   return positions.length ? { positions, cash, asOf } : null;
 }
 
+/* Excel hands dates back as Date objects (cellDates), as 1900-system serial
+   numbers, or as text, depending on how the cell was written. */
+const _isoDate = v => {
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (typeof v === 'number') return new Date((v - 25569) * 86400000).toISOString().slice(0, 10);
+  return String(v ?? '').slice(0, 10);
+};
+
+/* Price Data tab: a Date column with one column per ticker, the committee's own
+   daily closes. The dashboard never needs these - it quotes live prices - but the
+   performance rebuild does, for the stretches where the price provider has no
+   history of its own (Energy Transfer's, for one, now starts in July 2026). */
+function readPriceDataTab(rows) {
+  if (!rows || !rows.length) return null;
+  const hdr = findHeaderRow(rows, { date: ['date'] });
+  if (!hdr) return null;
+  const head = rows[hdr.i] || [];
+  const cols = [];
+  head.forEach((v, j) => {
+    const tk = normTicker(v);
+    if (j !== hdr.map.date && tk && /^[A-Z][A-Z0-9.\-]{0,9}$/.test(tk)) cols.push({ tk, j });
+  });
+  if (!cols.length) return null;
+  const dates = [], px = {};
+  cols.forEach(c => { px[c.tk] = []; });
+  for (let i = hdr.i + 1; i < rows.length; i++) {
+    const row = rows[i] || [], ds = _isoDate(row[hdr.map.date]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
+    dates.push(ds);
+    cols.forEach(c => {
+      const v = row[c.j];
+      px[c.tk].push(typeof v === 'number' && isFinite(v) && v > 0 ? Math.round(v * 1e4) / 1e4 : null);
+    });
+  }
+  if (!dates.length) return null;
+  // Drop any column that turned out to be empty.
+  for (const tk of Object.keys(px)) if (!px[tk].some(v => v != null)) delete px[tk];
+  return { dates, px };
+}
+
 function readTransactionsTab(rows) {
   const hdr = findHeaderRow(rows,
     { date: ['date'], fund: ['fund'], action: ['action'] },
@@ -4643,11 +4683,7 @@ function readTransactionsTab(rows) {
   const num = v => typeof v === 'number' ? v : (v == null || v === '' ? 0 : (parseFloat(String(v).replace(/[$,\s]/g, '')) || 0));
   const tx = [];
   for (let i = hdr.i + 1; i < rows.length; i++) {
-    const row = rows[i] || [], dv = row[hdr.map.date];
-    let ds = '';
-    if (dv instanceof Date) ds = dv.toISOString().slice(0, 10);
-    else if (typeof dv === 'number') ds = new Date((dv - 25569) * 86400000).toISOString().slice(0, 10);
-    else ds = String(dv ?? '').slice(0, 10);
+    const row = rows[i] || [], ds = _isoDate(row[hdr.map.date]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
     const action = String(row[hdr.map.action] ?? '').trim();
     if (!action) continue;
@@ -4670,6 +4706,7 @@ function parseMasterWorkbook(wb) {
   if (!snap) return null;
   const txName = findSheetName(wb, [/^transactions$/i, /^ledger$/i]);
   const transactions = txName ? readTransactionsTab(_sheetRows(wb, txName)) : [];
+  const priceHistory = readPriceDataTab(_sheetRowsSafe(wb, findSheetName(wb, [/^price\s*data$/i, /^prices$/i])));
   const tabOf = {};
   for (const [key, res] of [['endowment', [/^endowment/i]], ['ceeFund', [/^cee\s*fund/i]]]) {
     const n = findSheetName(wb, res);
@@ -4681,7 +4718,7 @@ function parseMasterWorkbook(wb) {
     return m;
   };
   const out = { endowment: { equities: [], etfs: [], cash: 0, bond: null }, ceeFund: { equities: [], etfs: [], cash: 0 },
-    transactions, settings, asOf: snap.asOf, warnings: [] };
+    transactions, settings, priceHistory, asOf: snap.asOf, warnings: [] };
   const seeds = { endowment: seedOf('endowment'), ceeFund: seedOf('ceeFund') };
   for (const pos of snap.positions) {
     const key = /endow/i.test(pos.fund) ? 'endowment' : 'ceeFund';
@@ -5185,6 +5222,7 @@ const FB_NODE = '/ceeThesis';
 // ── SHARED HOLDINGS SYNC (Firebase) ───────────────────────────────────────────
 const FB_HOLDINGS_NODE = '/ceeHoldings';
 const FB_HOLDINGS_BACKUP = '/ceeHoldingsBackup';
+const FB_PRICES_NODE = '/ceePriceHistory';   // read by the performance rebuild, not by the dashboard
 
 /* Applies a Master workbook upload: holdings from the snapshot, the ledger and the
    committee's own maps, then live prices and the regression betas on top. */
@@ -5205,13 +5243,15 @@ function commitMasterUpload(m, file, okEl, errEl, input) {
   okEl.innerHTML = `✅ Read from <strong>${file.name}</strong>` +
     `<div style="font-size:11px;margin-top:4px">${nEnd} Endowment and ${nCee} CEE Fund positions as of ${m.asOf || 'the snapshot date'} · ` +
     `${m.transactions.length.toLocaleString()} transactions · ${Object.keys(m.settings.sectorMap).length + sectors.size} sector assignments · ` +
-    `${Object.keys(m.settings.benchmarks).length} benchmark ETFs</div>` +
+    `${Object.keys(m.settings.benchmarks).length} benchmark ETFs` +
+    (m.priceHistory ? ` · ${m.priceHistory.dates.length.toLocaleString()} days of prices for ${Object.keys(m.priceHistory.px).length} tickers` : '') + `</div>` +
     `<div style="font-size:10px;margin-top:4px;color:var(--muted)">Prices, market values, gains and betas are worked out here, not read from the sheet.</div>` +
     (m.warnings.length ? `<div style="font-size:10px;margin-top:4px;color:var(--warning)">⚠ ${m.warnings.length} share-count difference${m.warnings.length > 1 ? 's' : ''} between the snapshot and the fund tabs: ${m.warnings.slice(0, 4).join('; ')}</div>` : '');
   okEl.style.display = 'block';
   document.getElementById('lastUpdate').textContent = `Uploaded: ${file.name}`;
   input.value = '';
   saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf });
+  savePriceHistoryToFirebase(m.priceHistory, file.name);
   fetchLivePrices().catch(() => {});      // the sheet carries no prices; quote everything now
 }
 
@@ -5235,6 +5275,20 @@ async function saveHoldingsToFirebase(srcName, extra){
     else console.warn('Holdings Firebase save returned',r.status);
   }catch(e){ console.warn('Holdings sync failed (kept locally):',e.message); }
 }
+/* The Price Data tab, published for the performance rebuild to fall back on.
+   It is kept out of /ceeHoldings deliberately: that node is fetched by every
+   visitor on every page load, and this table is around a megabyte. A failure
+   here is not an upload failure - the holdings are already saved. */
+async function savePriceHistoryToFirebase(ph, srcName){
+  if(!ph || !ph.dates || !ph.dates.length) return;
+  try{
+    const payload={ updatedAt:new Date().toISOString(), source:srcName||'upload', dates:ph.dates, px:Object.entries(ph.px) };
+    const r=await fetch(FB_DB_URL+FB_PRICES_NODE+'.json',{method:'PUT',body:JSON.stringify(payload)});
+    if(r.ok) console.log(`✅ Price history synced (${ph.dates.length} days, ${Object.keys(ph.px).length} tickers)`);
+    else console.warn('Price history save returned',r.status);
+  }catch(e){ console.warn('Price history sync failed:',e.message); }
+}
+
 async function loadHoldingsFromFirebase(){
   try{
     const r=await fetch(FB_DB_URL+FB_HOLDINGS_NODE+'.json');

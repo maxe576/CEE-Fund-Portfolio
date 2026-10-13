@@ -5,12 +5,13 @@ Two things feed the dashboard, and they are refreshed separately.
 | What | Source | How it updates |
 |---|---|---|
 | Holdings, sectors, cash, bond | the Excel workbook | you upload it in the dashboard |
-| Performance history, trade ledger, dividends | Schwab CSV exports | `node tools/build-performance.js && node tools/publish-performance.js` |
+| Performance history, trade ledger, dividends | the same upload | `node tools/build-performance.js && node tools/publish-performance.js` |
 
-The workbook alone keeps every holdings-driven tab correct. The rebuild is only
-needed when you want the Performance and Transactions tabs to reflect new
-trades, because those need years of daily prices that a browser upload cannot
-practically fetch.
+Everything now comes from one file. Uploading the workbook publishes the
+holdings, the transaction ledger, the sector and symbol maps and the Price Data
+tab to Firebase, and the rebuild reads all of it from there - no CSV export, no
+file path on anyone's machine. The rebuild is still a separate step only because
+it needs years of daily prices that a browser upload cannot practically fetch.
 
 ## Updating the workbook (the usual case)
 
@@ -44,6 +45,28 @@ Then:
    code and upload password, choose the file.
 
 ### Sheet layout the upload expects
+
+The reader looks for the Master workbook's four tabs first:
+
+| Tab | What it carries |
+|---|---|
+| **Holdings Snapshot** | Fund · Ticker · Shares · Cost Basis (· Price Symbol), plus `Snapshot date` and a `Cash at snapshot` block |
+| **Transactions** | the full ledger - see the columns below |
+| **Settings** | sector per ticker, equity/ETF per ticker, symbol aliases, sector benchmark ETFs, the actions that count as external flows |
+| **Price Data** | a Date column and one column per ticker of daily closes |
+
+Nothing is read by position. Tabs are found by name, the header row by its
+labels, and each column by its header text, so a column can move, a tab can be
+added, or a block can shift down the sheet without breaking the read. A row left
+in the snapshot with no shares is treated as sold out, not as a holding. If the
+Holdings Snapshot tab is missing, the reader falls back to the older layout
+below; if Settings is missing, the dashboard's own built-in maps are used.
+
+The Price Data tab is published to its own Firebase node, `/ceePriceHistory`,
+because `/ceeHoldings` is downloaded by every visitor on every page load and the
+price table is about a megabyte. Only the rebuild reads it.
+
+#### The older layout (still read if there is no snapshot tab)
 
 Three tabs: **Endowment**, **CEE Fund**, **Transactions**.
 
@@ -94,25 +117,38 @@ day it converts or is sold its value lands as a one-day gain. Two tools in
 - `PX_PROXY` - a holding with no history left anywhere, valued at the price the
   fund exited at: LHC Group (`50187A107`, cash merger at $170.00) and DISH
   (sold at $13.79).
+- **The workbook's Price Data tab**, used wherever the provider has no close.
+  A provider's history is not permanent: Yahoo now starts Energy Transfer at
+  2026-07-17, so ET was missing from NAV for the two years the funds held it
+  while its purchases still counted as money put to work, leaving Energy $1,502
+  (CEE) and $1,659 (Endowment) short. The workbook's own closes fill that in.
+  A ticker whose split falls inside the stretch being filled is skipped and
+  reported, because the provider's closes are back-adjusted for splits and the
+  workbook's are the raw price of the day.
 
 Actions in `POS_FLOW` (Buy, Sell, Cash Merger) are what move money into or out
 of a position; anything else that changes shares - dividend reinvestment, a
 spin-off - counts as return.
 
 **If the build prints `NOT WRITTEN`, nothing was changed.** The builder refuses to
-write its output when any holding came back with no price history, because a
+write its output when a holding could not be priced on a day it was held - either
+because its series is missing entirely or because the series does not reach back
+far enough - because a
 series with a missing holding looks plausible and is wrong (on 2026-09-22 Yahoo
 throttled 17 downloads and the CEE Fund would have read $194k instead of $220k).
 Each download is retried with backoff, a refused download is never cached, and if
 every attempt fails the last good saved prices are used - so re-running a few
 minutes later normally clears it.
 
-Update the four file paths and `ANCHOR` at the top of `build-performance.js`
-when new exports arrive. `ANCHOR` is the as-of date printed in the positions
-filename. Prices are cached in `tools/pxcache/`; delete it to force a refresh.
+There is nothing to edit before a rebuild. The anchor date, the share counts,
+the cash balances, the ledger and the sector map all come from the latest
+upload, so the sequence is always: upload the workbook in the dashboard, then
+run the two commands above. Prices are cached in `tools/pxcache/`; delete it to
+force a refresh.
 
-This writes two Firebase nodes, `/ceePerformance` and `/ceeTransactions`, and
-touches nothing else.
+This writes three Firebase nodes - `/ceePerformance`, `/ceeTransactions` and
+`/ceePerformanceHoldings` - and touches nothing else. In particular it never
+touches `/ceeThesis`, where the committee's written research lives.
 
 ## How positions are rebuilt
 
@@ -147,8 +183,11 @@ growth looks far larger than the fund earned.
 ## Known gaps
 
 - `DISH` (acquired) has no Yahoo price history, and two CUSIP-only symbols
-  (`30231G102` old Exxon, `50187A107` LHC Group) cannot be priced. Their value
-  is excluded from the days they were held.
+  (`30231G102` old Exxon, `50187A107` LHC Group) cannot be priced from the
+  provider. All three are valued by hand (`ALIAS` / `PX_PROXY`).
+- A ticker filled from the workbook's Price Data tab carries raw closes, so a
+  split in that stretch would be invisible. The builder refuses to fill such a
+  ticker rather than guess, and says which one it skipped.
 - The Treasury note is carried near par rather than marked to market.
 - `MBGL` (Mobility Global, spun off from ExxonMobil 07/01/2026) is classified
   under Financials in the workbook.

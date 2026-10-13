@@ -13,7 +13,8 @@ Current status of known issues. Everything below reflects what is actually in
 
 The dashboard reads and writes
 `https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com` (`/ceeHoldings`,
-`/ceeHoldingsBackup`, `/ceeThesis`, `/ceePerformance`) with unauthenticated REST
+`/ceeHoldingsBackup`, `/ceeThesis`, `/ceePerformance`,
+`/ceePerformanceHoldings`, `/ceeTransactions`, `/ceePriceHistory`) with unauthenticated REST
 calls. Anyone who views the page source can overwrite the club's holdings,
 thesis notes and performance history with a single `curl` command.
 

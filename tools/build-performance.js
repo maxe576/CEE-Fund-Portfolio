@@ -22,7 +22,7 @@ function lastCloseMs(){
 const LAST_CLOSE_MS=lastCloseMs();
 const cacheFresh=f=>{ const m=fs.statSync(f).mtimeMs; return Date.now()-m<CACHE_MAX_AGE_MS && m>=LAST_CLOSE_MS; };
 
-/* ---------- csv ---------- */
+/* ---------- csv (kept for the odd one-off import) ---------- */
 function parseCSV(t){const rows=[];let row=[],cell='',q=false;
  for(let i=0;i<t.length;i++){const c=t[i];
   if(q){if(c==='"'){if(t[i+1]==='"'){cell+='"';i++}else q=false}else cell+=c}
@@ -64,15 +64,6 @@ const INCOME=new Set(['Reinvest Dividend','Qual Div Reinvest','Qualified Dividen
 const FEES=new Set(['Foreign Tax Paid','ADR Mgmt Fee']);
 const EXTERNAL=new Set(['Wire Received','Wire Sent']);
 
-function load(p,fund){
- const rows=parseCSV(fs.readFileSync(p,'utf8')),h=rows[0].map(x=>x.trim()),ix=n=>h.indexOf(n);
- const out=[];
- for(let i=1;i<rows.length;i++){const r=rows[i];const a=(r[ix('Action')]||'').trim();if(!a)continue;
-  out.push({date:iso(r[ix('Date')]),action:a,sym:norm((r[ix('Symbol')]||'').trim()),
-   qty:num(r[ix('Quantity')]),price:money(r[ix('Price')]),fee:money(r[ix('Fees & Comm')]),
-   amt:money(r[ix('Amount')]),fund});}
- return out.filter(t=>t.date).sort((a,b)=>a.date.localeCompare(b.date));
-}
 
 /* ---------- prices ---------- */
 function fetchJSON(url){return new Promise((res,rej)=>{
@@ -124,6 +115,36 @@ async function getSeries(tk){
  return {px:{},splits:[],ok:false};
 }
 
+/* The committee's own Price Data tab, published alongside the workbook.
+   A price provider's history is not permanent: Yahoo now starts Energy Transfer
+   at 2026-07-17, which left ET out of NAV for the two years the funds held it
+   while its purchases still counted as money put to work - the Energy sector
+   came out $1,502 (CEE) and $1,659 (Endowment) short. Where the provider has no
+   close for a day, the workbook's close for that day is used instead.
+
+   Splits are the one thing to be careful of here: the provider's closes are
+   back-adjusted for later splits and the workbook's are the raw price of the
+   day, so a ticker with a split inside the stretch being filled is left alone
+   rather than valued on two different bases. */
+function fillFromWorkbook(S,tickers,WB){
+ if(!WB||!WB.dates||!WB.dates.length) return;
+ const used=[],skipped=[];
+ for(const tk of tickers){
+  const col=WB.px[tk]; if(!col) continue;
+  const ser=S[tk]||(S[tk]={px:{},splits:[],ok:false});
+  const gaps=[];
+  WB.dates.forEach((d,i)=>{ const v=col[i]; if(v!=null&&ser.px[d]==null) gaps.push([d,v]); });
+  if(!gaps.length) continue;
+  const from=gaps[0][0];
+  if((ser.splits||[]).some(sp=>sp.date>=from)){ skipped.push(tk); continue; }
+  gaps.forEach(([d,v])=>{ ser.px[d]=v; });
+  ser.ok=Object.keys(ser.px).length>0;
+  used.push(`${tk} ${gaps.length}d from ${from}`);
+ }
+ if(used.length) console.log(`  workbook prices filled provider gaps: ${used.join(', ')}`);
+ if(skipped.length) console.log(`  workbook prices skipped (split inside the gap): ${skipped.join(', ')}`);
+}
+
 async function pool(items,n,fn){const res=[];let i=0;
  await Promise.all(Array.from({length:n},async()=>{while(i<items.length){const k=i++;res[k]=await fn(items[k],k)}}));
  return res}
@@ -146,67 +167,74 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  return (lo+hi)/2;
 }
 
-/* Positions export -> the anchor the reconstruction is pinned to.
-   Reading the dated Schwab file rather than the holdings node means the anchor
-   date is never in doubt. The earlier version trusted Firebase, whose as-of date
-   had to be recovered by matching prices because a workbook filename said April
-   while its contents were actually July. */
-function loadPositions(p){
- const rows=parseCSV(fs.readFileSync(p,'utf8'));
- const h=rows.findIndex(r=>r[0]==='Symbol');
- const hdr=rows[h].map(x=>x.trim());
- const ix=n=>hdr.findIndex(c=>c.startsWith(n));
- const iQty=ix('Qty'), iMv=ix('Mkt Val'), iType=ix('Asset Type');
- const out={shares:{},cash:0,type:{}};
- for(let i=h+1;i<rows.length;i++){
-  const r=rows[i]; if(!r||!r[0]) continue;
-  const sym=r[0].trim();
-  if(sym==='Positions Total') continue;
-  if(sym.startsWith('Cash')){ out.cash=money(r[iMv]); continue; }
-  const tk=norm(sym), q=num(r[iQty]), at=(r[iType]||'').trim();
-  if(!q) continue;
-  out.shares[tk]=q;
-  out.type[tk]=at.startsWith('ETF')?'etf':at.startsWith('Fixed')?'bond':'equity';
- }
- return out;
-}
-
 (async()=>{
- // Anchor = the as-of date carried in the positions export filenames.
- const ANCHOR='2026-09-02';
- const DL='C:\\Users\\Wmaxe\\Downloads\\';
- const FUNDS=[
-  {name:'CEE Fund',key:'ceeFund',
-   file:DL+'CEE_Fund_Portfolio_XXX948_Transactions_20260812-085629.csv',
-   pos:DL+'CEE Fund Portfolio-Positions-2026-09-02-140153.csv'},
-  {name:'Endowment',key:'endowment',
-   file:DL+'CEE_Fund_Mngd_Endow_XXX047_Transactions_20260812-085807.csv',
-   pos:DL+'CEE Fund Mngd Endow-Positions-2026-09-02-140132.csv'}];
-
- // Sector labels stay with the dashboard holdings, where the committee maintains
- // them; the positions export supplies share counts and cash.
+ /* Everything comes from the workbook the dashboard uploaded, published at
+    /ceeHoldings: the Holdings Snapshot is the anchor (its date, share counts and
+    cash), the Transactions tab is the ledger, and the Settings maps say which
+    sector each ticker belongs to, which symbols are the same security, and which
+    actions move money in or out of the funds. Nothing is read from a CSV sitting
+    on one person's computer any more, so a rebuild needs only the latest upload -
+    which is also what lets this run unattended. */
  const live=await get('https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeHoldings.json');
- const sectorOf={}, typeOf={};
- for(const f of FUNDS){const lf=live[f.key]||{};
-  (lf.equities||[]).forEach(h=>{sectorOf[h.ticker]=h.sector||'Other';typeOf[h.ticker]='equity'});
-  (lf.etfs||[]).forEach(h=>{sectorOf[h.ticker]=h.sector||'Other';typeOf[h.ticker]='etf'});}
-
- const universe=new Set();
- // Transactions after the last CSV export, reconstructed from the August
- // statements and validated to reproduce the 9/2 positions exactly.
- const extraPath=path.join(__dirname,'new_tx.json');
- const extra=fs.existsSync(extraPath)?JSON.parse(fs.readFileSync(extraPath,'utf8')):[];
- for(const f of FUNDS){ f.tx=load(f.file,f.name); f.positions=loadPositions(f.pos);
-  for(const row of extra){
-   const [d,fund,t,a,q,pr,amt]=row, desc=row[7]||'';
-   if(fund!==f.name) continue;
-   f.tx.push({date:d,action:a,sym:norm(t||''),qty:q||0,price:pr||0,fee:0,amt:amt||0,fund:f.name,desc});
+ if(!live||!live.endowment||!live.ceeFund){ console.error('No uploaded holdings found at /ceeHoldings.'); process.exit(1); }
+ const ANCHOR=String(live.asOf||'').slice(0,10);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(ANCHOR)){
+  console.error('The uploaded holdings carry no snapshot date. Upload the Master workbook (its Holdings Snapshot tab dates the anchor).');
+  process.exit(1);
+ }
+ const asMap=v=>Array.isArray(v)?Object.fromEntries(v.filter(x=>Array.isArray(x)&&x.length>=2)):(v||{});
+ // The workbook's Price Data tab rides in its own node: /ceeHoldings is fetched by
+ // every visitor on every page load and this table is about a megabyte.
+ let WBPX=null;
+ try{
+  const ph=await get('https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceePriceHistory.json');
+  if(ph&&Array.isArray(ph.dates)&&ph.dates.length){
+   WBPX={dates:ph.dates,px:asMap(ph.px)};
+   console.log(`workbook prices: ${ph.dates.length} days, ${Object.keys(WBPX.px).length} tickers (${ph.dates[0]} -> ${ph.dates[ph.dates.length-1]})`);
   }
-  f.tx.sort((x,y)=>x.date.localeCompare(y.date));
-  f.tx.forEach(t=>{if(t.sym&&!IS_CUSIP(t.sym))universe.add(t.sym)});
-  Object.keys(f.positions.shares).forEach(t=>{ if(!IS_CUSIP(t)) universe.add(t);
-   if(!typeOf[t]) typeOf[t]=f.positions.type[t]||'equity';
-   if(!sectorOf[t]) sectorOf[t]='Other'; }); }
+ }catch(e){ console.warn('no workbook price history available:',e.message); }
+ const st=live.settings||{};
+ const SYMBOL_MAP=asMap(st.symbolMap), SECTOR_MAP=asMap(st.sectorMap), TYPE_MAP=asMap(st.typeMap);
+ const normSym=x=>{ const t=String(x||'').trim().toUpperCase(); return SYMBOL_MAP[t]||ALIAS[t]||t; };
+ // The workbook lists the actions that move capital in or out; fall back to the built-in pair.
+ if(Array.isArray(st.flowActions)&&st.flowActions.length){ EXTERNAL.clear(); st.flowActions.forEach(a=>EXTERNAL.add(String(a).trim())); }
+
+ const FUNDS=[{name:'CEE Fund',key:'ceeFund'},{name:'Endowment',key:'endowment'}];
+ const sectorOf={}, typeOf={};
+ for(const [tk,sec] of Object.entries(SECTOR_MAP)) if(sec) sectorOf[normSym(tk)]=sec;
+ for(const [tk,ty] of Object.entries(TYPE_MAP)) typeOf[normSym(tk)]=ty==='etf'?'etf':'equity';
+ for(const f of FUNDS){
+  const lf=live[f.key]||{};
+  (lf.equities||[]).forEach(h=>{ const t=normSym(h.ticker); sectorOf[t]=h.sector||sectorOf[t]||'Other'; typeOf[t]='equity'; });
+  (lf.etfs||[]).forEach(h=>{ const t=normSym(h.ticker); sectorOf[t]=h.sector||sectorOf[t]||'Other'; typeOf[t]='etf'; });
+ }
+
+ const ledgerRows=Array.isArray(live.transactions)?live.transactions:[];
+ if(!ledgerRows.length){ console.error('The uploaded holdings carry no transactions.'); process.exit(1); }
+ const universe=new Set();
+ for(const f of FUNDS){
+  // One ledger covers both funds; split it and put it in the shape the walk expects.
+  f.tx=ledgerRows.filter(t=>String(t.fund||'').trim()===f.name)
+   .map(t=>({date:String(t.date||'').slice(0,10),action:String(t.action||'').trim(),
+     sym:t.ticker?normSym(t.ticker):'',qty:+t.shares||0,price:+t.price||0,fee:+t.fees||0,
+     amt:+t.amount||0,fund:f.name,desc:t.desc||t.description||''}))
+   .filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&t.action)
+   .sort((a,b)=>a.date.localeCompare(b.date));
+  const lf=live[f.key]||{}, shares={}, type={};
+  [...(lf.equities||[]),...(lf.etfs||[])].forEach(h=>{ const t=normSym(h.ticker); if(h.shares) shares[t]=h.shares; type[t]=h.type==='etf'?'etf':'equity'; });
+  // The Treasury is held outside the equity and ETF lists.
+  (lf.bond?(Array.isArray(lf.bond)?lf.bond:[lf.bond]):[]).forEach(b=>{
+   if(b&&b.ticker&&b.shares){ shares[normSym(b.ticker)]=b.shares; type[normSym(b.ticker)]='bond'; sectorOf[normSym(b.ticker)]='Fixed Income'; }
+  });
+  f.positions={shares,cash:+lf.cash||0,type};
+  f.tx.forEach(t=>{ if(t.sym&&!IS_CUSIP(t.sym)) universe.add(t.sym); });
+  Object.keys(shares).forEach(t=>{ if(!IS_CUSIP(t)) universe.add(t);
+   if(!typeOf[t]) typeOf[t]=type[t]||'equity';
+   if(!sectorOf[t]) sectorOf[t]='Other'; });
+ }
+ console.log(`anchor ${ANCHOR} from ${live.source||'the uploaded workbook'} - ${ledgerRows.length} ledger rows, ` +
+   `${FUNDS.map(f=>f.name+' '+Object.keys(f.positions.shares).length).join(', ')} positions`);
+
  const BENCH=['SPY','QQQ','VTI','VOO','XLK','XLF','XLV','XLY','XLC','XLI','XLP','XLE','XLU','XLB','XLRE','AGG'];
  BENCH.forEach(b=>universe.add(b));
  const tickers=[...universe].sort();
@@ -214,6 +242,7 @@ function loadPositions(p){
 
  const seriesArr=await pool(tickers,4,getSeries);   // 8 at once is what Yahoo throttled
  const S={}; tickers.forEach((t,i)=>S[t]=seriesArr[i]);
+ fillFromWorkbook(S,tickers,WBPX);
  const failed=tickers.filter(t=>!S[t].ok);
  console.log(`  ok=${tickers.length-failed.length}  failed=${failed.length}${failed.length?' -> '+failed.join(', '):''}`);
 
@@ -271,6 +300,10 @@ function loadPositions(p){
   tx.forEach(t=>{(byDate[t.date]=byDate[t.date]||[]).push(t)});
 
   const nav=[],flows=[],eqNav=[],etfNav=[],eqFlow=[],etfFlow=[],secNav={},secFlow={},missing=new Set();
+  // Days a holding was held but could not be priced. These do not show up in
+  // `missing` - the series exists, it just does not reach back far enough - and
+  // they are what made the sector totals and the position totals disagree.
+  const unpricedDays={};
   // Per-position daily value and flow, so we can report what WE earned on a
   // holding rather than what the security did. Buying NVDA in March means our
   // return starts in March, not on 1 January.
@@ -294,7 +327,8 @@ function loadPositions(p){
              const keys=Object.keys(ser.px); let last=null;
              for(let i=keys.length-1;i>=0;i--) if(keys[i]<=d){last=ser.px[keys[i]];break;}
              px=last; }
-           if(px==null) continue; }
+           if(px==null){ (unpricedDays[tk]=unpricedDays[tk]||{days:0,first:d,last:d}).days++;
+             unpricedDays[tk].last=d; continue; } }
     const v=sh*px; total+=v;
     const ty=typeOf[tk]||'equity';
     if(ty==='etf')etf+=v; else eq+=v;
@@ -311,6 +345,10 @@ function loadPositions(p){
     if(!POS_FLOW.has(t.action)) continue;
     tkFlowDay[t.sym]=(tkFlowDay[t.sym]||0)-t.amt;
    }
+   // A ticket on a holding we could not value still happened. Give it a series of
+   // zeros so the flow is kept: dropping it is how Energy's sector total came to
+   // show purchases the position series knew nothing about.
+   for(const k of Object.keys(tkFlowDay)) if(!tkVal[k]) tkVal[k]=new Array(nav.length+1).fill(0);
    for(const k of Object.keys(tkVal)){
     if(!tkFlow[k]) tkFlow[k]=new Array(tkVal[k].length-1).fill(0);
     tkFlow[k].push(+(tkFlowDay[k]||0).toFixed(2));
@@ -324,7 +362,7 @@ function loadPositions(p){
     const sname=sectorOf[t.sym]||'Other';
     secFlowDay[sname]=(secFlowDay[sname]||0)-t.amt;   // buy amt is negative -> positive inflow
    }
-   for(const k of Object.keys(sec)) if(!(k in secFlow)) secFlow[k]=new Array(nav.length).fill(0);
+   for(const k of [...Object.keys(sec),...Object.keys(secFlowDay)]) if(!(k in secFlow)) secFlow[k]=new Array(nav.length).fill(0);
    for(const k of Object.keys(secFlow)) secFlow[k].push(+(secFlowDay[k]||0).toFixed(2));
    // same idea for the equity / ETF sleeves so their returns are real returns
    let eqF=0,etF=0;
@@ -438,7 +476,8 @@ function loadPositions(p){
    irr: irr!=null?+(irr*100).toFixed(2):null,
    externalFlows:+flows.reduce((a,b)=>a+b,0).toFixed(2),   // wires only, excl. opening NAV
    startNav:nav[0], endNav:nav[nav.length-1],
-   missingPrices:[...missing]
+   missingPrices:[...missing],
+   unpricedDays
   };
   const twrTotal=(twr[twr.length-1]/twr[0]-1)*100;
   console.log(`\n${f.name}`);
@@ -448,6 +487,8 @@ function loadPositions(p){
   console.log(`  TIME-weighted return   : ${twrTotal.toFixed(2)}%   (comparable to SPY)`);
   console.log(`  MONEY-weighted (IRR)   : ${irr!=null?(irr*100).toFixed(2)+'%/yr':'n/a'}`);
   if(missing.size) console.log(`  unpriced tickers: ${[...missing].join(', ')}`);
+  for(const [tk,u] of Object.entries(unpricedDays))
+   console.log(`  ${tk}: held but no price on ${u.days} day${u.days>1?'s':''} (${u.first} -> ${u.last})`);
  }
 
  // benchmarks over the same calendar
@@ -461,10 +502,14 @@ function loadPositions(p){
  OUT.meta.sectorOf=sectorOf; OUT.meta.typeOf=typeOf;
 
  {
-  const unpriced=Object.values(OUT.funds).flatMap(f=>(f.missingPrices||[]).map(t=>f.name+': '+t));
+  const unpriced=Object.values(OUT.funds).flatMap(f=>[
+   ...(f.missingPrices||[]).map(t=>`${f.name}: ${t} (no price history at all)`),
+   ...Object.entries(f.unpricedDays||{}).map(([t,u])=>`${f.name}: ${t} (held ${u.days} day${u.days>1?'s':''} with no price, ${u.first} -> ${u.last})`)
+  ]);
   if(unpriced.length){
-   console.error('\nNOT WRITTEN - these holdings have no price history, so the fund values would be wrong:\n  '+unpriced.join('\n  '));
-   console.error('Re-run in a few minutes, or add the symbol to ALIAS / PX_PROXY if it will never price.');
+   console.error('\nNOT WRITTEN - these holdings could not be priced for days they were held, so the fund values would be wrong:\n  '+unpriced.join('\n  '));
+   console.error("Add the missing closes to the workbook's Price Data tab and re-upload, re-run in a few minutes,");
+   console.error('or add the symbol to ALIAS / PX_PROXY if it will never price again.');
    process.exit(1);
   }
  }
