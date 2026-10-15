@@ -272,7 +272,7 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   f.tx=ledgerRows.filter(t=>String(t.fund||'').trim()===f.name)
    .map(t=>({date:String(t.date||'').slice(0,10),action:String(t.action||'').trim(),
      sym:t.ticker?normSym(t.ticker):'',qty:+t.shares||0,price:+t.price||0,fee:+t.fees||0,
-     amt:+t.amount||0,fund:f.name,desc:t.desc||t.description||''}))
+     amt:+t.amount||0,fund:f.name,desc:t.desc||t.description||'',est:t.est?1:0}))
    .filter(t=>/^\d{4}-\d{2}-\d{2}$/.test(t.date)&&t.action)
    .sort((a,b)=>a.date.localeCompare(b.date));
   const lf=live[f.key]||{}, shares={}, type={};
@@ -642,6 +642,8 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
    const sf=t.sym&&!IS_CUSIP(t.sym)?splitFactor(t.sym,t.date):1;
    const rec={d:t.date,f:f.key==='ceeFund'?'C':'E',a:t.action,t:t.sym||null,
     q:t.qty||null,p:t.price||null,m:t.amt||0,e:t.fee||0,desc:t.desc||''};
+   // worked out from the position snapshots rather than confirmed by the broker
+   if(t.est) rec.est=1;
    if(Math.abs(sf-1)>1e-9) rec.sf=+sf.toFixed(6);
    ledger.push(rec);
   }

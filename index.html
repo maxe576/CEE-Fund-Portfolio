@@ -2421,7 +2421,15 @@ function renderTrades() {
           // Cash movements carry no ticker, so the description is the only thing
           // that says what they were for.
           (t.desc && !t.t ? '<div style="font-size:9px;color:var(--gold);font-weight:600;margin-top:2px">'
-            + t.desc + '</div>' : '') + '</td>' +
+            + t.desc + '</div>' : '') +
+          /* A trade the workbook worked out by comparing position snapshots,
+             because the broker's transaction export has not reached it yet. The
+             shares and the cash are right - the fund holds what it holds - but
+             the date is an estimate and the trade is not confirmed, so it should
+             never be presented as though it came off a statement. */
+          (t.est ? '<div style="font-size:9px;color:var(--warning);font-weight:600;margin-top:2px" ' +
+            'title="Worked out from the position snapshots - the broker\'s transaction export has not ' +
+            'reached this trade yet, so the date is approximate">estimated</div>' : '') + '</td>' +
         tickerCell(t.t) +
         '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') +
           (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600">&rarr; ' + adjSh.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' after split</div>' : '') + '</td>' +
