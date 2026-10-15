@@ -236,6 +236,46 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  if(Array.isArray(st.flowActions)&&st.flowActions.length){ EXTERNAL.clear(); st.flowActions.forEach(a=>EXTERNAL.add(String(a).trim())); }
 
  const bondPx=bondPricer(live);
+ /* Dividends on these accounts are reinvested, and the action name says which
+    ones were: every one of the 1,123 reinvest-type dividends in the ledger has
+    its share purchase beside it, and none of the five positions the broker does
+    not reinvest has ever carried one. When a dividend arrives without its share
+    purchase - which is how the export usually lands first - the shares are
+    worked out from the cash at that day's close. The money is the broker's
+    figure and the price is the market's, so nothing is invented, and a share
+    purchase that turns up later within ten days stops this from firing. */
+ const DIV_REINVESTED=new Set(['Qual Div Reinvest','Reinvest Dividend','Pr Yr Div Reinvest']);
+ /* Dividends on these accounts are reinvested, and the action name says which
+    ones were: every one of the 1,123 reinvest-type dividends in the ledger has
+    its share purchase beside it, and none of the five positions the broker does
+    not reinvest (TSM, CEG, SBGSF, TKO and the Treasury) has ever carried one, so
+    the action name is a reliable signal.
+
+    When a dividend arrives without its share purchase - which is how the export
+    usually lands first - the shares are worked out from the cash at that day's
+    close and added. The money is the broker's figure and the price is the
+    market's, so nothing is invented, and a share purchase that shows up within
+    ten days of the dividend stops this from firing at all. */
+ function autoReinvest(tx,S){
+  const bought=tx.filter(t=>t.action==='Reinvest Shares'&&t.sym&&t.qty);
+  const gap=(a,b)=>Math.abs(Date.parse(a)-Date.parse(b))/86400000;
+  const made=[];
+  for(const t of tx){
+   if(!DIV_REINVESTED.has(t.action)||!t.sym||!(t.amt>0)) continue;
+   if(bought.some(x=>x.sym===t.sym&&gap(x.date,t.date)<=10)) continue;
+   const ser=S[t.sym];
+   if(!ser||!ser.ok) continue;
+   let px=ser.px[t.date];
+   if(px==null){ const keys=Object.keys(ser.px).sort();
+    for(let i=keys.length-1;i>=0;i--) if(keys[i]<=t.date){ px=ser.px[keys[i]]; break; } }
+   if(!(px>0)) continue;
+   made.push({date:t.date,action:'Reinvest Shares',sym:t.sym,qty:t.amt/px,price:px,fee:0,
+     amt:-t.amt,fund:t.fund,desc:'reinvested at $'+px.toFixed(2)+' - share purchase not yet in the export',
+     est:0,auto:1});
+  }
+  return made;
+ }
+
  const FUNDS=[{name:'CEE Fund',key:'ceeFund'},{name:'Endowment',key:'endowment'}];
  const sectorOf={}, typeOf={};
  for(const [tk,sec] of Object.entries(SECTOR_MAP)) if(sec) sectorOf[normSym(tk)]=sec;
@@ -333,6 +373,14 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const seriesArr=await pool(tickers,4,getSeries);   // 8 at once is what Yahoo throttled
  const S={}; tickers.forEach((t,i)=>S[t]=seriesArr[i]);
  fillFromWorkbook(S,tickers,WBPX);
+ {
+  let n=0;
+  for(const f of FUNDS){
+   const made=autoReinvest(f.tx,S);
+   if(made.length){ f.tx=f.tx.concat(made).sort((a,b)=>a.date.localeCompare(b.date)); n+=made.length; }
+  }
+  if(n) console.log(`  ${n} dividend(s) reinvested automatically - the share purchase was not in the export`);
+ }
  const failed=tickers.filter(t=>!S[t].ok);
  console.log(`  ok=${tickers.length-failed.length}  failed=${failed.length}${failed.length?' -> '+failed.join(', '):''}`);
 

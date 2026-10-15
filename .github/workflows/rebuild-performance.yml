@@ -1,0 +1,71 @@
+# Rebuilds the performance history after the close and publishes it.
+#
+# The dashboard's holdings refresh themselves - every visitor's browser quotes
+# live prices - but the daily series behind the Performance tab is built by a
+# Node job, and until now somebody had to remember to run it. This runs it on a
+# schedule instead, so the history keeps up with the market on its own and the
+# only manual step left is uploading the workbook when transactions change.
+#
+# It reads the published upload from Firebase and writes the three series nodes
+# back. It needs no secrets and commits nothing.
+
+name: Rebuild performance history
+
+on:
+  schedule:
+    # 22:30 UTC on weekdays: 6:30pm New York in summer, 5:30pm in winter, so it
+    # is always after the 4:15pm cut-off the builder uses to decide whether
+    # today has a close worth including.
+    - cron: '30 22 * * 1-5'
+  workflow_dispatch:        # and on demand, from the Actions tab
+
+# Two runs writing the same nodes at once would be pointless, not harmful, but
+# queue them anyway.
+concurrency:
+  group: rebuild-performance
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Daily closes rarely change once written, so carrying the cache between
+      # runs saves re-downloading 135 tickers and keeps us well clear of the
+      # rate limit that once had the builder throttled.
+      - name: Restore price cache
+        uses: actions/cache@v4
+        with:
+          path: tools/pxcache
+          key: pxcache-${{ github.run_id }}
+          restore-keys: |
+            pxcache-
+
+      - name: Build
+        run: node tools/build-performance.js
+
+      # Only runs if the build exited cleanly. The builder refuses to write when
+      # a holding could not be priced for a day it was held, which is exactly
+      # the case where publishing would be worse than publishing nothing.
+      - name: Publish
+        run: node tools/publish-performance.js
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Performance rebuild" >> $GITHUB_STEP_SUMMARY
+          echo "Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          if [ -f tools/perf.json ]; then
+            node -e "const p=require('./tools/perf.json');
+              console.log('Window: '+p.dates[0]+' to '+p.dates[p.dates.length-1]);
+              console.log('Built from: '+(p.source||'unknown'));
+              for (const [k,f] of Object.entries(p.funds))
+                console.log(f.name+': \$'+Math.round(f.nav[f.nav.length-1]).toLocaleString());
+            " >> $GITHUB_STEP_SUMMARY
+          fi

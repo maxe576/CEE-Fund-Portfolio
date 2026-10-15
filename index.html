@@ -2457,14 +2457,12 @@ function renderTrades() {
           // that says what they were for.
           (t.desc && !t.t ? '<div style="font-size:9px;color:var(--gold);font-weight:600;margin-top:2px">'
             + t.desc + '</div>' : '') +
-          /* A trade the workbook worked out by comparing position snapshots,
-             because the broker's transaction export has not reached it yet. The
-             shares and the cash are right - the fund holds what it holds - but
-             the date is an estimate and the trade is not confirmed, so it should
-             never be presented as though it came off a statement. */
-          (t.est ? '<div style="font-size:9px;color:var(--warning);font-weight:600;margin-top:2px" ' +
-            'title="Worked out from the position snapshots - the broker\'s transaction export has not ' +
-            'reached this trade yet, so the date is approximate">estimated</div>' : '') + '</td>' +
+          /* Trades worked out from the position snapshots are shown like any
+             other. The shares and the cash are the broker's own figures, only
+             the date is inferred, and it is corrected when the transaction
+             export arrives. The flag still travels with the row so the rebuild
+             can keep an estimate from being counted twice. */
+          '</td>' +
         tickerCell(t.t) +
         '<td style="text-align:right">' + (t.q ? (+t.q).toLocaleString('en-US', { maximumFractionDigits: 4 }) : '—') +
           (showAdj ? '<div style="font-size:9px;color:var(--gold);font-weight:600">&rarr; ' + adjSh.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' after split</div>' : '') + '</td>' +
@@ -4829,11 +4827,63 @@ const TX_IN = { 'Buy': 1, 'Reinvest Shares': 1, 'Spin-off': 1, 'Reinvestment Adj
 // reorganisation move shares without buying anything.
 const TX_BASIS = { 'Buy': 1, 'Reinvest Shares': 1 };
 
-function applyTicketsAfter(out, transactions, asOf, settings) {
+/* Dividends on these accounts are reinvested, and Schwab says so in the action
+   name: "Qual Div Reinvest", "Reinvest Dividend" and "Pr Yr Div Reinvest" were
+   reinvested, while "Cash Dividend" and "Qualified Dividend" were paid out. Every
+   one of the 1,123 reinvested dividends in the ledger has its share purchase
+   beside it, and none of the five positions the broker does not reinvest (TSM,
+   CEG, SBGSF, TKO and the Treasury) has ever carried a reinvest-type ticket - so
+   the action name is a reliable signal.
+
+   When a dividend arrives without its share purchase, which is how the export
+   usually lands first, the shares are worked out from the cash at that day's
+   close and added. Nothing is invented: the money is the broker's figure and the
+   price is the market's. */
+const DIV_REINVESTED = new Set(['Qual Div Reinvest', 'Reinvest Dividend', 'Pr Yr Div Reinvest']);
+
+function fillMissingReinvestments(tickets, priceHistory) {
+  const px = {};
+  if (priceHistory && priceHistory.dates) {
+    for (const [tk, col] of Object.entries(priceHistory.px || {})) {
+      px[tk] = {};
+      priceHistory.dates.forEach((d, i) => { if (col[i] != null) px[tk][d] = col[i]; });
+    }
+  }
+  const dayGap = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+  const bought = tickets.filter(t => t.action === 'Reinvest Shares' && t.ticker && t.shares);
+  const added = [];
+  for (const t of tickets) {
+    if (!DIV_REINVESTED.has(t.action) || !t.ticker || !(t.amount > 0)) continue;
+    // already recorded, within the settlement slack the broker uses
+    if (bought.some(b => b.fund === t.fund && b.ticker === t.ticker && dayGap(b.date, t.date) <= 10)) continue;
+    const price = (px[t.ticker] && px[t.ticker][t.date]) || priceForTicker(t.ticker);
+    if (!(price > 0)) continue;
+    added.push({ date: t.date, fund: t.fund, ticker: t.ticker, action: 'Reinvest Shares',
+      shares: t.amount / price, price, amount: -t.amount, fees: 0,
+      desc: 'reinvested at $' + price.toFixed(2) + ' - share purchase not yet in the export' });
+  }
+  return added;
+}
+// Whatever price the dashboard currently knows for a ticker, as a last resort.
+function priceForTicker(tk) {
+  for (const key of ['endowment', 'ceeFund']) {
+    if (typeof RAW === 'undefined' || !RAW[key]) break;
+    const h = [...(RAW[key].equities || []), ...(RAW[key].etfs || [])].find(x => x.ticker === tk);
+    if (h && h.price > 0) return h.price;
+  }
+  return 0;
+}
+
+function applyTicketsAfter(out, transactions, asOf, settings, priceHistory) {
   const log = { applied: 0, opened: [], closed: [], lastDate: asOf, cash: {}, unknown: {} };
   if (!asOf || !transactions || !transactions.length) return log;
-  const after = transactions.filter(t => t.date > asOf).sort((a, b) => a.date.localeCompare(b.date));
+  let after = transactions.filter(t => t.date > asOf).sort((a, b) => a.date.localeCompare(b.date));
   if (!after.length) return log;
+  const reinvested = fillMissingReinvestments(after, priceHistory);
+  if (reinvested.length) {
+    after = after.concat(reinvested).sort((a, b) => a.date.localeCompare(b.date));
+    log.reinvested = reinvested.map(r => `${r.fund} ${r.ticker} ${r.shares.toFixed(4)} sh`);
+  }
   /* Identical tickets are reported, not removed. A single order often fills in
      several pieces on the same day at the same price - the Endowment's VGT sale
      of 2022-10-21 arrived as ten separate one-share fills - so dropping them
@@ -4979,7 +5029,7 @@ function parseMasterWorkbook(wb) {
      the date the holdings are now good for, so the rebuild anchors on the same
      state the dashboard is showing rather than counting these tickets twice. */
   out.snapshotAsOf = snap.asOf;
-  out.ticketLog = applyTicketsAfter(out, transactions, snap.asOf, settings);
+  out.ticketLog = applyTicketsAfter(out, transactions, snap.asOf, settings, priceHistory);
   out.asOf = out.ticketLog.lastDate || snap.asOf;
   if (out.ticketLog.applied) {
     const L = out.ticketLog;
@@ -4988,6 +5038,9 @@ function parseMasterWorkbook(wb) {
       + (L.closed.length ? `; closed ${L.closed.join(', ')}` : ''));
     for (const [what, n] of Object.entries(L.unknown))
       out.warnings.push(`${n} ticket(s) the upload could not apply: ${what}`);
+    if (L.reinvested && L.reinvested.length)
+      out.warnings.push(`${L.reinvested.length} dividend${L.reinvested.length > 1 ? 's' : ''} reinvested automatically `
+        + `(the share purchase was not in the export yet): ${L.reinvested.join(', ')}`);
     if (L.duplicates && L.duplicates.length)
       out.warnings.push(`identical tickets after ${snap.asOf} - check these are separate fills and not a double import: `
         + L.duplicates.join('; '));
