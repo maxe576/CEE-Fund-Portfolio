@@ -107,18 +107,29 @@ function fetchJSON(url){return new Promise((res,rej)=>{
   r.on('end',()=>{try{res(JSON.parse(d))}catch(e){rej(e)}})});
  req.on('error',rej); req.setTimeout(25000,()=>{req.destroy();rej(new Error('timeout'))});});}
 
-async function getSeriesOnce(tk){
+async function getSeriesOnce(tk,needAdj){
  const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
- if(fs.existsSync(f) && cacheFresh(f)){ const c=JSON.parse(fs.readFileSync(f,'utf8')); if(c&&c.ok) return c; }
+ if(fs.existsSync(f) && cacheFresh(f)){ const c=JSON.parse(fs.readFileSync(f,'utf8'));
+  if(c&&c.ok&&(!needAdj||c.adj)) return c; }   // a benchmark cached before total return was added is refetched
  const y=YF[tk]||tk.replace('.','-');
  let out={px:{},splits:[],ok:false};
  try{
-  const j=await fetchJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${y}?interval=1d&range=5y&events=split`);
+  const j=await fetchJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${y}?interval=1d&range=5y&events=div%7Csplit`);
   const r=j?.chart?.result?.[0];
   if(r&&r.timestamp){
    const cl=r.indicators.quote[0].close;
-   r.timestamp.forEach((ts,i)=>{const c=cl[i];
-    if(c!=null&&!isNaN(c)) out.px[new Date(ts*1000).toISOString().slice(0,10)]=+c.toFixed(4);});
+   /* Two series, for two different jobs. The plain close values our own
+      holdings, because the dividends those paid are already in the ledger as
+      income and reinvested shares - valuing them at a dividend-adjusted price
+      as well would count the same money twice. The adjusted close is for the
+      benchmarks, where there is no ledger: an index compared against a fund
+      whose dividends are reinvested has to have its own dividends reinvested
+      too, or the comparison is not like for like. */
+   const ac=r.indicators?.adjclose?.[0]?.adjclose;
+   r.timestamp.forEach((ts,i)=>{const c=cl[i], d=new Date(ts*1000).toISOString().slice(0,10);
+    if(c!=null&&!isNaN(c)) out.px[d]=+c.toFixed(4);
+    const a=ac&&ac[i];
+    if(a!=null&&!isNaN(a)) (out.adj=out.adj||{})[d]=+a.toFixed(4);});
    const sp=r.events?.splits;
    if(sp) Object.values(sp).forEach(s=>out.splits.push({
      date:new Date(s.date*1000).toISOString().slice(0,10),
@@ -135,13 +146,13 @@ async function getSeriesOnce(tk){
    others, the CEE Fund reading $194k instead of $220k). Now each ticker is retried
    with backoff, a failure is never cached, and if every attempt fails the last good
    saved prices are used instead. Holdings valued by hand (PX_PROXY) are not fetched. */
-async function getSeries(tk){
+async function getSeries(tk,needAdj){
  if(PX_PROXY[tk]!=null) return {px:{},splits:[],ok:false};
  const f=path.join(CACHE,tk.replace(/[^A-Z0-9.\-]/gi,'_')+'.json');
  let prev=null; try{ if(fs.existsSync(f)) prev=JSON.parse(fs.readFileSync(f,'utf8')); }catch(e){}
  for(let attempt=0;attempt<4;attempt++){
-  const out=await getSeriesOnce(tk);
-  if(out&&out.ok) return out;
+  const out=await getSeriesOnce(tk,needAdj);
+  if(out&&out.ok&&(!needAdj||out.adj)) return out;
   await new Promise(r=>setTimeout(r,1500*(attempt+1)*(attempt+1)));
  }
  if(prev&&prev.ok){
@@ -370,7 +381,8 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const tickers=[...universe].sort();
  console.log(`fetching daily history for ${tickers.length} tickers...`);
 
- const seriesArr=await pool(tickers,4,getSeries);   // 8 at once is what Yahoo throttled
+ const BENCHSET=new Set(BENCH);
+ const seriesArr=await pool(tickers,4,t=>getSeries(t,BENCHSET.has(t)));   // 8 at once is what Yahoo throttled
  const S={}; tickers.forEach((t,i)=>S[t]=seriesArr[i]);
  fillFromWorkbook(S,tickers,WBPX);
  {
@@ -725,12 +737,25 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  }
 
  // benchmarks over the same calendar
- OUT.bench={};
+ /* Benchmarks are published as total return - dividends reinvested - because
+    that is what the funds' own series is. Comparing a fund that reinvests its
+    dividends against an index on price alone understated the S&P by about 1.2
+    points a year and made our alpha look that much better than it was. The
+    workbook has always done it this way: its S&P figure for the year to
+    2026-09-25 is +17.87%, which is VOO's total return to the decimal, against
+    +16.49% on price. */
+ OUT.bench={}; const priceOnly=[];
  for(const b of BENCH){ if(!S[b]?.ok) continue;
-  const arr=calendar.map(d=>{const p=S[b].px[d]; return p??null;});
+  const src=S[b].adj&&Object.keys(S[b].adj).length?S[b].adj:(priceOnly.push(b),S[b].px);
+  const arr=calendar.map(d=>{const p=src[d]; return p??null;});
   for(let i=1;i<arr.length;i++) if(arr[i]==null) arr[i]=arr[i-1];
   if(arr[0]==null) continue;
   OUT.bench[b]=arr.map(v=>v==null?null:+v.toFixed(4));
+ }
+ OUT.benchBasis='total return (dividends reinvested)';
+ if(priceOnly.length){
+  OUT.benchBasis='mixed - price only for '+priceOnly.join(', ');
+  console.warn(`  no dividend-adjusted prices for ${priceOnly.join(', ')} - those are price-only`);
  }
  OUT.meta.sectorOf=sectorOf; OUT.meta.typeOf=typeOf;
 

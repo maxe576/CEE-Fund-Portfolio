@@ -329,6 +329,21 @@ The Performance tab names the upload its history was built from and warns when
 the holdings have been uploaded again since. The rebuild is a separate step, so
 without that the two dates sit on one screen with nothing to tell them apart.
 
+## What the benchmark is
+
+Benchmarks are published on a **total-return basis** - dividends reinvested -
+because that is what the funds' own series is. The dividends these accounts
+receive are reinvested and the shares are in the ledger, so comparing against an
+index on price alone understated the S&P by about 1.2 points a year and made our
+alpha look that much better than it was. The workbook has always done it the
+right way: its S&P figure for the year to 2026-09-25 is +17.87%, which is VOO's
+total return to the decimal, against +16.49% on price.
+
+Holdings keep being valued at the **plain close**. Their dividends are already in
+the ledger as income and reinvested shares, so valuing them at a
+dividend-adjusted price as well would count the same money twice. The builder
+fetches both series and keeps them apart on purpose.
+
 ## Return measures
 
 - **Our Return** (Modified Dietz) is what the dollars actually at work earned,

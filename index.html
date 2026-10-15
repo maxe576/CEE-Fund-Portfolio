@@ -2066,7 +2066,7 @@ function renderTrack() {
   const ourVsSpy = (own && own.ourRet != null && spy != null) ? own.ourRet - spy : null;
   document.getElementById('trkKpis').innerHTML =
     kpiCard('Our Return', pct(own && own.ourRet), 'what our dollars earned, incl. timing', cls(own && own.ourRet), true) +
-    kpiCard('S&amp;P 500 Return', pct(spy), 'what the market did', cls(spy), false) +
+    kpiCard('S&amp;P 500 Return', pct(spy), 'total return, dividends reinvested', cls(spy), false) +
     kpiCard('Alpha', pct(ourVsSpy), 'ours minus the market', cls(ourVsSpy), true) +
     kpiCard('Time-Weighted Return', pct(fundRet), 'timing removed &middot; strict basis', cls(fundRet), false) +
     kpiCard('Raw Gap vs SPY', pct(alpha), 'time-weighted, before risk', cls(alpha), false) +
