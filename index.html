@@ -4635,6 +4635,57 @@ function readSnapshotTab(rows) {
   return positions.length ? { positions, cash, asOf } : null;
 }
 
+/* The Holdings Snapshot tab carries a second block the workbook builds itself:
+   "Estimated trades (unconfirmed)". The broker's transaction export lags its
+   position export by a few weeks, so the committee's own sheet works out what
+   must have happened in between by differencing the two position snapshots, and
+   publishes each one with a date, a share change, the cash it moved and a flag
+   for whether the real ticket has turned up yet.
+
+   Without these the rebuild has a month-shaped hole: it anchors on the snapshot
+   and walks backward through the ledger, so a trade the ledger never saw is
+   treated as though the position had always been that size. That is how the
+   September rebalance came to read as thirteen shares of Broadcom held since
+   2022 and a sale of thirty-two shares of XLB that never happened. */
+function readEstimatedTrades(rows) {
+  if (!rows || !rows.length) return [];
+  /* This block shares its header row with the snapshot's own columns, and
+     "Fund" appears in both. Every column here is therefore looked up at or to
+     the right of "Est. date" - taking the first "Fund" on the row reads the
+     snapshot's fund for that row instead, which labelled the CEE Fund's trades
+     as the Endowment's. */
+  let hi = -1, at = -1;
+  for (let i = 0; i < Math.min(rows.length, 80) && hi < 0; i++) {
+    const j = (rows[i] || []).findIndex(v => _mkey(v) === 'estdate');
+    if (j >= 0) { hi = i; at = j; }
+  }
+  if (hi < 0) return [];
+  const head = rows[hi] || [];
+  const col = names => { for (let j = at; j < head.length; j++) if (names.includes(_mkey(head[j]))) return j; return null; };
+  const hdr = { i: hi, map: { date: at, fund: col(['fund']), symbol: col(['symbol']), shares: col(['sharechange']),
+    price: col(['buyprice']), cash: col(['cashamount']), active: col(['active']), ledgerRows: col(['ledgerrowsatbuild']) } };
+  if (hdr.map.fund == null || hdr.map.symbol == null || hdr.map.shares == null) return [];
+  const out = [];
+  for (let i = hdr.i + 1; i < rows.length; i++) {
+    const row = rows[i] || [], ds = _isoDate(row[hdr.map.date]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
+    const fund = String(row[hdr.map.fund] ?? '').trim();
+    const tk = normTicker(row[hdr.map.symbol] ?? '');
+    const sh = Number(row[hdr.map.shares]);
+    if (!fund || !tk || !isFinite(sh) || Math.abs(sh) < 1e-9) continue;
+    // Active says the committee still wants it counted; ledgerRows says how many
+    // real tickets existed when the sheet last built, so a non-zero count means
+    // the export has caught up and the estimate would double-count.
+    const active = hdr.map.active == null ? 1 : Number(row[hdr.map.active]);
+    const already = hdr.map.ledgerRows == null ? 0 : Number(row[hdr.map.ledgerRows]);
+    if (!active || already > 0) continue;
+    const cash = hdr.map.cash == null ? 0 : (Number(row[hdr.map.cash]) || 0);
+    const price = hdr.map.price == null ? 0 : (Number(row[hdr.map.price]) || 0);
+    out.push({ date: ds, fund, ticker: tk, shares: sh, price, cash });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /* Excel hands dates back as Date objects (cellDates), as 1900-system serial
    numbers, or as text, depending on how the cell was written. */
 const _isoDate = v => {
@@ -4702,8 +4753,10 @@ function readTransactionsTab(rows) {
 function parseMasterWorkbook(wb) {
   const settings = readSettingsTab(_sheetRowsSafe(wb, findSheetName(wb, [/^settings$/i])));
   const snapName = findSheetName(wb, [/^holdings\s*snapshot$/i, /snapshot/i]);
-  const snap = snapName ? readSnapshotTab(_sheetRows(wb, snapName)) : null;
+  const snapRows = snapName ? _sheetRows(wb, snapName) : null;
+  const snap = snapRows ? readSnapshotTab(snapRows) : null;
   if (!snap) return null;
+  const estimates = readEstimatedTrades(snapRows);
   const txName = findSheetName(wb, [/^transactions$/i, /^ledger$/i]);
   const transactions = txName ? readTransactionsTab(_sheetRows(wb, txName)) : [];
   const priceHistory = readPriceDataTab(_sheetRowsSafe(wb, findSheetName(wb, [/^price\s*data$/i, /^prices$/i])));
@@ -4718,7 +4771,7 @@ function parseMasterWorkbook(wb) {
     return m;
   };
   const out = { endowment: { equities: [], etfs: [], cash: 0, bond: null }, ceeFund: { equities: [], etfs: [], cash: 0 },
-    transactions, settings, priceHistory, asOf: snap.asOf, warnings: [] };
+    transactions, settings, priceHistory, estimates, asOf: snap.asOf, warnings: [] };
   const seeds = { endowment: seedOf('endowment'), ceeFund: seedOf('ceeFund') };
   for (const pos of snap.positions) {
     const key = /endow/i.test(pos.fund) ? 'endowment' : 'ceeFund';
@@ -5244,13 +5297,14 @@ function commitMasterUpload(m, file, okEl, errEl, input) {
     `<div style="font-size:11px;margin-top:4px">${nEnd} Endowment and ${nCee} CEE Fund positions as of ${m.asOf || 'the snapshot date'} · ` +
     `${m.transactions.length.toLocaleString()} transactions · ${Object.keys(m.settings.sectorMap).length + sectors.size} sector assignments · ` +
     `${Object.keys(m.settings.benchmarks).length} benchmark ETFs` +
-    (m.priceHistory ? ` · ${m.priceHistory.dates.length.toLocaleString()} days of prices for ${Object.keys(m.priceHistory.px).length} tickers` : '') + `</div>` +
+    (m.priceHistory ? ` · ${m.priceHistory.dates.length.toLocaleString()} days of prices for ${Object.keys(m.priceHistory.px).length} tickers` : '') +
+    (m.estimates.length ? ` · ${m.estimates.length} estimated trade${m.estimates.length > 1 ? 's' : ''} awaiting the broker export` : '') + `</div>` +
     `<div style="font-size:10px;margin-top:4px;color:var(--muted)">Prices, market values, gains and betas are worked out here, not read from the sheet.</div>` +
     (m.warnings.length ? `<div style="font-size:10px;margin-top:4px;color:var(--warning)">⚠ ${m.warnings.length} share-count difference${m.warnings.length > 1 ? 's' : ''} between the snapshot and the fund tabs: ${m.warnings.slice(0, 4).join('; ')}</div>` : '');
   okEl.style.display = 'block';
   document.getElementById('lastUpdate').textContent = `Uploaded: ${file.name}`;
   input.value = '';
-  saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf });
+  saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf, estimates: m.estimates });
   savePriceHistoryToFirebase(m.priceHistory, file.name);
   fetchLivePrices().catch(() => {});      // the sheet carries no prices; quote everything now
 }
@@ -5268,6 +5322,9 @@ async function saveHoldingsToFirebase(srcName, extra){
       // The committee's sector map, benchmarks and symbol map travel with the holdings,
       // so every visitor and the performance rebuild use the same definitions.
       settings:_settingsForFirebase((extra&&extra.settings)||SETTINGS),
+      // Trades the position snapshots imply but the transaction export has not
+      // reached yet. The performance rebuild folds them into the ledger.
+      estimatedTrades:(extra&&extra.estimates)||[],
       asOf:(extra&&extra.asOf)||null
     };
     const r=await fetch(FB_DB_URL+FB_HOLDINGS_NODE+'.json',{method:'PUT',body:JSON.stringify(payload)});

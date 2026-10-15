@@ -240,6 +240,32 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
 
  const ledgerRows=Array.isArray(live.transactions)?live.transactions:[];
  if(!ledgerRows.length){ console.error('The uploaded holdings carry no transactions.'); process.exit(1); }
+ /* The broker's transaction export lags its position export by weeks, and the
+    workbook works out what happened in between by differencing position
+    snapshots - publishing each one as an estimated trade. Folding them in is
+    what keeps the reconstruction honest in the meantime: the walk anchors on the
+    snapshot and goes backward, so a trade nobody told it about reads as a
+    position that was always that size (thirteen shares of AVGO held since 2022,
+    an XLB sale that never happened). Cash comes from the sheet's own figure, so
+    the money and the shares move together.
+
+    A reinvested dividend moves no cash: it is recorded as Reinvest Shares, which
+    the engine counts as return rather than as money put to work. Anything that
+    moves cash is a Buy or a Sell. */
+ const estimates=(Array.isArray(live.estimatedTrades)?live.estimatedTrades:[]).filter(e=>
+   e&&e.fund&&e.ticker&&+e.shares&&/^\d{4}-\d{2}-\d{2}$/.test(String(e.date||'').slice(0,10)));
+ if(estimates.length){
+  for(const e of estimates){
+   const sh=+e.shares, cash=+e.cash||0;
+   const action=Math.abs(cash)<0.005?'Reinvest Shares':(sh>0?'Buy':'Sell');
+   ledgerRows.push({date:String(e.date).slice(0,10),fund:String(e.fund).trim(),ticker:e.ticker,
+     action,shares:Math.abs(sh),price:+e.price||0,amount:cash,fees:0,
+     desc:'ESTIMATED from position snapshots - awaiting the broker transaction export',est:1});
+  }
+  const trades=estimates.filter(e=>Math.abs(+e.cash||0)>=0.005).length;
+  console.log(`estimated trades folded into the ledger: ${estimates.length} `+
+    `(${trades} moving cash, ${estimates.length-trades} reinvested dividends)`);
+ }
  const universe=new Set();
  for(const f of FUNDS){
   // One ledger covers both funds; split it and put it in the shape the walk expects.

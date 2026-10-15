@@ -90,6 +90,54 @@ The Transactions tab starts in column **A**: Date · Fund · Ticker · Action ·
 Shares · Price · Amount · Fees · Description. Rows without a share count are
 kept — dividends, interest and wires carry their value in **Amount**.
 
+## Checking that the workbook, the dashboard and the broker agree
+
+```bash
+python tools/reconcile.py "C:\Users\<you>\Downloads\CEE Fund Portfolios - Master.xlsx"
+```
+
+Run it after every upload. It is deliberately written from scratch rather than
+reusing the dashboard's own parser, so when the two disagree that means
+something. It reads nothing but the workbook, the published Firebase nodes and
+the Schwab position exports sitting in Downloads, and it writes nothing.
+
+It reports, in order of how much each matters:
+
+1. **The Holdings Snapshot against the broker's own position export.** The
+   snapshot is what every holdings-driven figure on the dashboard is built from,
+   so when it matches the custodian those figures are right by construction.
+   Both funds currently match to the share and to the cent on all 102 positions.
+2. **What the dashboard publishes against that snapshot.**
+3. **The ledger against the broker** - the share changes between the two most
+   recent position exports that no ticket explains, each priced, and whether the
+   workbook's estimated-trades block already covers it.
+4. **The published NAV against the Schwab month-end values** typed into the
+   Statement Check tab. Those statement figures are the only fully independent
+   check on the return engine, which is why it is worth typing in each month's
+   numbers as they arrive.
+5. **The end of the published series against today's holdings** - the series
+   should land on shares x close + cash.
+6. **The workbook against itself** - stale cached formulas, sold-out rows still
+   carrying a value, and summary cells that disagree with the rows they total.
+
+A `HIGH` finding means a figure on the dashboard is wrong and why. `NOTE` means
+the rebuild is right but is leaning on an estimate rather than a real ticket.
+
+### Estimated trades
+
+The broker's transaction export lags its position export by several weeks. The
+workbook bridges that gap itself: the Holdings Snapshot tab carries an
+**Estimated trades (unconfirmed)** block, worked out by differencing two position
+snapshots, with a date, a share change, the cash moved, and a count of how many
+real tickets existed when it was built. The upload publishes the active ones and
+the rebuild folds them into the ledger - a trade the ledger has never seen reads
+as a position that was always that size, which is how September's rebalance once
+appeared as thirteen shares of Broadcom held since 2022.
+
+An estimate stops being applied as soon as a real ticket for it appears
+(`Ledger rows at build` stops being zero) or the `Active` flag is cleared, so
+pasting the real tickets in when the export arrives needs no other change.
+
 ## Rebuilding performance history
 
 ```bash
