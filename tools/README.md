@@ -138,6 +138,46 @@ An estimate stops being applied as soon as a real ticket for it appears
 (`Ledger rows at build` stops being zero) or the `Active` flag is cleared, so
 pasting the real tickets in when the export arrives needs no other change.
 
+## The rebuild runs itself
+
+`.github/workflows/rebuild-performance.yml` rebuilds and publishes at 22:30 UTC
+on weekdays - 6:30pm New York in summer, 5:30pm in winter, always after the
+4:15pm cut-off the builder uses to decide whether today has a close worth
+including. It reads the published upload from Firebase, needs no secrets, and
+commits nothing. It publishes only if the build exits cleanly, so the
+refuse-to-write guard still means a bad day publishes nothing rather than
+something wrong. The Actions tab has a **Run workflow** button for when a
+workbook goes up mid-week and you do not want to wait for the evening.
+
+So the division of labour is: holdings and prices refresh in the browser on
+every visit, the daily series refreshes itself each evening, and the only manual
+step is uploading the workbook when transactions change.
+
+## Dividends reinvest themselves
+
+These accounts reinvest, and Schwab's action name says which dividends were:
+`Qual Div Reinvest`, `Reinvest Dividend` and `Pr Yr Div Reinvest` were
+reinvested; `Cash Dividend` and `Qualified Dividend` were paid out. That signal
+holds in the data - all 1,123 reinvest-type dividends in the ledger have their
+share purchase beside them, and none of the five positions the broker does not
+reinvest (TSM, CEG, SBGSF, TKO and the Treasury note) has ever carried one.
+
+When a dividend arrives without its share purchase, which is how the export
+usually lands first, the shares are worked out from the cash at that day's close
+and added - on upload, so the holdings move immediately, and in the rebuild, so
+the history follows. The money is the broker's figure and the price is the
+market's. A share purchase that turns up within ten days of the dividend stops it
+firing, so the real ticket always wins.
+
+## The Treasury note's mark
+
+`Endowment!G70` is a typed cell holding the note's market value, and everything
+downstream - the holdings view, the Endowment's NAV, the interpolated history -
+hangs off it. It needs updating from the broker whenever a position export
+arrives: the 2026-09-29 export marks the note at 93.7734, which is $23,443.36
+against face of $25,000, while the cell still read $24,187.50 from the September 2
+mark. The Endowment reads $744 high until it is changed.
+
 ## Rebuilding performance history
 
 ```bash
