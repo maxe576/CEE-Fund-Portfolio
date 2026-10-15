@@ -217,6 +217,78 @@ Two details worth knowing:
 A rebuild reconciles to roughly 0.4% of the Schwab totals, because the export is
 taken intraday while the rebuild values positions at that day's close.
 
+## Conventions, written down
+
+These are the choices two systems can make differently and both look right.
+Where the workbook and the dashboard disagree, the figure below is what the
+dashboard uses.
+
+**Fees.** Schwab's `Amount` is the cash that actually moved and already carries
+the fee - a sale of 60 XLY at $138.21 grosses $8,292.60 and is recorded as
+$8,292.41 against a $0.19 fee. The `Fees` column is therefore for reporting
+only. Subtracting it as well charged every fee twice, $76.60 across the ledger.
+
+**External flows and the day they land.** A deposit or withdrawal has to be kept
+out of the day's return, and there are two defensible ways to do it:
+
+| | Formula | Assumes |
+|---|---|---|
+| Dashboard | `(NAV - flow) / prior NAV` | the money arrived at the close, so it earns nothing that day |
+| Workbook | `NAV / (prior NAV + flow)` | the money was there from the open, so it earns the whole day |
+
+Over the whole window the two differ by **0.13 points** on the Endowment's
+since-inception return (it has taken $120,000 of wires) and **0.003 points** on
+the CEE Fund's. The dashboard's convention is the one validated against the
+Schwab statements, so align the workbook to it rather than the other way round,
+and use the actual time of day wherever a ticket records it.
+
+**The risk-free rate** comes from the workbook's Settings tab, dated and
+sourced, so Sharpe and Jensen's alpha cannot differ between the two screens. It
+used to be hard-coded here at 4.30% while the sheet said 4.24%.
+
+**Period returns start from the close before the period.** Year-to-date is
+measured from 31 December's close, not the first close of January - on an index
+that went 100 (31 Dec), 102, 103 the old way read +0.98% instead of +3%. The
+same rule applies to 1M, 3M, 1Y and the sector views, and to the benchmark
+beside them. A custom date range is measured between the two closes picked.
+
+**The Treasury note** has no daily price from any source we have, so it is
+valued on a straight line between the price paid and the latest mark the
+workbook carries, and held flat outside that span. Both ends are right and the
+middle is an estimate, so treat the Endowment's history as approximate to within
+a couple of hundred dollars and replace this with dated broker marks if they
+become available.
+
+**Since inception is not the same period in both systems.** The workbook's
+stored history begins 2022-07-01; the published series begins 2022-08-15, where
+the transaction ledger starts and therefore the earliest date positions can be
+reconstructed for. The Performance tab prints its own window under the title.
+The two "all history" figures are not directly comparable.
+
+## Tickets dated after the snapshot
+
+The Holdings Snapshot is a photograph of one day. Tickets typed in after that
+day are now carried forward by the upload itself: shares, cash and cost basis
+all move, positions open and close, and a newly bought ticker appears in the
+holdings with a warning if it has no sector yet. The working loop is:
+
+1. paste the new transactions into the Transactions tab
+2. upload the workbook
+3. rebuild: `node tools/build-performance.js && node tools/publish-performance.js`
+
+Cost basis is calculated **chronologically**, under moving-average accounting.
+Order matters: sell five of ten shares at a $100 basis and then buy five at $20
+and the remaining basis is $150, because the sale takes half the pool before the
+purchase adds $100. The workbook's own fund-tab formula pools post-snapshot buys
+and sells and prorates the result, which gives $133.33 for that sequence, so
+after a batch of transactions the dashboard and that cell can disagree. The
+cleanest answer is to refresh the Holdings Snapshot from Schwab whenever a batch
+goes in - which is what the snapshot is for.
+
+The Performance tab names the upload its history was built from and warns when
+the holdings have been uploaded again since. The rebuild is a separate step, so
+without that the two dates sit on one screen with nothing to tell them apart.
+
 ## Return measures
 
 - **Our Return** (Modified Dietz) is what the dollars actually at work earned,

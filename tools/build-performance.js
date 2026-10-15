@@ -82,10 +82,18 @@ const PX_PROXY={'50187A107':170.00,'DISH':13.79};
 // like a sale: without it the payout reads as a total loss on the position.
 const POS_FLOW=new Set(['Buy','Sell','Cash Merger']);
 
-const SH_IN=new Set(['Buy','Reinvest Shares','Spin-off','Reinvestment Adj']);
+const SH_IN=new Set(['Buy','Reinvest Shares','Spin-off']);
+/* Schwab reverses a dividend reinvestment and re-books it when the price it
+   used turns out to be wrong, and the reversal arrives as "Reinvestment Adj"
+   with a positive quantity. Counting it as another purchase added the shares a
+   third time: ABBV ended 0.28 shares (~$79) above what the fund holds, with GD
+   and COST doing the same thing smaller. It takes the earlier reinvestment back
+   out. */
+const SH_REVERSE=new Set(['Reinvestment Adj']);
 const SH_OUT=new Set(['Sell']);
 const SH_DELTA=new Set(['Mandatory Reorg Exc','Cash Merger Adj']);
 const SPLIT_ROW='Stock Split';                       // handled via Yahoo split factors instead
+const CASH_IN_LIEU='Cash In Lieu';                   // pays out a fraction a split could not issue
 const INCOME=new Set(['Reinvest Dividend','Qual Div Reinvest','Qualified Dividend','Non-Qualified Div',
  'Special Qual Div','Cash Dividend','Pr Yr Non Qual Div','Pr Yr Div Reinvest','Bank Interest',
  'Bond Interest','Cash In Lieu','Cash Merger']);
@@ -255,6 +263,33 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const estimates=(Array.isArray(live.estimatedTrades)?live.estimatedTrades:[]).filter(e=>
    e&&e.fund&&e.ticker&&+e.shares&&/^\d{4}-\d{2}-\d{2}$/.test(String(e.date||'').slice(0,10)));
  if(estimates.length){
+  /* An estimate is a stand-in for a ticket nobody has yet. Once the real one
+     arrives the two would both be counted, so the workbook's own guard (its
+     "Ledger rows at build" count) is backed up here: an estimate is dropped if
+     the ledger already holds a share-moving ticket for that fund and ticker
+     within a fortnight of it. Belt and braces, because double-counting a trade
+     is invisible in the totals and wrong in the history. */
+  const WINDOW=14*86400000;
+  /* The match has to be convincing: same fund, same ticker, same direction and
+     a quantity within 5%. A looser test - anything on that ticker nearby - would
+     throw away a dividend estimate because an unrelated sale happened the same
+     week, and the dividend would simply vanish from the history. */
+  const covered=e=>{
+   const want=+e.shares||0;
+   return ledgerRows.some(t=>{
+    const q=+t.shares||0;
+    if(!q||!want) return false;
+    if(String(t.fund||'').trim()!==String(e.fund).trim()) return false;
+    if(String(t.ticker||'').trim().toUpperCase()!==String(e.ticker).trim().toUpperCase()) return false;
+    const signed=/sell/i.test(String(t.action||''))?-q:q;
+    if(Math.sign(signed)!==Math.sign(want)) return false;
+    if(Math.abs(Math.abs(signed)-Math.abs(want))>Math.abs(want)*0.05) return false;
+    return Math.abs(Date.parse(String(t.date||'').slice(0,10))-Date.parse(String(e.date).slice(0,10)))<=WINDOW;
+   });
+  };
+  const live=estimates.filter(e=>!covered(e)), dropped=estimates.length-live.length;
+  if(dropped) console.log(`  ${dropped} estimate(s) dropped - the ledger already has a ticket for them`);
+  estimates.length=0; estimates.push(...live);
   for(const e of estimates){
    const sh=+e.shares, cash=+e.cash||0;
    const action=Math.abs(cash)<0.005?'Reinvest Shares':(sh>0?'Buy':'Sell');
@@ -364,7 +399,12 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  }
 
  const HOLD={funds:{}};   // per-position daily series for the sector drill-down
- const OUT={generatedAt:new Date().toISOString(),anchor:ANCHOR,dates:calendar,funds:{},meta:{}};
+ /* Stamp the series with the upload it was built from, so the dashboard can
+    tell whether the history on screen belongs to the holdings on screen. */
+ const OUT={generatedAt:new Date().toISOString(),anchor:ANCHOR,dates:calendar,funds:{},meta:{},
+  source:live.source||null,holdingsUpdatedAt:live.updatedAt||null,
+  holdingsAsOf:String(live.asOf||'').slice(0,10)||null,
+  snapshotAsOf:String(live.snapshotAsOf||live.asOf||'').slice(0,10)||null};
 
  for(const f of FUNDS){
   // anchor positions in ADJUSTED share space, taken from the positions export
@@ -375,15 +415,45 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   let anchorCash=f.positions.cash||0;
 
   // transactions in adjusted space (Stock Split rows dropped - factor handles them)
+  /* A split that does not divide evenly pays cash for the leftover fraction and
+     takes those shares with it, but the ticket carries only the cash: XLB's
+     2-for-1 added 94 whole shares and paid $42.05 for the 0.959 it could not
+     issue. Left in, that fraction stayed in the position permanently - the CEE
+     Fund's XLB ran 0.96 shares high right to the end of the series, with XLE,
+     XLU, GD and VUG doing the same thing smaller. The quantity is recovered
+     from the cash at that day's close, and only where a split on the same
+     ticker within a week explains it: cash in lieu also arrives from spin-offs,
+     where the share line is already whole and nothing should be removed. */
+  const splitNear={};
+  for(const t of f.tx) if(t.action===SPLIT_ROW&&t.sym) (splitNear[t.sym]=splitNear[t.sym]||[]).push(t.date);
+  const DAY=86400000;
+  const fractionSoldFor=t=>{
+   const dates=splitNear[t.sym]||[];
+   if(!dates.some(d=>Math.abs(Date.parse(d)-Date.parse(t.date))<=7*DAY)) return 0;
+   const ser=S[t.sym]; if(!ser||!ser.ok) return 0;
+   let px=ser.px[t.date];
+   if(px==null){ const keys=Object.keys(ser.px).sort();
+    for(let i=keys.length-1;i>=0;i--) if(keys[i]<=t.date){ px=ser.px[keys[i]]; break; } }
+   if(!px||px<=0) return 0;
+   const q=Math.abs(t.amt)/px;
+   return q<1?q:0;                       // cash in lieu never buys out a whole share
+  };
+
   const tx=f.tx.filter(t=>t.action!==SPLIT_ROW).map(t=>{
    const eff=t.date<calendar[0]?t.date:tradingDayFor(t.date);   // posted on a closed day -> next session
    const fac=t.sym&&!IS_CUSIP(t.sym)?splitFactor(t.sym,t.date):1;
    let dq=0;
-   if(SH_IN.has(t.action))dq=t.qty; else if(SH_OUT.has(t.action))dq=-t.qty;
+   if(t.action===CASH_IN_LIEU&&t.sym&&!t.qty)dq=-fractionSoldFor(t);
+   else if(SH_IN.has(t.action))dq=t.qty; else if(SH_OUT.has(t.action))dq=-t.qty;
+   else if(SH_REVERSE.has(t.action))dq=-Math.abs(t.qty);
    else if(SH_DELTA.has(t.action))dq=t.qty;
    let dc=0;
-   if(SH_IN.has(t.action)||SH_OUT.has(t.action)||SH_DELTA.has(t.action)||INCOME.has(t.action)||FEES.has(t.action)||EXTERNAL.has(t.action))dc=t.amt;
-   return {...t,date:eff,asPosted:t.date,dq:dq*fac,dc:dc-(t.fee||0),ext:EXTERNAL.has(t.action)?t.amt:0};
+   if(SH_IN.has(t.action)||SH_OUT.has(t.action)||SH_REVERSE.has(t.action)||SH_DELTA.has(t.action)||INCOME.has(t.action)||FEES.has(t.action)||EXTERNAL.has(t.action))dc=t.amt;
+   /* Schwab's Amount is the cash that moved and already nets the fee - a sale
+      grossing $8,292.60 with a $0.19 fee is recorded as $8,292.41 - so taking
+      the Fees column off as well charged every fee twice ($76.60 across the
+      ledger). Fees are kept on the record for reporting, not re-applied. */
+   return {...t,date:eff,asPosted:t.date,dq:dq*fac,dc,ext:EXTERNAL.has(t.action)?t.amt:0};
   });
 
   // walk BACK from anchor to build the position/cash state at the window start

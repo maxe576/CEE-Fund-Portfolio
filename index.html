@@ -1086,8 +1086,10 @@ function perfYTD(fundKey) {
   const f = PERF.funds[fundKey === 'endowment' ? 'endowment' : 'ceeFund'];
   if (!f || !f.twr) return null;
   const D = PERF.dates, e = D.length - 1, yr = D[e].slice(0, 4);
-  let s = 0; for (let i = 0; i < D.length; i++) if (D[i].startsWith(yr)) { s = i; break; }
-  const flows = f.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+  // Measured from the last close of the previous year, so the first session of
+  // January is inside the return rather than being the starting point.
+  let s = 0; for (let i = 0; i < D.length; i++) if (D[i].startsWith(yr)) { s = i > 0 ? i - 1 : 0; break; }
+  const flows = f.flows.slice(s + 1, e + 1).reduce((a, b) => a + b, 0);
   return { twr: (f.twr[e] / f.twr[s] - 1) * 100, flows,
            spy: PERF.bench && PERF.bench.SPY ? (PERF.bench.SPY[e] / PERF.bench.SPY[s] - 1) * 100 : null };
 }
@@ -1773,7 +1775,7 @@ function perfStartIdx(period) {
   const d = PERF.dates, last = d[perfEndIdx()];
   if (customFrom) { for (let i = 0; i < d.length; i++) if (d[i] >= customFrom) return i; return 0; }
   if (customTo) return 0;
-  if (period === 'ALL') return 0;
+  if (period === 'ALL') return 0;     // the first close we have, whatever date that is
   const end = new Date(last + 'T00:00:00');
   let from;
   if (period === 'YTD') from = new Date(end.getFullYear(), 0, 1);
@@ -1785,7 +1787,17 @@ function perfStartIdx(period) {
     else from.setFullYear(from.getFullYear() - n);
   }
   const iso = from.toISOString().slice(0, 10);
-  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i;
+  /* The baseline is the close BEFORE the window opens, not the first close
+     inside it. A year-to-date return is measured from 31 December's close, so
+     starting at 2 January's close throws away the first session of the year -
+     on an index that went 100 (31 Dec), 102, 103 that reads as +0.98% instead
+     of +3%. The same applies to 1M, 3M, 1Y and the rest: the nearest close at
+     or before the start of the period is the base.
+
+     A custom range is different. When someone picks two dates they mean the
+     change between those two closes, so that path keeps the first index inside
+     the range (it returns above, before this). */
+  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i > 0 ? i - 1 : 0;
   return 0;
 }
 // % change of an index series between two positions
@@ -1793,9 +1805,14 @@ const idxRet = (arr, a, b) => (arr && arr[a] > 0 && arr[b] != null) ? (arr[b] / 
 const pct = v => v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
 const cls = v => v == null ? '' : (v >= 0 ? 'pos' : 'neg');
 
-// Approximate average cash yield over the rebuild window; used as the risk-free
-// leg in Jensen's alpha and Sharpe. Roughly the 3-month T-bill average 2022-2026.
-const RISK_FREE = 0.043;
+/* The risk-free leg in Sharpe and Jensen's alpha. The committee sets it on the
+   workbook's Settings tab, dated and sourced ("3-month T-bill, FRED DGS3MO"),
+   and that is the figure both systems should use - this used to be hard-coded
+   at 4.30% while the workbook said 4.24%, so the same portfolio produced two
+   different Sharpe ratios depending on which screen you read. The constant
+   below is only a fallback for when no workbook has been uploaded. */
+const RISK_FREE_FALLBACK = 0.043;
+const riskFreeRate = () => (SETTINGS && SETTINGS.riskFree > 0 ? SETTINGS.riskFree : RISK_FREE_FALLBACK);
 
 /* Risk statistics over a window.
    A raw return gap vs SPY is unfair to a portfolio that deliberately runs less
@@ -1825,10 +1842,10 @@ function riskStats(f, s, e) {
   const spyAnn = annualisable ? Math.pow(1 + spyTot, 1 / years) - 1 : null;
   const vol = sd(fr) * Math.sqrt(252);
   let jensen = null;
-  if (annualisable && beta != null) jensen = fundAnn - (RISK_FREE + beta * (spyAnn - RISK_FREE));
-  const sharpe = (annualisable && vol > 0) ? (fundAnn - RISK_FREE) / vol : null;
+  if (annualisable && beta != null) jensen = fundAnn - (riskFreeRate() + beta * (spyAnn - riskFreeRate()));
+  const sharpe = (annualisable && vol > 0) ? (fundAnn - riskFreeRate()) / vol : null;
   const spyVol = sds * Math.sqrt(252);
-  const spySharpe = (annualisable && spyVol > 0) ? (spyAnn - RISK_FREE) / spyVol : null;
+  const spySharpe = (annualisable && spyVol > 0) ? (spyAnn - riskFreeRate()) / spyVol : null;
   return { beta, corr, years, fundAnn, spyAnn, vol, spyVol, jensen, sharpe, spySharpe, annualisable };
 }
 
@@ -2003,20 +2020,38 @@ async function renderTrkMovers(s, e) {
       'Bond funds excluded. Stock&rsquo;s Move is the security over the whole period, whether we held it or not.</div>';
 }
 
+/* Says plainly which upload the history was built from, and whether a rebuild
+   is owed. Holdings refresh the moment the workbook is uploaded; the daily
+   series is rebuilt by a separate job, so without this the two dates sit on the
+   same screen with nothing to tell them apart. */
+function perfFreshnessNote() {
+  if (!PERF) return '';
+  const built = PERF.holdingsUpdatedAt || null, now = HOLDINGS_META.updatedAt || null;
+  const stale = built && now && built !== now;
+  const when = PERF.dates ? PERF.dates[PERF.dates.length - 1] : null;
+  const fmt = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const bits = [`prices through ${fmt(when)}`,
+    `holdings as of ${fmt(HOLDINGS_META.asOf)}`,
+    `history built from ${PERF.source || 'an earlier upload'}`];
+  return `<div style="font-size:10px;color:${stale ? 'var(--warning)' : 'var(--muted)'};margin-top:4px">`
+    + (stale ? '\u26a0 the holdings have been uploaded again since this history was built - a rebuild is pending \u00b7 ' : '')
+    + bits.join(' \u00b7 ') + '</div>';
+}
+
 function renderTrack() {
   if (!PERF) return;
   syncPerfFundButtons();
   const f = PERF.funds[perfFundKey()];
   if (!f) return;
   const dates = PERF.dates, e = perfEndIdx(), s = perfStartIdx(trkPeriod);
-  document.getElementById('trkFundLabel').textContent =
-    '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e];
+  document.getElementById('trkFundLabel').innerHTML =
+    '· ' + f.name + ' · ' + dates[s] + ' to ' + dates[e] + perfFreshnessNote();
 
   const fundRet = idxRet(f.twr, s, e);
   const spy = PERF.bench && PERF.bench.SPY ? idxRet(PERF.bench.SPY, s, e) : null;
   const alpha = (fundRet != null && spy != null) ? fundRet - spy : null;
   const navChg = f.nav[e] - f.nav[s];
-  const flowIn = f.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+  const flowIn = f.flows.slice(s + 1, e + 1).reduce((a, b) => a + b, 0);
   const marketGain = navChg - flowIn;
 
   // max drawdown on the time-weighted index
@@ -2215,7 +2250,7 @@ function renderTrack() {
     const gTwr = idxRet(g.twr, s, e);
     let gPeak = g.twr[s], gMdd = 0;
     for (let i = s; i <= e; i++) { if (g.twr[i] > gPeak) gPeak = g.twr[i]; const dd = (g.twr[i] / gPeak - 1) * 100; if (dd < gMdd) gMdd = dd; }
-    const wired = g.flows.slice(s, e + 1).reduce((a, b) => a + b, 0);
+    const wired = g.flows.slice(s + 1, e + 1).reduce((a, b) => a + b, 0);
     const isActive = k === perfFundKey();
     return '<tr style="cursor:pointer' + (isActive ? ';background:rgba(201,168,76,.08)' : '') +
       (k === 'combined' ? ';border-top:2px solid var(--border)' : '') +
@@ -4536,7 +4571,11 @@ const CUSIP_RE=/^[0-9][0-9A-Z]{8}$/;
    move, a tab can be added, or a block can shift down the sheet without
    breaking the read. If a tab is missing the reader falls back: no snapshot ->
    read the Endowment / CEE Fund tabs; no settings -> the dashboard's own maps. */
-let SETTINGS = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{} };
+let SETTINGS = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{}, riskFree:0 };
+// Which upload the holdings on screen came from. The performance history is
+// published by a separate rebuild, so the two can be out of step and the
+// Performance tab says so rather than letting them be read as one picture.
+let HOLDINGS_META = { updatedAt:null, asOf:null, snapshotAsOf:null, source:null };
 
 const _mkey = v => v == null ? '' : String(v).toLowerCase().replace(/[\s'\u2019().,_\-\/]/g, '');
 const _sheetRows = (wb, name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null });
@@ -4576,8 +4615,19 @@ function _readDown(rows, at, cols) {
 }
 
 function readSettingsTab(rows) {
-  const out = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{} };
+  const out = { sectorMap:{}, typeMap:{}, symbolMap:{}, benchmarks:{}, flowActions:[], capClasses:{}, riskFree:0 };
   if (!rows) return out;
+  /* The risk-free rate the committee has chosen, dated and sourced on the sheet.
+     Sharpe and Jensen's alpha use it here so the dashboard and the workbook
+     cannot report different risk-adjusted numbers for the same portfolio. */
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    const j = row.findIndex(v => /^riskfreerate/.test(_mkey(v)));
+    if (j < 0) continue;
+    const v = Number(row[j + 1]);
+    if (isFinite(v) && v > 0) out.riskFree = v > 1 ? v / 100 : v;   // 4.24 or 0.0424
+    break;
+  }
   // Sector map: a "Ticker" column with "Sector" and "Type" beside it.
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] || [];
@@ -4755,6 +4805,123 @@ function readTransactionsTab(rows) {
   return tx.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/* Tickets dated after the snapshot, applied to the holdings.
+
+   The Holdings Snapshot is a photograph of the accounts on one day. Tickets
+   typed in after that day are the whole point of keeping a ledger, so the
+   upload has to carry them forward: add a position that did not exist, remove
+   one that was sold out, move the cash, and keep the basis right.
+
+   Order matters, which is why this walks the tickets by date instead of netting
+   them. Sell five of ten shares at a $100 basis and then buy five more at $20
+   and the remaining basis is $150: the sale takes half the pool ($50) and the
+   purchase adds $100. Netting the two first - zero net shares, so no change -
+   leaves $100, and averaging over the pooled quantity gives $133.33. Neither is
+   what the broker reports.
+
+   Cost basis follows moving-average accounting, which is what Schwab reports
+   for these accounts. A sale takes its share of the pool and nothing else; a
+   split changes the share count and leaves the basis alone; a name change or
+   reorganisation moves shares without touching money. */
+const TX_IN = { 'Buy': 1, 'Reinvest Shares': 1, 'Spin-off': 1, 'Reinvestment Adj': -1,
+  'Mandatory Reorg Exc': 1, 'Cash Merger Adj': 1, 'Stock Split': 1 };
+// Actions whose cash outlay becomes cost basis. A spin-off, a split and a
+// reorganisation move shares without buying anything.
+const TX_BASIS = { 'Buy': 1, 'Reinvest Shares': 1 };
+
+function applyTicketsAfter(out, transactions, asOf, settings) {
+  const log = { applied: 0, opened: [], closed: [], lastDate: asOf, cash: {}, unknown: {} };
+  if (!asOf || !transactions || !transactions.length) return log;
+  const after = transactions.filter(t => t.date > asOf).sort((a, b) => a.date.localeCompare(b.date));
+  if (!after.length) return log;
+  /* Identical tickets are reported, not removed. A single order often fills in
+     several pieces on the same day at the same price - the Endowment's VGT sale
+     of 2022-10-21 arrived as ten separate one-share fills - so dropping them
+     would lose real trades. Pasting the same export in twice looks the same
+     from here, so it says so and leaves the decision to a person. */
+  const seen = new Map();
+  for (const t of after) {
+    const k = [t.date, t.fund, t.ticker, t.action, (+t.shares || 0).toFixed(4), (+t.amount || 0).toFixed(2)].join('|');
+    seen.set(k, (seen.get(k) || 0) + 1);
+  }
+  log.duplicates = [...seen.entries()].filter(([, n]) => n > 1)
+    .map(([k, n]) => `${k.split('|').slice(0, 4).join(' ')} x${n}`);
+
+  const keyOf = fund => /endow/i.test(fund) ? 'endowment' : 'ceeFund';
+  const find = (key, tk) => {
+    const lists = [out[key].equities, out[key].etfs];
+    for (const list of lists) { const h = list.find(x => x.ticker === tk); if (h) return h; }
+    return null;
+  };
+
+  for (const t of after) {
+    const key = keyOf(t.fund);
+    if (!out[key]) continue;
+    const tk = t.ticker;
+    log.lastDate = t.date > log.lastDate ? t.date : log.lastDate;
+    // Cash moves for every ticket that carries an amount, dividends and wires included.
+    /* Schwab's Amount is the cash that actually moved and already carries the
+       fee: a sale of 60 XLY at $138.21 grosses $8,292.60 and the Amount reads
+       $8,292.41 against a $0.19 fee. Subtracting the Fees column as well took
+       it out twice. */
+    const cash = Number(t.amount) || 0;
+    if (cash) { out[key].cash = (out[key].cash || 0) + cash; log.cash[t.fund] = (log.cash[t.fund] || 0) + cash; }
+    log.applied++;
+    if (!tk) continue;
+
+    const dir = TX_IN[t.action] != null ? TX_IN[t.action] : (t.action === 'Sell' ? -1 : 0);
+    if (!dir) { if (t.shares) log.unknown[t.action] = (log.unknown[t.action] || 0) + 1; continue; }
+    const dq = dir * Math.abs(Number(t.shares) || 0);
+    if (!dq) continue;
+
+    let h = find(key, tk);
+    if (!h) {
+      if (dq < 0) { log.unknown['sale of a position not held: ' + tk] = 1; continue; }
+      // A ticker bought for the first time. Sector and type come from the
+      // committee's own maps where they exist; the price arrives with the live
+      // quotes seconds later.
+      const isEtf = (settings.typeMap[tk] || (ETF_SECTORS[tk] ? 'etf' : 'equity')) === 'etf';
+      h = { ticker: tk, company: COMPANY_NAMES[tk] || tk, shares: 0, costBasis: 0, avgCost: 0,
+        price: 0, marketValue: 0, dayPct: 0, dayDollar: 0, glDollar: 0, glPct: 0,
+        sector: settings.sectorMap[tk] || (isEtf ? ETF_SECTORS[tk] : null) || 'Unclassified',
+        beta: isEtf ? (ETF_BETAS[tk] ?? null) : null, type: isEtf ? 'etf' : 'equity',
+        fund: key === 'endowment' ? 'Endowment' : 'CEE Fund' };
+      (isEtf ? out[key].etfs : out[key].equities).push(h);
+      log.opened.push(`${h.fund} ${tk}`);
+    }
+
+    if (dq > 0) {
+      h.shares += dq;
+      if (TX_BASIS[t.action]) h.costBasis += Math.abs(Number(t.amount) || dq * (Number(t.price) || 0));
+    } else {
+      // A sale takes its proportion of the pool with it.
+      const sold = Math.min(Math.abs(dq), h.shares);
+      const unit = h.shares > 1e-9 ? h.costBasis / h.shares : 0;
+      h.shares -= Math.abs(dq);
+      h.costBasis = Math.max(0, h.costBasis - unit * sold);
+    }
+    if (Math.abs(h.shares) < 1e-9) {
+      for (const list of [out[key].equities, out[key].etfs]) {
+        const i = list.indexOf(h);
+        if (i >= 0) list.splice(i, 1);
+      }
+      log.closed.push(`${key === 'endowment' ? 'Endowment' : 'CEE Fund'} ${tk}`);
+    }
+  }
+
+  // Everything derived from shares and basis is recomputed, so nothing is left
+  // carrying a figure from before the tickets were applied.
+  for (const key of ['endowment', 'ceeFund']) {
+    for (const h of [...out[key].equities, ...out[key].etfs]) {
+      h.avgCost = h.shares ? h.costBasis / h.shares : 0;
+      h.marketValue = h.shares * (h.price || 0);
+      h.glDollar = h.marketValue - h.costBasis;
+      h.glPct = h.costBasis ? h.glDollar / h.costBasis : 0;
+    }
+  }
+  return log;
+}
+
 /* Builds the dashboard's holdings from the snapshot, using the fund tabs only for
    a starting price (live prices replace it seconds later) and the Treasury line,
    which the snapshot does not carry. */
@@ -4806,6 +4973,34 @@ function parseMasterWorkbook(wb) {
   }
   const bonds = tabOf.endowment && tabOf.endowment.bonds;   // the Treasury is only on the fund tab
   if (bonds && bonds.length) out.endowment.bond = bonds.length === 1 ? bonds[0] : bonds;
+
+  /* The snapshot stays as it was read - it is the anchor the performance
+     rebuild is pinned to - and the holdings move forward from it. asOf becomes
+     the date the holdings are now good for, so the rebuild anchors on the same
+     state the dashboard is showing rather than counting these tickets twice. */
+  out.snapshotAsOf = snap.asOf;
+  out.ticketLog = applyTicketsAfter(out, transactions, snap.asOf, settings);
+  out.asOf = out.ticketLog.lastDate || snap.asOf;
+  if (out.ticketLog.applied) {
+    const L = out.ticketLog;
+    out.warnings.push(`${L.applied} ticket${L.applied > 1 ? 's' : ''} after ${snap.asOf} applied to the holdings`
+      + (L.opened.length ? `; opened ${L.opened.join(', ')}` : '')
+      + (L.closed.length ? `; closed ${L.closed.join(', ')}` : ''));
+    for (const [what, n] of Object.entries(L.unknown))
+      out.warnings.push(`${n} ticket(s) the upload could not apply: ${what}`);
+    if (L.duplicates && L.duplicates.length)
+      out.warnings.push(`identical tickets after ${snap.asOf} - check these are separate fills and not a double import: `
+        + L.duplicates.join('; '));
+  }
+  /* A newly bought ticker must never go quiet. It is in the holdings and in the
+     fund's value either way, but without a sector it falls outside the sector
+     tables and without a price it cannot be valued, so both get said out loud. */
+  for (const key of ['endowment', 'ceeFund']) {
+    for (const h of [...out[key].equities, ...out[key].etfs]) {
+      if (h.sector === 'Unclassified')
+        out.warnings.push(`${h.fund} ${h.ticker} has no sector - add it to the Settings sector map so it appears in the sector views`);
+    }
+  }
   return out;
 }
 function _sheetRowsSafe(wb, name) { try { return name ? _sheetRows(wb, name) : null; } catch (e) { return null; } }
@@ -4815,7 +5010,8 @@ function _sheetRowsSafe(wb, name) { try { return name ? _sheetRows(wb, name) : n
 const _settingsForFirebase = st => ({
   sectorMap: Object.entries(st.sectorMap || {}), typeMap: Object.entries(st.typeMap || {}),
   symbolMap: Object.entries(st.symbolMap || {}), benchmarks: Object.entries(st.benchmarks || {}),
-  flowActions: st.flowActions || [], capClasses: Object.entries(st.capClasses || {})
+  flowActions: st.flowActions || [], capClasses: Object.entries(st.capClasses || {}),
+  riskFree: st.riskFree || 0
 });
 const _asMap = v => Array.isArray(v) ? Object.fromEntries(v.filter(p => Array.isArray(p) && p.length >= 2)) : (v || {});
 
@@ -4823,7 +5019,8 @@ const _asMap = v => Array.isArray(v) ? Object.fromEntries(v.filter(p => Array.is
 function applySettings(st) {
   if (!st) return;
   SETTINGS = { sectorMap: _asMap(st.sectorMap), typeMap: _asMap(st.typeMap), symbolMap: _asMap(st.symbolMap),
-    benchmarks: _asMap(st.benchmarks), flowActions: st.flowActions || [], capClasses: _asMap(st.capClasses) };
+    benchmarks: _asMap(st.benchmarks), flowActions: st.flowActions || [], capClasses: _asMap(st.capClasses),
+    riskFree: Number(st.riskFree) || 0 };
   Object.entries(SETTINGS.benchmarks).forEach(([sec, etf]) => { SECTOR_BENCHMARKS[sec] = etf; });
 }
 
@@ -4990,7 +5187,8 @@ function scStartIdx(p) {
   else { from = new Date(end); const k = parseInt(p);
     if (p.endsWith('W')) from.setDate(from.getDate() - 7 * k); else if (p.endsWith('M')) from.setMonth(from.getMonth() - k); else from.setFullYear(from.getFullYear() - k); }
   const iso = from.toISOString().slice(0, 10);
-  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i;
+  // Same baseline rule as perfStartIdx: the close before the period opens.
+  for (let i = 0; i < d.length; i++) if (d[i] >= iso) return i > 0 ? i - 1 : 0;
   return 0;
 }
 
@@ -5308,11 +5506,16 @@ function commitMasterUpload(m, file, okEl, errEl, input) {
     (m.priceHistory ? ` · ${m.priceHistory.dates.length.toLocaleString()} days of prices for ${Object.keys(m.priceHistory.px).length} tickers` : '') +
     (m.estimates.length ? ` · ${m.estimates.length} estimated trade${m.estimates.length > 1 ? 's' : ''} awaiting the broker export` : '') + `</div>` +
     `<div style="font-size:10px;margin-top:4px;color:var(--muted)">Prices, market values, gains and betas are worked out here, not read from the sheet.</div>` +
-    (m.warnings.length ? `<div style="font-size:10px;margin-top:4px;color:var(--warning)">⚠ ${m.warnings.length} share-count difference${m.warnings.length > 1 ? 's' : ''} between the snapshot and the fund tabs: ${m.warnings.slice(0, 4).join('; ')}</div>` : '');
+    // Everything the read had something to say about: tickets carried forward,
+    // positions opened or closed, identical tickets, holdings with no sector,
+    // and share counts that differ between the snapshot and the fund tabs.
+    (m.warnings.length ? `<div style="font-size:10px;margin-top:6px;color:var(--warning);text-align:left">`
+      + m.warnings.map(w => `⚠ ${w}`).join('<br>') + `</div>` : '');
   okEl.style.display = 'block';
   document.getElementById('lastUpdate').textContent = `Uploaded: ${file.name}`;
   input.value = '';
-  saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf, estimates: m.estimates });
+  saveHoldingsToFirebase(file.name, { settings: m.settings, asOf: m.asOf, snapshotAsOf: m.snapshotAsOf,
+    estimates: m.estimates });
   savePriceHistoryToFirebase(m.priceHistory, file.name);
   fetchLivePrices().catch(() => {});      // the sheet carries no prices; quote everything now
 }
@@ -5333,7 +5536,11 @@ async function saveHoldingsToFirebase(srcName, extra){
       // Trades the position snapshots imply but the transaction export has not
       // reached yet. The performance rebuild folds them into the ledger.
       estimatedTrades:(extra&&extra.estimates)||[],
-      asOf:(extra&&extra.asOf)||null
+      // asOf is the date the holdings are good for - the snapshot date, moved
+      // forward by any tickets dated after it. snapshotAsOf is the snapshot's
+      // own date, which is what the ledger is anchored to.
+      asOf:(extra&&extra.asOf)||null,
+      snapshotAsOf:(extra&&extra.snapshotAsOf)||(extra&&extra.asOf)||null
     };
     const r=await fetch(FB_DB_URL+FB_HOLDINGS_NODE+'.json',{method:'PUT',body:JSON.stringify(payload)});
     if(r.ok){ console.log('✅ Holdings synced to Firebase — all users will see this on refresh'); const ok=document.getElementById('uploadSuccess'); if(ok)ok.textContent+=' · ☁ Synced to all users'; }
@@ -5368,6 +5575,8 @@ async function loadHoldingsFromFirebase(){
     RAW.ceeFund.equities=d.ceeFund.equities; RAW.ceeFund.etfs=d.ceeFund.etfs||[]; RAW.ceeFund.cash=d.ceeFund.cash||0;
     if(Array.isArray(d.transactions)){ TRANSACTIONS.length=0; d.transactions.forEach(t=>TRANSACTIONS.push(t)); }
     if(d.settings) applySettings(d.settings);
+    HOLDINGS_META = { updatedAt:d.updatedAt||null, asOf:d.asOf||null,
+      snapshotAsOf:d.snapshotAsOf||d.asOf||null, source:d.source||null };
     if(d.updatedAt){ const dt=new Date(d.updatedAt); const lu=document.getElementById('lastUpdate'); if(lu)lu.textContent='Holdings as of '+dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
     console.log('✅ Shared holdings loaded from Firebase ('+(d.updatedAt||'unknown date')+')');
     return true;

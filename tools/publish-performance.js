@@ -7,7 +7,10 @@ const r2=a=>a.map(v=>v==null?null:+v.toFixed(2));
 
 // Firebase keys cannot contain . # $ [ ] / - store ticker maps as arrays instead
 const metaArr=Object.keys(P.meta.sectorOf||{}).map(t=>[t,P.meta.sectorOf[t],P.meta.typeOf[t]||'equity']);
-const OUT={generatedAt:P.generatedAt,anchor:P.anchor,dates:P.dates,funds:{},bench:{},tickers:metaArr};
+const OUT={generatedAt:P.generatedAt,anchor:P.anchor,dates:P.dates,funds:{},bench:{},tickers:metaArr,
+ // which upload this history was built from - the dashboard warns when it is not the current one
+ source:P.source||null,holdingsUpdatedAt:P.holdingsUpdatedAt||null,
+ holdingsAsOf:P.holdingsAsOf||null,snapshotAsOf:P.snapshotAsOf||null};
 for(const [k,f] of Object.entries(P.funds)){
  const sec={},secTwr={},secFlow={};
  for(const [s,v] of Object.entries(f.sectors)) sec[s]=r0(v);
