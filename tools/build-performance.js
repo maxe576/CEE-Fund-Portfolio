@@ -44,6 +44,34 @@ const YF   ={'BRK.B':'BRK-B'};                       // dashboard ticker -> Yaho
 const norm=s=>ALIAS[s]||s;
 const IS_CUSIP=s=>/^[0-9][0-9A-Z]{8}$/.test(s);
 const BOND_CUSIP='91282CLW9';
+/* The Treasury note used to be carried at 0.99 of face every day, which is
+   neither its cost nor its market price: the broker marked it at 96.75 on
+   2026-09-29, so the Endowment was carried about $563 (0.1%) high. There is no
+   daily price for a CUSIP from any of our sources, so it is valued on a straight
+   line between the price actually paid and the latest mark the workbook carries
+   (marketValue / face), and held flat outside that span. Both ends are then
+   right and the error in between is bounded by a point or so. */
+function bondPricer(live){
+ const b=live&&live.endowment&&live.endowment.bond;
+ const rec=Array.isArray(b)?b[0]:b;
+ const face=rec&&+rec.shares||0;
+ const mark=rec&&face&&+rec.marketValue?(+rec.marketValue/face):null;
+ const cost=rec&&face&&+rec.costBasis?(+rec.costBasis/face):null;
+ if(!mark) return ()=>0.99;
+ const asOf=String(live.asOf||'').slice(0,10);
+ let buy=null;
+ const rows=Array.isArray(live.transactions)?live.transactions:[];
+ for(const t of rows) if(String(t.ticker||'').trim()===BOND_CUSIP&&/buy/i.test(String(t.action||'')))
+  { const d=String(t.date||'').slice(0,10); if(!buy||d<buy) buy=d; }
+ if(!buy||!cost||!asOf||buy>=asOf) return ()=>mark;
+ const t0=Date.parse(buy), t1=Date.parse(asOf), span=t1-t0;
+ return d=>{
+  const t=Date.parse(d);
+  if(t<=t0) return cost;
+  if(t>=t1) return mark;
+  return cost+(mark-cost)*((t-t0)/span);
+ };
+}
 // Holdings with no price history left anywhere, valued at the price the fund
 // actually exited at. Left unpriced they are missing from NAV while held and their
 // exit proceeds land as a one-day gain.
@@ -199,6 +227,7 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  // The workbook lists the actions that move capital in or out; fall back to the built-in pair.
  if(Array.isArray(st.flowActions)&&st.flowActions.length){ EXTERNAL.clear(); st.flowActions.forEach(a=>EXTERNAL.add(String(a).trim())); }
 
+ const bondPx=bondPricer(live);
  const FUNDS=[{name:'CEE Fund',key:'ceeFund'},{name:'Endowment',key:'endowment'}];
  const sectorOf={}, typeOf={};
  for(const [tk,sec] of Object.entries(SECTOR_MAP)) if(sec) sectorOf[normSym(tk)]=sec;
@@ -246,6 +275,35 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
  const failed=tickers.filter(t=>!S[t].ok);
  console.log(`  ok=${tickers.length-failed.length}  failed=${failed.length}${failed.length?' -> '+failed.join(', '):''}`);
 
+ /* The provider files two different things under "splits": real share splits
+    (2-for-1, 10-for-1) and the price adjustment it applies before a spin-off,
+    where no shares change hands. Both arrive as a ratio, but they have to be
+    handled in opposite ways, and treating the second as the first is what left
+    S&P Global 0.767 shares (5.4%) too high for every day after 2026-07-01:
+    the backward walk went negative and the drift clamp quietly absorbed it.
+
+    A share split multiplies the holding, so past share counts are scaled.
+    A price-only adjustment leaves the holding alone - what it changes is the
+    earlier prices, which the provider has divided by the ratio - so the prices
+    before that date are multiplied back up and the ratio is dropped from the
+    split list. Both give value = the shares actually held x the price actually
+    traded; the difference is which side of the multiplication it belongs on. */
+ const SPLIT_RATIOS=[2,3,4,5,6,7,8,9,10,15,20,1.5,2.5,0.5,1/3,0.25,0.2,0.1,0.05];
+ const isShareSplit=r=>SPLIT_RATIOS.some(x=>Math.abs(r/x-1)<0.005);
+ const priceOnlyAdjustments=[];
+ for(const tk of tickers){
+  const ser=S[tk]; if(!ser||!ser.splits||!ser.splits.length) continue;
+  const keep=[];
+  for(const sp of ser.splits){
+   if(isShareSplit(sp.ratio)){ keep.push(sp); continue; }
+   for(const d of Object.keys(ser.px)) if(d<sp.date) ser.px[d]=+(ser.px[d]*sp.ratio).toFixed(4);
+   priceOnlyAdjustments.push(`${tk} ${sp.date} x${sp.ratio.toFixed(4)}`);
+  }
+  ser.splits=keep;
+ }
+ if(priceOnlyAdjustments.length)
+  console.log(`  treated as price adjustments, not share splits: ${priceOnlyAdjustments.join(', ')}`);
+
  // split factor: product of ratios strictly AFTER date (Yahoo prices are back-adjusted)
  function splitFactor(tk,date){
   const sp=S[tk]?.splits||[]; let f=1;
@@ -264,6 +322,21 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   }
  }
 
+ /* Dividends and interest are posted on the day they land, including weekends
+    and holidays. The backward walk removed those tickets by date, but the
+    forward walk only ever visits trading days, so they were taken out and never
+    put back: 39 tickets, and the published cash ended $556.51 (Endowment) and
+    $157.53 (CEE Fund) short of the snapshot it is anchored to. Each ticket is
+    moved to the first trading day at or after its own date. */
+ const dayIndex=new Map(); calendar.forEach((d,i)=>dayIndex.set(d,i));
+ function tradingDayFor(date){
+  if(dayIndex.has(date)) return date;
+  let lo=0,hi=calendar.length-1,ans=null;
+  while(lo<=hi){ const mid=(lo+hi)>>1;
+   if(calendar[mid]>=date){ ans=calendar[mid]; hi=mid-1; } else lo=mid+1; }
+  return ans||calendar[calendar.length-1];
+ }
+
  const HOLD={funds:{}};   // per-position daily series for the sector drill-down
  const OUT={generatedAt:new Date().toISOString(),anchor:ANCHOR,dates:calendar,funds:{},meta:{}};
 
@@ -277,13 +350,14 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
 
   // transactions in adjusted space (Stock Split rows dropped - factor handles them)
   const tx=f.tx.filter(t=>t.action!==SPLIT_ROW).map(t=>{
+   const eff=t.date<calendar[0]?t.date:tradingDayFor(t.date);   // posted on a closed day -> next session
    const fac=t.sym&&!IS_CUSIP(t.sym)?splitFactor(t.sym,t.date):1;
    let dq=0;
    if(SH_IN.has(t.action))dq=t.qty; else if(SH_OUT.has(t.action))dq=-t.qty;
    else if(SH_DELTA.has(t.action))dq=t.qty;
    let dc=0;
    if(SH_IN.has(t.action)||SH_OUT.has(t.action)||SH_DELTA.has(t.action)||INCOME.has(t.action)||FEES.has(t.action)||EXTERNAL.has(t.action))dc=t.amt;
-   return {...t,dq:dq*fac,dc:dc-(t.fee||0),ext:EXTERNAL.has(t.action)?t.amt:0};
+   return {...t,date:eff,asPosted:t.date,dq:dq*fac,dc:dc-(t.fee||0),ext:EXTERNAL.has(t.action)?t.amt:0};
   });
 
   // walk BACK from anchor to build the position/cash state at the window start
@@ -292,8 +366,23 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
   let cash=anchorCash;
   const pre=tx.filter(t=>t.date<=ANCHOR).sort((a,b)=>b.date.localeCompare(a.date));
   for(const t of pre){ if(t.dq&&t.sym) pos[t.sym]=(pos[t.sym]||0)-t.dq; cash-=t.dc; }
-  // clamp sub-share drift from snapshot/log timing
-  for(const k of Object.keys(pos)) if(pos[k]<0&&pos[k]>-1.5) pos[k]=0;
+  /* Walking back from the snapshot should land on a position of zero or more.
+     A negative one means the ledger and the snapshot disagree - a trade that was
+     never recorded, or one counted twice. Clamping it keeps the series usable,
+     but doing so silently is what hid the S&P Global error for as long as it
+     did, so every clamp is now reported with what it cost. */
+  const clamped=[];
+  for(const k of Object.keys(pos)){
+   if(pos[k]>=-1e-6) continue;
+   const px=S[k]&&S[k].ok?(S[k].px[ANCHOR]||Object.values(S[k].px).pop()):null;
+   clamped.push({ticker:k,shares:+pos[k].toFixed(4),approxValue:px?+Math.abs(pos[k]*px).toFixed(2):null});
+   pos[k]=0;
+  }
+  if(clamped.length){
+   console.warn(`  ${f.name}: ledger does not reconcile with the snapshot for `+
+    clamped.map(c=>`${c.ticker} (${c.shares} sh${c.approxValue?', ~$'+c.approxValue.toLocaleString():''})`).join(', '));
+   console.warn('    the position series for those holdings is as good as the ledger behind it');
+  }
 
   // now walk FORWARD across the calendar, applying each day's transactions
   const byDate={};
@@ -320,7 +409,7 @@ function xirr(flows){ // [{date, amt}] with final value as a positive flow
    for(const [tk,sh] of Object.entries(pos)){
     if(Math.abs(sh)<1e-6) continue;
     let px;
-    if(tk===BOND_CUSIP) px=0.99;                       // Treasury par proxy
+    if(tk===BOND_CUSIP) px=bondPx(d);                  // cost -> latest mark, straight line
     else if(PX_PROXY[tk]!=null) px=PX_PROXY[tk];      // no history left: exit price
     else { const ser=S[tk]; if(!ser||!ser.ok){missing.add(tk);continue;}
            px=ser.px[d]; if(px==null){ // carry last known close
