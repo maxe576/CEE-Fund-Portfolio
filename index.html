@@ -374,6 +374,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
     <div class="card"><div class="card-title">Risk Comparison</div><div id="riskComparison"></div></div>
   </div>
   <div class="card"><div class="card-title">Sector Weights vs S&P 500</div>
+    <div id="spWeightsNote" style="font-size:10px;color:var(--muted);margin:-6px 0 8px"></div>
     <div style="display:grid;grid-template-columns:160px 70px 1fr 70px 1fr 70px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding:4px 0 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
       <span>Sector</span><span style="text-align:right">Fund</span><span></span><span style="text-align:right">S&P</span><span></span><span style="text-align:right">Diff</span>
     </div><div id="spSectorTable"></div>
@@ -864,7 +865,59 @@ const JAN1 = {"endowment": {"GOOG": {"shares": 84.689, "sector": "Communication 
 const JAN1_PRICES = {"AAPL": 243.0, "ABBV": 181.57, "ADI": 224.89, "AMZN": 225.89, "BILS": 91.61, "BRK.B": 454.99, "BX": 158.5, "CAT": 357.34, "CEG": 258.6, "COF": 188.59, "COST": 972.49, "CRWD": 373.8, "DAR": 35.27, "DLR": 183.4, "ET": 20.29, "FDIS": 94.46, "FSLR": 165.37, "FTEC": 174.39, "GD": 302.4, "GOOG": 196.32, "GOOGL": 196.69, "GRMN": 224.07, "HCA": 368.2, "HD": 408.96, "IGV": 107.58, "IREN": 10.5, "ISRG": 524.65, "IYG": 92.0, "IYJ": 137.0, "KO": 62.63, "LLY": 799.14, "MA": 534.54, "META": 589.02, "MSFT": 422.0, "NLR": 55.36, "NUE": 117.59, "ORCL": 166.87, "PANW": 193.83, "PFE": 24.81, "PGR": 260.36, "PINS": 29.88, "PLTR": 73.22, "PSCT": 77.74, "QQQ": 518.86, "RSPN": 55.44, "SBGSF": 271.0, "SOFI": 15.93, "SOUN": 21.39, "SPGI": 491.24, "SYK": 375.64, "TROW": 99.49, "TSM": 205.7, "V": 316.17, "VCSH": 76.62, "VFH": 115.68, "VGLT": 53.39, "VGT": 74.33, "VHT": 262.6, "VIS": 230.8, "VMC": 264.67, "VOO": 545.91, "VTI": 291.98, "VUG": 67.16, "WM": 211.17, "WMT": 93.62, "XLB": 44.26, "XLC": 103.13, "XLE": 44.06, "XLF": 49.32, "XLP": 77.44, "XLU": 39.485, "XLV": 146.1, "XOM": 119.4};
 const YTD_BASELINES = {"endowment": {"jan1Cash": 76383.07, "jan1StockVal": 354194.64, "jan1Total": 455336.43, "curTotal": 521431.54, "ytdReturn": 14.5157}, "ceeFund": {"jan1Cash": 7728.82, "jan1StockVal": 190030.35, "jan1Total": 197759.18, "curTotal": 205993.69, "ytdReturn": 4.1639}};
 const START_PRICES = {"endowment": {"V": 316.17, "GOOG": 196.32, "CRWD": 373.8, "SBGSF": 271.0, "XLC": 103.13, "HCA": 368.2, "IGV": 107.58, "VIS": 230.8, "ORCL": 166.87, "PFE": 24.81, "CAT": 357.34, "SPGI": 491.24, "HD": 408.96, "WMT": 93.62, "FTEC": 174.39, "BX": 158.5, "QQQ": 518.86, "XLU": 39.485, "WM": 211.17, "XLP": 77.44, "XLE": 44.06, "MA": 534.54, "VFH": 115.68, "VTI": 291.98, "LLY": 799.14, "XOM": 119.4, "META": 589.02, "TSM": 205.7, "NUE": 117.59, "RSPN": 55.44, "VCSH": 76.62, "XLF": 49.32, "FDIS": 94.46, "BRK.B": 454.99, "AAPL": 243.0, "COST": 972.49, "VUG": 67.16, "VHT": 262.6, "MSFT": 422.0, "KO": 62.63, "PSCT": 77.74, "CEG": 258.6, "DLR": 183.4, "XLB": 44.26, "AMZN": 225.89, "VOO": 545.91, "NLR": 55.36, "SYK": 375.64, "SMH": 407.72, "CVS": 77.06, "OLLI": 112.14, "TKO": 203.03, "HWM": 254.43, "TMUS": 198.18, "NFLX": 92.26, "NVDA": 170.59}, "ceeFund": {"V": 316.17, "XLC": 103.13, "IGV": 107.58, "COF": 188.59, "FSLR": 165.37, "SPGI": 491.24, "HD": 408.96, "WMT": 93.62, "VGLT": 53.39, "ISRG": 524.65, "GRMN": 224.07, "GOOGL": 196.69, "DAR": 35.27, "WM": 211.17, "ABBV": 181.57, "PLTR": 73.22, "XLE": 44.06, "XLP": 77.44, "XLU": 39.485, "LLY": 799.14, "XOM": 119.4, "TSM": 205.7, "SOFI": 15.93, "XLV": 146.1, "PANW": 193.83, "RSPN": 55.44, "BRK.B": 454.99, "AAPL": 243.0, "BILS": 91.61, "TROW": 99.49, "VMC": 264.67, "MSFT": 422.0, "PSCT": 77.74, "PINS": 29.88, "DLR": 183.4, "VGT": 74.33, "XLB": 44.26, "SOUN": 21.39, "ET": 20.29, "PGR": 260.36, "IYJ": 137.0, "GD": 302.4, "ADI": 224.89, "IREN": 10.5, "IYG": 92.0, "DIS": 107.43, "TTWO": 204.21, "VNQ": 92.19, "XLY": 58.765, "HWM": 257.71, "NFLX": 92.21, "HOOD": 69.63}};
-const SP500_SECTORS = {"Information Technology": 32.08, "Financials": 13.02, "Health Care": 9.22, "Consumer Discretionary": 10.35, "Communication Services": 11.89, "Industrials": 8.26, "Consumer Staples": 5.84, "Energy": 3.52, "Real Estate": 2.24, "Materials": 2.17, "Utilities": 2.3};
+/* The index's own sector weights, used to say where each fund is overweight or
+   underweight. These used to be typed in here and they went stale: information
+   technology was 32.08% when they were written and is now near 38%, so every
+   comparison against it was out by six points. tools/index-weights.py refreshes
+   them each evening from the published holdings of the S&P 500 ETF joined with
+   each constituent's GICS sector, and the dashboard reads the result.
+
+   The figures below are the fallback, used only when that node cannot be read.
+   They are dated so a stale comparison says so on screen rather than passing
+   for current. */
+let SP500_SECTORS = {"Information Technology": 38.20, "Financials": 11.93, "Health Care": 9.81, "Consumer Discretionary": 8.92, "Communication Services": 8.96, "Industrials": 8.02, "Consumer Staples": 4.85, "Energy": 3.84, "Real Estate": 1.76, "Materials": 1.68, "Utilities": 2.02};
+let SP500_SECTORS_META = { asOf: '2026-10-26', live: false };
+const SP500_SECTORS_KEY = 'cee_index_sectors_v1';
+
+/* Reads the published weights, and keeps the last good copy in this browser so a
+   failed read shows last night's figures rather than year-old ones. A set that
+   does not have all eleven sectors adding to about 100 is rejected: a partial
+   table would quietly make every overweight look larger than it is. */
+async function loadIndexSectors() {
+  const use = (d, live) => {
+    const w = d && d.weights;
+    if (!w) return false;
+    const names = Object.keys(SP500_SECTORS);
+    if (!names.every(n => Number.isFinite(Number(w[n])) && Number(w[n]) > 0)) return false;
+    const sum = names.reduce((t, n) => t + Number(w[n]), 0);
+    if (Math.abs(sum - 100) > 1.5) return false;
+    SP500_SECTORS = {}; names.forEach(n => { SP500_SECTORS[n] = Number(w[n]); });
+    SP500_SECTORS_META = { asOf: d.asOf || null, live, coverage: d.coverage, source: d.source };
+    return true;
+  };
+  try { const c = JSON.parse(localStorage.getItem(SP500_SECTORS_KEY) || 'null'); if (c) use(c, false); } catch (e) {}
+  try {
+    const r = await fetch(FB_DB_URL + '/ceeIndexSectors.json');
+    if (r.ok) {
+      const d = await r.json();
+      if (use(d, true)) {
+        try { localStorage.setItem(SP500_SECTORS_KEY, JSON.stringify(d)); } catch (e) {}
+        if (currentTab === 'risk') renderBenchmark();
+        console.log('S&P 500 sector weights as of ' + (d.asOf || 'unknown') + ' (IT ' + SP500_SECTORS['Information Technology'].toFixed(2) + '%)');
+      }
+    }
+  } catch (e) { console.warn('index sector weights unavailable, using the stored copy:', e.message); }
+}
+// How current the comparison is, said out loud wherever it is used.
+function indexWeightsNote() {
+  const m = SP500_SECTORS_META;
+  if (!m.asOf) return 'S&P 500 weights: date unknown';
+  const d = new Date(m.asOf + 'T00:00:00');
+  const age = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const when = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return 'S&P 500 weights as of ' + when + (age > 10 ? ' (' + age + ' days old)' : '')
+    + ' \u00b7 from the index ETF\u2019s published holdings';
+}
 const SECTOR_BENCHMARKS = {"Information Technology": "XLK", "Financials": "XLF", "Health Care": "XLV", "Consumer Discretionary": "XLY", "Communication Services": "XLC", "Industrials": "XLI", "Consumer Staples": "XLP", "Energy": "XLE", "Real Estate": "XLRE", "Materials": "XLB", "Utilities": "XLU", "Broad Market": "SPY", "Fixed Income": "AGG"};
 const WS_TARGETS_DEFAULT = {"GOOG": 210, "META": 730, "NFLX": 1200, "TKO": 220, "AMZN": 280, "HD": 390, "COST": 1050, "KO": 78, "WMT": 115, "XOM": 135, "BRK.B": 530, "BX": 160, "MA": 600, "SPGI": 510, "V": 380, "TMUS": 240, "HCA": 420, "LLY": 1050, "PFE": 30, "SYK": 390, "CAT": 430, "HWM": 290, "SBGSF": 370, "WM": 245, "AAPL": 240, "CRWD": 480, "MSFT": 500, "NVDA": 175, "ORCL": 210, "TSM": 240, "NUE": 145, "DLR": 180, "CEG": 340, "ABBV": 235, "ADI": 280, "COF": 230, "DAR": 75, "DIS": 120, "ET": 22, "FSLR": 220, "GD": 380, "GOOGL": 210, "GRMN": 290, "HOOD": 65, "IREN": 18, "ISRG": 620, "PANW": 210, "PLTR": 120, "SOFI": 18, "SOUN": 12, "TTWO": 230, "VMC": 310};
 const FINNHUB = 'd84tjq9r01qrqbnni8b0d84tjq9r01qrqbnni8bg';
@@ -904,6 +957,7 @@ async function init() {
   // table). Swap in the cached 36-month regression before anything is drawn, so
   // the first screen shows the same beta the page settles on.
   apply3YBetas();
+  loadIndexSectors();        // the index's own sector weights, refreshed nightly
   buildState();
   updateFundSelector();
   renderAll();
@@ -3306,6 +3360,8 @@ function renderBenchmark() {
     <div style="text-align:right;color:var(--gray)">${r.sp.toFixed(1)}%</div>
     <div style="height:14px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;background:#f97316;width:${Math.min(r.sp/40*100,100).toFixed(1)}%;border-radius:3px"></div></div>
     <div style="text-align:right;font-weight:700;color:${r.diff>1?'#9fc4ff':r.diff<-1?'#ff8f8f':'#64748b'}">${r.diff>=0?'+':''}${r.diff.toFixed(1)}%</div></div>`).join('');
+  const noteEl=document.getElementById('spWeightsNote');
+  if(noteEl) noteEl.textContent=indexWeightsNote();
   const ow=rows.filter(r=>r.diff>1).length, uw=rows.filter(r=>r.diff<-1).length;
   document.getElementById('benchKpis').innerHTML=`
     <div class="kpi accent"><div class="kpi-label" title="Whole-fund beta incl. bonds and cash at beta 0">Portfolio Beta (Total Fund)</div><div class="kpi-value">${fmtBeta(fundBeta)}</div><div class="kpi-sub">${fundBeta!=null?(fundBeta>1?'More':'Less')+' volatile than S&P':'insufficient beta data'}</div></div>

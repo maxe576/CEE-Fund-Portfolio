@@ -90,6 +90,40 @@ The Transactions tab starts in column **A**: Date · Fund · Ticker · Action ·
 Shares · Price · Amount · Fees · Description. Rows without a share count are
 kept — dividends, interest and wires carry their value in **Amount**.
 
+## Where the S&P 500's sector weights come from
+
+```bash
+python tools/index-weights.py --dry-run   # fetch and print
+python tools/index-weights.py             # and publish
+```
+
+The overweight and underweight figures on Risk and Exposure are only as good as
+the index weights behind them, and those used to be typed into the page. They
+went stale: the table said information technology was 32.08% of the S&P 500 when
+the real figure had reached 38.20%, which was enough to show both funds as
+overweight technology when they are underweight by 2 to 5 points.
+
+Two sources, joined:
+
+- **State Street's daily SPY holdings file** gives each holding's exact index
+  weight and the date it is good for. It is the authority on weights, being the
+  fund that tracks the index. Its sector column is blank, which is why the second
+  source is needed. Published as `.xlsx` only, hence the openpyxl dependency.
+- **Wikipedia's list of S&P 500 companies** gives the GICS sector of every
+  constituent, and is kept current within a day or two of an index change.
+
+Only the labels come from Wikipedia; every number is the index's own. The script
+refuses to publish if it cannot label 97% of the index by weight, or if a sector
+comes out at zero, because a partial table makes every overweight look larger
+than it is. It writes one node, `/ceeIndexSectors`, and the nightly workflow runs
+it after the rebuild.
+
+The dashboard reads that node, keeps the last good copy in the browser, and
+rejects a set whose eleven sectors do not add to about 100. The table in
+`index.html` remains as a dated fallback. Risk and Exposure prints the date the
+weights are good for, so a stale comparison says so rather than passing for
+current.
+
 ## Checking that the workbook, the dashboard and the broker agree
 
 ```bash
