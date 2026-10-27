@@ -77,6 +77,12 @@ jobs:
         run: |
           echo "### Performance rebuild" >> $GITHUB_STEP_SUMMARY
           echo "Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          # The weights step is allowed to fail without failing the run, so say
+          # what is actually published. A date that stops advancing here is the
+          # first sign the index feed has broken.
+          curl -s --max-time 60 "https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeIndexSectors.json"             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const d=JSON.parse(s);
+                console.log('S&P 500 sector weights: as of '+d.asOf+', info tech '+d.weights['Information Technology']+'%, coverage '+d.coverage+'%');
+              }catch(e){console.log('S&P 500 sector weights: could not be read')}})" >> $GITHUB_STEP_SUMMARY
           if [ -f tools/perf.json ]; then
             node -e "const p=require('./tools/perf.json');
               console.log('Window: '+p.dates[0]+' to '+p.dates[p.dates.length-1]);
