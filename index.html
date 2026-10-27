@@ -1067,6 +1067,22 @@ function isEquityRiskHolding(h) {
   return h.type === 'equity' || (h.type === 'etf' && h.sector !== 'Fixed Income')
     || (!h.type && !['Fixed Income', 'Broad Market'].includes(h.sector));
 }
+/* Any holding carrying a measured beta, bond funds included. A bond ETF does
+   have a sensitivity to the stock market and it is not zero: over the last 36
+   months BILS comes out at 0.005 and VGLT at 0.446 against SPY. Counting them
+   at zero said they had no market exposure at all, which is not what the
+   regression shows.
+
+   This is not the same as the 1.00 the workbook reports for them. Excel's
+   Stocks beta for a fund is measured against that fund's own benchmark, so VGLT
+   reads 0.9977 against the long-Treasury index and XLU reads 0.9981 against
+   utilities. Useful numbers, but they cannot be added across a portfolio: for
+   that every holding has to be measured against the same yardstick, which here
+   is SPY. */
+function hasMeasuredBeta(h) {
+  if (h.beta === null || h.beta === undefined || h.beta === '') return false;
+  return Number.isFinite(Number(h.beta));
+}
 function hasValidEquityBeta(h) {
   // Number(null) and Number('') are both 0, and Number.isFinite(0) is true — so
   // testing the coerced value alone let a holding with NO beta count as beta 0
@@ -1083,18 +1099,24 @@ function calculateEquityBeta(holdings) {
   return { beta, coverage: totalValue > 0 ? eligibleValue / totalValue : 0 };
 }
 function calculateFundBeta(holdings, cash = 0) {
-  // TOTAL-FUND beta: bonds/fixed income and cash count at beta 0 (they dampen risk);
-  // equity holdings with a missing beta are excluded from BOTH sides (coverage gap),
-  // never treated as 0 or 1.
-  const equityValid = holdings.filter(hasValidEquityBeta);
-  const zeroBeta = holdings.filter(h => !isEquityRiskHolding(h));   // bonds + fixed-income ETFs
-  const num = equityValid.reduce((s, h) => s + Number(h.beta) * Number(h.marketValue || 0), 0);
-  const denom = equityValid.reduce((s, h) => s + Number(h.marketValue || 0), 0)
-    + zeroBeta.reduce((s, h) => s + Number(h.marketValue || 0), 0)
-    + Math.max(0, Number(cash) || 0);
+  /* TOTAL-FUND beta. Every holding with a measured beta contributes at that
+     beta, bond funds included. Cash counts at zero because it is cash, and so
+     does the Treasury note, which has no regression beta of its own. An equity
+     holding whose beta could not be measured is left out of the numerator and
+     shows up as a gap in the reported coverage, never as an assumed 0 or 1. */
+  const measured = holdings.filter(hasMeasuredBeta);
+  const noBeta = holdings.filter(h => !hasMeasuredBeta(h));
+  const num = measured.reduce((s, h) => s + Number(h.beta) * Number(h.marketValue || 0), 0);
+  const measuredValue = measured.reduce((s, h) => s + Number(h.marketValue || 0), 0);
   const totalValue = holdings.reduce((s, h) => s + Number(h.marketValue || 0), 0) + Math.max(0, Number(cash) || 0);
+  // Cash and anything without a beta stay in the denominator: they are part of
+  // the fund and they do dampen its sensitivity to the market.
+  const denom = measuredValue
+    + noBeta.reduce((s, h) => s + Number(h.marketValue || 0), 0)
+    + Math.max(0, Number(cash) || 0);
   if (denom <= 0) return { beta: null, coverage: 0 };
-  return { beta: num / denom, coverage: totalValue > 0 ? denom / totalValue : 0 };
+  // Coverage is the share of the fund whose beta is a measured number.
+  return { beta: num / denom, coverage: totalValue > 0 ? measuredValue / totalValue : 0 };
 }
 function calculateConcentration(holdings, totalValue) {
   const sorted = [...holdings].filter(h => Number(h.marketValue || 0) > 0)
@@ -1219,7 +1241,7 @@ function renderRiskExposure() {
   const fiVal=fi.reduce((s,h)=>s+(h.marketValue||0),0);
   const kpi=(l,v,sub,a)=>`<div class="kpi${a?' accent':''}"><div class="kpi-label">${l}</div><div class="kpi-value">${v}</div>${sub?`<div class="kpi-sub">${sub}</div>`:''}</div>`;
   kEl.innerHTML=
-    kpi('Portfolio Beta (Total Fund)', fmtBeta(S.beta), (S.betaCoverage!=null?(S.betaCoverage*100).toFixed(0)+'% coverage · bonds+cash at β0':''), true)+
+    kpi('Portfolio Beta (Total Fund)', fmtBeta(S.beta), (S.betaCoverage!=null?(S.betaCoverage*100).toFixed(0)+'% measured · bond funds per the workbook · cash at β0':''), true)+
     kpi('Largest Position', (conc.largest*100).toFixed(1)+'%', conc.sorted[0]?conc.sorted[0].ticker:'')+
     kpi('Top 5 Concentration', (conc.topFive*100).toFixed(1)+'%','of active fund')+
     kpi('Top 10 Concentration', (conc.topTen*100).toFixed(1)+'%','of active fund')+
@@ -3127,7 +3149,7 @@ function renderKPIs() {
     <div class="kpi accent"><div class="kpi-label" title="Positions with a known cost basis only — direct bonds without cost data are excluded">Unrealized G/L (Eq + ETFs)</div><div class="kpi-value ${tgl>=0?'pos':'neg'}">${tgl>=0?'+':''}${fmt(Math.abs(tgl))}</div><div class="kpi-sub">${tglp>=0?'+':''}${tglp.toFixed(2)}% on cost basis</div></div>
     <div class="kpi"><div class="kpi-label">Equity G/L</div><div class="kpi-value ${egl>=0?'pos':'neg'}">${egl>=0?'+':''}${fmt(Math.abs(egl))}</div><div class="kpi-sub">${eglp>=0?'+':''}${eglp.toFixed(2)}% · ${S.equities.length} stocks</div></div>
     <div class="kpi"><div class="kpi-label">ETF G/L</div><div class="kpi-value ${fgl>=0?'pos':'neg'}">${fgl>=0?'+':''}${fmt(Math.abs(fgl))}</div><div class="kpi-sub">${fglp>=0?'+':''}${fglp.toFixed(2)}% · ${S.etfs.length} ETFs</div></div>
-    <div class="kpi accent"><div class="kpi-label" title="Whole-fund beta: bonds, fixed income, and cash count at beta 0 (they dampen risk)">Portfolio Beta (Total Fund)</div><div class="kpi-value">${fmtBeta(S.beta)}</div><div class="kpi-sub">${S.betaCoverage!=null?(S.betaCoverage*100).toFixed(0)+'% coverage · ':''}vs S&P 500 = 1.00</div></div>
+    <div class="kpi accent"><div class="kpi-label" title="Whole-fund beta. Equities and equity ETFs count at their 36-month beta against SPY; bond funds count at the beta the workbook reports, which Excel measures against each fund&apos;s own benchmark; cash and the Treasury note count at 0">Portfolio Beta (Total Fund)</div><div class="kpi-value">${fmtBeta(S.beta)}</div><div class="kpi-sub">${S.betaCoverage!=null?(S.betaCoverage*100).toFixed(0)+'% coverage · ':''}vs S&P 500 = 1.00</div></div>
     <div class="kpi"><div class="kpi-label">Today's Change</div><div class="kpi-value ${dd>=0?'pos':'neg'}">${dd>=0?'+':'−'}${fmt(Math.abs(dd))} <span style="font-size:13px">(${dd>=0?'+':''}${(dd/((S.total-dd)||1)*100).toFixed(2)}%)</span></div><div class="kpi-sub">Day P&L vs yesterday</div></div>
     <div class="kpi"><div class="kpi-label">Positions</div><div class="kpi-value">${S.holdings.length}</div><div class="kpi-sub">${S.equities.length} eq + ${S.etfs.length} ETFs${S.holdings.length>S.equities.length+S.etfs.length?' + '+(S.holdings.length-S.equities.length-S.etfs.length)+' bond':''}</div></div>
     <div class="kpi"><div class="kpi-label">Cash</div><div class="kpi-value">${fmt(S.cash)}</div><div class="kpi-sub">${(S.cash/S.total*100).toFixed(1)}% of fund</div></div>
@@ -3364,7 +3386,7 @@ function renderBenchmark() {
   if(noteEl) noteEl.textContent=indexWeightsNote();
   const ow=rows.filter(r=>r.diff>1).length, uw=rows.filter(r=>r.diff<-1).length;
   document.getElementById('benchKpis').innerHTML=`
-    <div class="kpi accent"><div class="kpi-label" title="Whole-fund beta incl. bonds and cash at beta 0">Portfolio Beta (Total Fund)</div><div class="kpi-value">${fmtBeta(fundBeta)}</div><div class="kpi-sub">${fundBeta!=null?(fundBeta>1?'More':'Less')+' volatile than S&P':'insufficient beta data'}</div></div>
+    <div class="kpi accent"><div class="kpi-label" title="Whole-fund beta. Equities and equity ETFs count at their 36-month beta against SPY; bond funds count at the beta the workbook reports for them, which Excel measures against each fund&apos;s own benchmark; cash and the Treasury note count at 0">Portfolio Beta (Total Fund)</div><div class="kpi-value">${fmtBeta(fundBeta)}</div><div class="kpi-sub">${fundBeta!=null?(fundBeta>1?'More':'Less')+' volatile than S&P':'insufficient beta data'}</div></div>
     <div class="kpi"><div class="kpi-label">Overweight Sectors</div><div class="kpi-value" style="color:var(--blue)">${ow}</div><div class="kpi-sub">vs S&P 500</div></div>
     <div class="kpi"><div class="kpi-label">Underweight Sectors</div><div class="kpi-value" style="color:var(--red)">${uw}</div><div class="kpi-sub">vs S&P 500</div></div>
     <div class="kpi"><div class="kpi-label">S&P 500 (SPY)</div><div class="kpi-value" id="spxKpiVal">${spxData?'$'+spxData.c.toFixed(2):'Loading...'}</div><div class="kpi-sub" id="spxKpiSub">${spxData?(((spxData.c-spxData.pc)/spxData.pc*100)>=0?'+':'')+(((spxData.c-spxData.pc)/spxData.pc*100)).toFixed(2)+'% today':'Fetching live data'}</div></div>
@@ -4449,6 +4471,12 @@ function apply3YBetas(){
   let applied=0;
   [RAW.endowment,RAW.ceeFund].forEach(src=>{
     [...(src.equities||[]),...(src.etfs||[])].forEach(h=>{
+      /* Bond funds keep the beta the workbook gives them, so the two systems
+         report the same number for the same holding. Excel measures a fund's
+         beta against that fund's own benchmark, which is why VGLT reads 0.9977
+         there and 0.446 against SPY - different question, different answer. The
+         committee's figure is the workbook's, so that is the one shown. */
+      if(h.sector==='Fixed Income' && hasMeasuredBeta(h)) return;
       const s=stats3y[h.ticker];
       if(s&&Number.isFinite(s.beta)&&h.beta!==s.beta){ h.beta=s.beta; applied++; }
     });
@@ -5067,7 +5095,14 @@ function parseMasterWorkbook(wb) {
       costBasis: pos.costBasis, avgCost: pos.shares ? pos.costBasis / pos.shares : 0, price,
       marketValue, dayPct: seed.dayPct || 0, dayDollar: seed.dayDollar || 0,
       glDollar: marketValue - pos.costBasis, glPct: pos.costBasis ? (marketValue - pos.costBasis) / pos.costBasis : 0,
-      sector, beta: isEtf ? (ETF_BETAS[tk] ?? seed.beta ?? null) : (seed.beta ?? null),
+      /* A bond fund keeps the beta the workbook reports for it, so the two
+         systems show the same number for the same holding. For everything else
+         the built-in table is the better starting point and the 36-month
+         regression replaces it seconds later anyway. */
+      sector,
+      beta: isEtf ? (/^(Fixed Income|Bond)$/i.test(sector) ? (seed.beta ?? ETF_BETAS[tk] ?? null)
+                                                           : (ETF_BETAS[tk] ?? seed.beta ?? null))
+                  : (seed.beta ?? null),
       type: isEtf ? 'etf' : 'equity', fund: fundName };
     (isEtf ? out[key].etfs : out[key].equities).push(h);
     if (seed.shares != null && Math.abs(seed.shares - pos.shares) > 1e-6)
