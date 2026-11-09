@@ -51,7 +51,39 @@ const BOND_CUSIP='91282CLW9';
    line between the price actually paid and the latest mark the workbook carries
    (marketValue / face), and held flat outside that span. Both ends are then
    right and the error in between is bounded by a point or so. */
+/* Every dated mark we have for the note, interpolated between consecutive ones.
+   A single straight line from the price paid to the latest mark was wrong in the
+   middle, and measurably: the broker marked the note at 93.7734 on 2026-09-29
+   while the line through October's 96.03515 put it near 96.17, so the
+   Endowment's 30 September value came out about $600 high and October's return
+   read -0.58% against the statement's -0.45%. Marks come from the position
+   exports and the monthly statements and are published with the holdings. */
+function bondPricerFromMarks(marks){
+  const pts=(marks||[]).filter(m=>m&&m.date&&+m.price>0)
+    .map(m=>({t:Date.parse(String(m.date).slice(0,10)),p:+m.price/100}))
+    .sort((a,b)=>a.t-b.t);
+  if(!pts.length) return null;
+  return d=>{
+   const t=Date.parse(d);
+   if(t<=pts[0].t) return pts[0].p;
+   if(t>=pts[pts.length-1].t) return pts[pts.length-1].p;
+   for(let i=1;i<pts.length;i++){
+    if(t<=pts[i].t){
+     const a=pts[i-1], c=pts[i];
+     return a.p+(c.p-a.p)*((t-a.t)/(c.t-a.t));
+    }
+   }
+   return pts[pts.length-1].p;
+  };
+}
+
 function bondPricer(live){
+ const fromMarks=bondPricerFromMarks(live&&live.bondMarks);
+ if(fromMarks){
+  console.log(`  Treasury priced from ${live.bondMarks.length} dated marks `+
+    `(${live.bondMarks.map(m=>String(m.date).slice(0,10)).join(', ')})`);
+  return fromMarks;
+ }
  const b=live&&live.endowment&&live.endowment.bond;
  const rec=Array.isArray(b)?b[0]:b;
  const face=rec&&+rec.shares||0;

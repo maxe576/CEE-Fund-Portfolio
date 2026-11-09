@@ -1849,7 +1849,16 @@ function clearCustomRange() {
 // First index of the window for a period key. 'ALL' = whole history.
 function perfStartIdx(period) {
   const d = PERF.dates, last = d[perfEndIdx()];
-  if (customFrom) { for (let i = 0; i < d.length; i++) if (d[i] >= customFrom) return i; return 0; }
+  /* A custom range starts from the close BEFORE the From date, so the first day
+     of the range is inside the return. Asking for 1 to 31 October means October,
+     and October's return runs from 30 September's close - which is also what a
+     Schwab statement means by "Beginning Account Value as of 10/01". Measuring
+     from 1 October's own close instead left that day out: the CEE Fund's October
+     read +1.14% where the statement says +1.08%. */
+  if (customFrom) {
+    for (let i = 0; i < d.length; i++) if (d[i] >= customFrom) return i > 0 ? i - 1 : 0;
+    return 0;
+  }
   if (customTo) return 0;
   if (period === 'ALL') return 0;     // the first close we have, whatever date that is
   const end = new Date(last + 'T00:00:00');
