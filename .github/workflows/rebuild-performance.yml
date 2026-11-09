@@ -29,6 +29,12 @@ jobs:
   rebuild:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # The reconstruction holds four years of daily values for every position
+      # the funds have ever held, and that outgrew Node's default heap once the
+      # universe passed 140 tickers: the build died with "Allocation failed -
+      # JavaScript heap out of memory" rather than finishing.
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
 
