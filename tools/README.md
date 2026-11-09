@@ -203,14 +203,32 @@ the history follows. The money is the broker's figure and the price is the
 market's. A share purchase that turns up within ten days of the dividend stops it
 firing, so the real ticket always wins.
 
-## The Treasury note's mark
+## The Treasury note's marks
 
-`Endowment!G70` is a typed cell holding the note's market value, and everything
-downstream - the holdings view, the Endowment's NAV, the interpolated history -
-hangs off it. It needs updating from the broker whenever a position export
-arrives: the 2026-09-29 export marks the note at 93.7734, which is $23,443.36
-against face of $25,000, while the cell still read $24,187.50 from the September 2
-mark. The Endowment reads $744 high until it is changed.
+The note has no daily price from any source we have, so it is valued between the
+dated marks the broker gives us, published with the holdings as `bondMarks` and
+interpolated day by day between consecutive ones, flat outside the first and
+last. Six marks so far, each off a position export or a monthly statement:
+
+| Date | Price | Source |
+|---|---|---|
+| 2024-11-12 | 99.0349 | price paid |
+| 2026-08-03 | 97.3047 | position export |
+| 2026-08-31 | 97.07421 | August statement |
+| 2026-09-02 | 96.75 | position export |
+| 2026-09-29 | 93.7734 | position export |
+| 2026-10-31 | 96.03515 | October statement |
+
+A single line from the price paid to the latest mark used to stand in for this,
+and in the middle it was wrong by real money: through October's 96.03515 that
+line put 29 September near 96.17 where the broker marked 93.7734, so the
+Endowment's 30 September value came out about $600 high and its October return
+read -0.58% against the statement's -0.45%. With the marks in, that month reads
+-0.48% and the 30 September value is $31 from the statement's opening balance.
+
+Add a mark whenever a statement or position export arrives; the note's history
+improves with each one. `Endowment!G70` still carries the latest market value for
+the holdings view and should be kept in step with the newest mark.
 
 ## Rebuilding performance history
 
@@ -324,14 +342,18 @@ used to be hard-coded here at 4.30% while the sheet said 4.24%.
 measured from 31 December's close, not the first close of January - on an index
 that went 100 (31 Dec), 102, 103 the old way read +0.98% instead of +3%. The
 same rule applies to 1M, 3M, 1Y and the sector views, and to the benchmark
-beside them. A custom date range is measured between the two closes picked.
+beside them. **A custom date range follows it too**: the From date's own close is
+the wrong baseline, because it leaves that day outside the return. 1 to 31
+October means October, and October's return runs from 30 September's close -
+which is also what a statement means by "Beginning Account Value as of 10/01".
+The To date is measured at its own close, or the last session at or before it
+when the market was shut. The CEE Fund's October read +1.14% before this and
++1.08% after, against the statement's +1.08%.
 
 **The Treasury note** has no daily price from any source we have, so it is
-valued on a straight line between the price paid and the latest mark the
-workbook carries, and held flat outside that span. Both ends are right and the
-middle is an estimate, so treat the Endowment's history as approximate to within
-a couple of hundred dollars and replace this with dated broker marks if they
-become available.
+interpolated between the dated broker marks published with the holdings and held
+flat outside them - see "The Treasury note's marks" above. Days between two marks
+are still an estimate, but a bounded one, and every mark added tightens it.
 
 **Since inception is not the same period in both systems.** The workbook's
 stored history begins 2022-07-01; the published series begins 2022-08-15, where
@@ -397,7 +419,8 @@ growth looks far larger than the fund earned.
 - A ticker filled from the workbook's Price Data tab carries raw closes, so a
   split in that stretch would be invisible. The builder refuses to fill such a
   ticker rather than guess, and says which one it skipped.
-- The Treasury note is carried near par rather than marked to market.
+- The Treasury note is priced between dated broker marks, so days between two
+  marks are interpolated rather than quoted.
 - `MBGL` (Mobility Global, spun off from ExxonMobil 07/01/2026) is classified
   under Financials in the workbook.
 
