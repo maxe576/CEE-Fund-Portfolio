@@ -400,6 +400,44 @@ the ledger as income and reinvested shares, so valuing them at a
 dividend-adjusted price as well would count the same money twice. The builder
 fetches both series and keeps them apart on purpose.
 
+## Where the ETF look-through comes from
+
+Risk & Exposure breaks each ETF into the stocks inside it. Nothing about it is
+stored in the repo or in Firebase: the browser fetches it, keeps it for a day,
+and fetches it again. Two sources, and two dates that are not the same thing.
+
+| Funds | Source | What it gives | How current |
+|---|---|---|---|
+| Vanguard (VOO, VTI, VUG, VGT, VHT, VFH, VIS) | Vanguard's own disclosure, `investor.vanguard.com/vmf/api/<TICKER>/portfolio-holding/stock.json` | every constituent (first 500) | **month-end only**, published weeks later |
+| Everyone else | the StockAnalysis holdings page | the 25 largest | updated daily |
+
+Both go through the Cloudflare proxy, since neither sends CORS headers.
+
+**The date on screen is the date of the holdings, not of the fetch.** A Vanguard
+fund fetched this morning can still be dated six weeks ago, and it looks no
+different in a column of percentages - so the tab now says so: the status line
+gives the range of holdings dates and when they were last checked, and a note
+names any fund more than three weeks old and how much of the portfolio it is.
+On 12 November 2026 that was six Vanguard funds dated 30 September, 19% of the
+Endowment. There is nothing fresher to fetch; that is the issuer's schedule.
+
+Three things this replaced:
+
+- The cache was a week long and wrote failures down too, so one bad request
+  left a fund reading "no data" for seven days. It is a day now, failures are
+  not cached, and if a refetch fails the last good copy is shown and marked.
+- Vanguard funds were on the 25-largest list like everything else, which is
+  half of VOO. A stock the fund owns outright that sits 80th in the index
+  showed no exposure through it at all.
+- A fund built on swaps lists the swap and the Treasury bills behind it as
+  separate lines, so its weights sum past 100% and the swap lines carry no
+  ticker. Roundhill's memory fund read 139%, with Micron at 1.9% when it is
+  27.6% through two swaps. Collateral, cash and currency are now left out and a
+  swap is counted against the stock it tracks.
+
+The combined table is also redrawn on every live price refresh; it used to be
+drawn once when the tab opened.
+
 ## Return measures
 
 - **Our Return** (Modified Dietz) is what the dollars actually at work earned,

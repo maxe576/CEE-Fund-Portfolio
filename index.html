@@ -335,7 +335,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <select id="ltEtfSel" onchange="renderLtEtfDetail(this.value)" style="background:var(--card-bg-alt);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px"></select>
     </div>
     <div class="tbl-wrap"><table id="ltEtfTable"></table></div>
-    <div class="snapshot-note" style="margin-top:10px"><strong>Full constituent lists</strong> load directly from Vanguard for its ETFs — no key needed. All other issuers (SPDR, Invesco, VanEck, Fidelity, iShares) show their <strong>25 largest holdings</strong>, which covers most of each fund's weight in these top-heavy ETFs. Bond ETFs have no equity constituents. Screening data — verify against fund provider disclosures.</div>
+    <div class="snapshot-note" style="margin-top:10px"><strong>Refetched every day</strong>, and the date shown is the date of the holdings themselves, not of the fetch. <strong>Vanguard funds</strong> come from Vanguard's own disclosure: the full constituent list, but published month-end only, so they run up to six weeks behind. <strong>All other issuers</strong> (SPDR, Invesco, VanEck, Fidelity, iShares, Roundhill, Defiance) show their <strong>25 largest holdings</strong>, updated daily; the coverage line under each fund says how much of it those 25 are, which is nearly all of a sector fund and about half of a broad one. Bond ETFs, T-bill collateral, cash and currency are left out of the stock overlap, and a swap is counted against the stock it tracks. Market values move with live prices. Screening data — verify against fund provider disclosures.</div>
   </div>
 </div>
 <div id="tab-sectorcompare" class="tab-panel">
@@ -966,7 +966,7 @@ async function init() {
   if (localStorage.getItem('cee_upload_pw')) document.getElementById('uploadBtn').classList.add('visible');
   setTimeout(fetchSPX, 2000);
   setTimeout(load3YStatsAll, 4000);     // 3Y regression beta/alpha (cached 7 days)
-  setTimeout(loadEtfLookThrough, 6000); // ETF look-through auto-loads on every open (cached 30 days)
+  setTimeout(loadEtfLookThrough, 6000); // ETF look-through auto-loads on every open (refetched daily)
 }
 
 // ── ACTIVE-FUND HELPERS ─────────────────────────────────────────────────────────
@@ -1270,6 +1270,10 @@ function renderRiskExposure() {
         <td style="text-align:right">${h.duration!=null?h.duration.toFixed(1)+'y':'—'}</td>
         <td>${h.maturityDate||'—'}</td></tr>`).join('');
   }
+  // Every live price refresh comes through here. The look-through used to be
+  // drawn once, when the tab opened, and then sit on those market values while
+  // the figures above it moved.
+  if(!_ltLoading && S.etfs.length && S.etfs.every(e=>etfHoldings[e.ticker]!==undefined)) renderLookThrough();
 }
 
 // ── ETF LOOK-THROUGH (each ETF's constituents + weights) ─────────────────────
@@ -1278,14 +1282,43 @@ function renderRiskExposure() {
 //   • stockanalysis.com/api/symbol/e/<TK>/holdings — now 404s on every ticker.
 //   • Vanguard's portfolio-holding JSON — now answers with the SPA HTML shell.
 // Both failed silently, which is why every ETF showed "0 of N decomposed".
-let etfHoldings = {};        // etfTicker -> {holdings:[{symbol,name,pct}], src, bond} | null | undefined
+// Vanguard is the exception: its own disclosure endpoint answers again (a different
+// path from the dead one above) and gives the full constituent list, so Vanguard
+// funds are read from Vanguard and everything else from StockAnalysis.
+//
+// Each record carries two dates, and they are not the same thing:
+//   asOf    - the date of the holdings themselves, as the source states it
+//   fetched - when this browser last asked
+// A fund can be fetched this morning and still be dated six weeks ago, because
+// Vanguard publishes month-end holdings only. Both are shown on screen.
+let etfHoldings = {};        // etfTicker -> {holdings:[{symbol,name,pct}], src, bond, asOf, fetched, listed, excluded} | null | undefined
+let _etfStale = {};          // last copy that loaded, kept only to fall back on if a refetch fails
 let _ltLoading = false;
-(function(){ try{ const c=JSON.parse(localStorage.getItem('cee_etf_hold_v5')||'null');
-  if(c && Date.now()-c.ts < 7*86400e3) etfHoldings=c.data||{}; }catch(e){} })();
+const ETF_CACHE_KEY='cee_etf_hold_v6', ETF_CACHE_TTL=24*3600e3;   // refetched daily; it was weekly
+(function(){ try{
+  ['cee_etf_hold_v5','cee_etf_hold_v4'].forEach(k=>localStorage.removeItem(k));
+  const c=JSON.parse(localStorage.getItem(ETF_CACHE_KEY)||'null');
+  Object.entries((c&&c.data)||{}).forEach(([tk,rec])=>{
+    if(!rec||!rec.holdings||!rec.holdings.length||!rec.fetched) return;
+    const { stale, ...clean } = rec;
+    if(Date.now()-rec.fetched < ETF_CACHE_TTL) etfHoldings[tk]=clean; else _etfStale[tk]=clean;
+  });
+}catch(e){} })();
+
+// Only what actually loaded is written down. A failed fetch used to be cached as
+// "no data" and then believed for a week.
+function saveEtfCache(){
+  const data={};
+  Object.entries(_etfStale).forEach(([tk,rec])=>{ if(rec&&rec.holdings) data[tk]=rec; });
+  Object.entries(etfHoldings).forEach(([tk,rec])=>{ if(rec&&rec.holdings&&!rec.stale) data[tk]=rec; });
+  try{ localStorage.setItem(ETF_CACHE_KEY,JSON.stringify({data})); }catch(e){}
+}
 
 function reloadEtfLookThrough(){
+  // What is on screen becomes the fallback, so a reload during an outage cannot
+  // leave the table emptier than it was.
+  Object.entries(etfHoldings).forEach(([tk,rec])=>{ if(rec&&rec.holdings){ const { stale, ...clean } = rec; _etfStale[tk]=clean; } });
   etfHoldings={};
-  try{ localStorage.removeItem('cee_etf_hold_v5'); localStorage.removeItem('cee_etf_hold_v4'); }catch(e){}
   loadEtfLookThrough();
 }
 
@@ -1324,18 +1357,113 @@ function _parseHoldingsTable(html){
   return [];
 }
 
+// The page states when its holdings were last updated; that is the date of the
+// data, and it used to be thrown away.
+const _LT_MON={Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+function _saHoldingsDate(html){
+  const m=String(html).match(/Updated:?\s*"?([A-Z][a-z]{2}) (\d{1,2}), (\d{4})/);
+  if(!m||!_LT_MON[m[1]]) return null;
+  return m[3]+'-'+String(_LT_MON[m[1]]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0');
+}
+function _ltFmtDate(iso){
+  if(!iso) return 'undated';
+  const [y,m,d]=String(iso).split('-').map(Number);
+  return Object.keys(_LT_MON)[m-1]+' '+d+', '+y;
+}
+
+// Vanguard's own disclosure: every constituent (first 500), with the as-of date.
+async function _fetchVanguardHoldings(tk){
+  try{
+    const r=await fetch(CF_PROXY+'?url='+encodeURIComponent('https://investor.vanguard.com/vmf/api/'+tk+'/portfolio-holding/stock.json'));
+    if(!r.ok) return null;
+    const j=await r.json();
+    const rows=((j.fund&&j.fund.entity)||[]).map(e=>({
+      symbol:String(e.ticker||'').trim().toUpperCase(),
+      name:String(e.longName||e.shortName||'').trim(),
+      pct:parseFloat(e.percentWeight)/100
+    })).filter(h=>h.symbol && h.pct>0).sort((a,b)=>b.pct-a.pct);
+    if(rows.length<10) return null;
+    return {rows, asOf:String(j.asOfDate||'').slice(0,10)||null, listed:+j.size||rows.length};
+  }catch(e){ return null; }
+}
+
+/* What a fund lists is not always what it is exposed to. A fund built on swaps
+   lists the swap, and the Treasury bills posted against it, as separate lines -
+   so its weights add to well over 100% and none of the swap lines carries a
+   ticker. Roundhill's memory fund read 139%, with Micron showing as 1.9% when
+   the fund is 27.6% Micron through two swaps.
+
+   This turns the listed rows into stock exposure: collateral, cash and currency
+   come out, and each swap is counted against the stock it tracks - matched by
+   name to a stock line in the same fund, or kept under its own name when the
+   fund holds no such line. A fund that is mostly debt is a bond fund and is
+   returned as one, whatever sector the workbook files it under. */
+const _LT_CCY=new Set(['USD','KRW','TWD','JPY','EUR','GBP','CHF','CAD','AUD','HKD','CNY','CNH','INR','SGD','SEK','NOK','DKK','BRL','MXN','ZAR']);
+function _ltNormName(s){
+  return String(s||'').toUpperCase().replace(/[-\u2013 ]\s*SWAP.*$/,'').replace(/[^A-Z0-9 ]/g,' ')
+    .replace(/\b(INC|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|HOLDINGS|HOLDING|GROUP|THE|SA|NV|AG)\b/g,' ')
+    .replace(/\s+/g,' ').trim();
+}
+function _ltEffective(rows){
+  const swapRe=/\bSWAP\b|\.TRS\b/i;
+  const debtRe=/TREASURY (BILL|NOTE|BOND|INFLATION|FLOAT)|UNITED STATES TREAS|\bUS TREAS|\bT-?BILLS?\b|\d\.\d+\s?%|\b\d{2}[\/.]\d{2}[\/.]\d{2,4}\b/i;
+  const cashRe=/^(US )?DOLLARS?$|^CASH\b|^NET (CASH|OTHER)|MONEY MARKET|MARKET LIQUIDITY|LIQUIDITY FUND|CASH (COLLATERAL|EQUIVALENT)|^OTHER ASSETS/i;
+  const ccyRe=/DOLLAR|WON|YEN|EURO|POUND|FRANC|YUAN|RENMINBI|RUPEE|PESO|KRON|RAND|REAL/i;
+  const kind=r=>{
+    const sym=r.symbol||'', n=(r.name||'').trim();
+    if(swapRe.test(sym)||swapRe.test(n)) return 'swap';
+    if(debtRe.test(n)||/^B\.\d|\d{2}\.\d{2}\.\d{2}/.test(sym)) return 'debt';
+    if(cashRe.test(n)||(_LT_CCY.has(sym)&&ccyRe.test(n))) return 'cash';
+    return 'stock';
+  };
+  const tagged=rows.map(r=>({...r,k:kind(r)}));
+  const sumOf=k=>tagged.filter(r=>r.k===k).reduce((a,r)=>a+r.pct,0);
+  const listed=tagged.reduce((a,r)=>a+r.pct,0)||1;
+  if(sumOf('debt')/listed>0.5) return {bond:true, holdings:rows, excluded:0};
+  const out=[], at={};
+  const put=(symbol,name,pct)=>{ if(at[symbol]!=null) out[at[symbol]].pct+=pct; else { at[symbol]=out.length; out.push({symbol,name,pct}); } };
+  tagged.filter(r=>r.k==='stock').forEach(r=>put(r.symbol,r.name,r.pct));
+  const byName={}; out.forEach(r=>{ const k=_ltNormName(r.name); if(k&&!byName[k]) byName[k]=r.symbol; });
+  tagged.filter(r=>r.k==='swap').forEach(r=>{
+    const k=_ltNormName(r.name); if(!k) return;
+    let sym=byName[k];
+    if(!sym){ const near=Object.keys(byName).find(n=>n.startsWith(k)||k.startsWith(n)); if(near) sym=byName[near]; }
+    if(sym) put(sym, out[at[sym]].name, r.pct);
+    else put(k, String(r.name||k).replace(/[-– ]\s*SWAP.*$/i,'').trim()+' (held through a swap)', r.pct);
+  });
+  out.sort((a,b)=>b.pct-a.pct);
+  return {bond:false, holdings:out, excluded:sumOf('debt')+sumOf('cash')};
+}
+
 async function fetchEtfHoldings(ticker){
   const tk=String(ticker).toUpperCase();
   if(etfHoldings[tk]!==undefined) return etfHoldings[tk];
   const etfObj=[...RAW.endowment.etfs,...RAW.ceeFund.etfs].find(e=>e.ticker===tk);
   const isBond=etfObj&&etfObj.sector==='Fixed Income';
-  const html=await _fetchTextWithProxyFallback('https://stockanalysis.com/etf/'+tk.toLowerCase()+'/holdings/');
-  if(!html) return (etfHoldings[tk]=null);
-  const rows=_parseHoldingsTable(html);
-  // Bond ETFs list individual Treasury/credit issues, not tickers. Worth showing on
-  // the fund's own page, but they are not equity exposure, so they stay out of the
-  // stock-overlap aggregate below.
-  return (etfHoldings[tk]=rows.length?{holdings:rows,src:'sa',bond:!!isBond}:null);
+  const isVanguard=etfObj ? /vanguard/i.test(etfObj.company||'') : /^V[A-Z]{2,3}$/.test(tk);
+  let rec=null;
+  if(isVanguard && !isBond){
+    const v=await _fetchVanguardHoldings(tk);
+    if(v){
+      const eff=_ltEffective(v.rows);
+      if(eff.holdings.length) rec={holdings:eff.holdings, excluded:eff.excluded, src:'vanguard', bond:!!eff.bond, asOf:v.asOf, listed:v.listed, fetched:Date.now()};
+    }
+  }
+  if(!rec){
+    const html=await _fetchTextWithProxyFallback('https://stockanalysis.com/etf/'+tk.toLowerCase()+'/holdings/');
+    const rows=html?_parseHoldingsTable(html):[];
+    if(rows.length){
+      // Bond ETFs list individual Treasury/credit issues, not tickers. Worth showing on
+      // the fund's own page, but they are not equity exposure, so they stay out of the
+      // stock-overlap aggregate below.
+      const eff=isBond?{bond:true,holdings:rows,excluded:0}:_ltEffective(rows);
+      if(eff.holdings.length) rec={holdings:eff.holdings, excluded:eff.excluded, src:'sa', bond:!!eff.bond, asOf:_saHoldingsDate(html), listed:rows.length, fetched:Date.now()};
+    }
+  }
+  // Nothing came back: show the last copy that did, marked as such, rather than
+  // dropping the fund out of the look-through.
+  if(!rec && _etfStale[tk]) rec={..._etfStale[tk], stale:true};
+  return (etfHoldings[tk]=rec);
 }
 
 async function loadEtfLookThrough(){
@@ -1349,7 +1477,7 @@ async function loadEtfLookThrough(){
       await Promise.all(todo.slice(i,i+4).map(t=>fetchEtfHoldings(t)));
       if(i+4<todo.length) await new Promise(r=>setTimeout(r,300));
     }
-    try{ localStorage.setItem('cee_etf_hold_v5',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
+    saveEtfCache();
     renderLookThrough();
   } finally { _ltLoading=false; }
 }
@@ -1361,10 +1489,36 @@ function renderLookThrough(){
   // stock-overlap table — they are listed on their own page instead.
   const eqEtfs=okEtfs.filter(e=>!etfHoldings[e.ticker].bond);
   const st=document.getElementById('ltStatus');
+  const fundW=e=>(e.marketValue||0)/(S.total||1);
+  const dated=eqEtfs.map(e=>etfHoldings[e.ticker].asOf).filter(Boolean).sort();
   if(st){
     const nBond=okEtfs.length-eqEtfs.length;
-    st.textContent = okEtfs.length+' of '+S.etfs.length+' ETFs decomposed · top 25 holdings each'
+    const checked=okEtfs.length?Math.min(...okEtfs.map(e=>etfHoldings[e.ticker].fetched||Date.now())):null;
+    st.textContent = okEtfs.length+' of '+S.etfs.length+' ETFs decomposed'
+      + (dated.length?' · holdings dated '+_ltFmtDate(dated[0])+(dated[0]!==dated[dated.length-1]?' to '+_ltFmtDate(dated[dated.length-1]):''):'')
+      + (checked?' · checked '+new Date(checked).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'')
       + (nBond?' · '+nBond+' bond ETF'+(nBond>1?'s':'')+' excluded from stock overlap':'');
+  }
+  /* Say what the table cannot. A fund that failed to load is simply absent from
+     the sums below, and a fund on month-end disclosure looks exactly like one
+     updated yesterday - neither is visible in a column of percentages. */
+  const notes=[];
+  const note=(txt,warn)=>`<div style="font-size:11px;line-height:1.5;padding:7px 10px;margin-bottom:8px;border-radius:6px;border:1px solid ${warn?'var(--warning)':'var(--border)'};color:${warn?'var(--warning)':'var(--muted)'}">${txt}</div>`;
+  const pctOf=list=>(list.reduce((a,e)=>a+fundW(e),0)*100).toFixed(1)+'%';
+  const names=list=>list.map(e=>e.ticker).join(', ');
+  const failed=S.etfs.filter(e=>etfHoldings[e.ticker]===null);
+  if(failed.length) notes.push(note(`<strong>${names(failed)} could not be loaded</strong> - ${pctOf(failed)} of the fund is missing from the exposure below, so "Via ETFs" is understated for every stock ${failed.length>1?'they hold':'it holds'}. Press Reload to try again.`, true));
+  const carried=okEtfs.filter(e=>etfHoldings[e.ticker].stale);
+  if(carried.length) notes.push(note(`${names(carried)} could not be refreshed just now; showing the last copy that loaded.`, true));
+  const cutoff=new Date(Date.now()-21*86400e3).toISOString().slice(0,10);
+  const old=eqEtfs.filter(e=>etfHoldings[e.ticker].asOf && etfHoldings[e.ticker].asOf<cutoff);
+  if(old.length){
+    const rest=eqEtfs.filter(e=>!old.includes(e)).map(e=>etfHoldings[e.ticker].asOf).filter(Boolean).sort();
+    const restTxt=rest.length?` The other ${rest.length} stock fund${rest.length>1?'s are':' is'} dated ${_ltFmtDate(rest[0])}${rest[0]!==rest[rest.length-1]?' to '+_ltFmtDate(rest[rest.length-1]):''}.`:'';
+    const byDate={}; old.forEach(e=>{ const d=etfHoldings[e.ticker].asOf; (byDate[d]=byDate[d]||[]).push(e); });
+    Object.keys(byDate).sort().forEach(d=>notes.push(note(
+      `<strong>${names(byDate[d])}</strong> ${byDate[d].length>1?'are':'is'} dated ${_ltFmtDate(d)} - the latest holdings ${byDate[d].length>1?'their':'its'} issuer has published (Vanguard reports month-end only). `
+      + `${byDate[d].length>1?'They make':'It makes'} up ${pctOf(byDate[d])} of the fund, so that part of the look-through runs on weights that have drifted with prices since.${restTxt}`)));
   }
   // Aggregate: combined exposure per stock = direct weight + Σ(ETF fund-weight × stock weight in ETF)
   const agg={};
@@ -1380,7 +1534,7 @@ function renderLookThrough(){
   });
   const rows=Object.values(agg).map(a=>({...a,total:a.direct+a.via}))
     .filter(a=>a.total>0.0005).sort((a,b)=>b.total-a.total).slice(0,15);
-  aggEl.innerHTML =
+  aggEl.innerHTML = notes.join('') +
     `<div style="display:grid;grid-template-columns:80px 1fr 80px 80px 90px;gap:6px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding-bottom:5px;border-bottom:1px solid var(--border)">
       <span>Stock</span><span>Held via</span><span style="text-align:right">Direct</span><span style="text-align:right">Via ETFs</span><span style="text-align:right">Combined</span></div>`+
     rows.map(r=>`<div style="display:grid;grid-template-columns:80px 1fr 80px 80px 90px;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px${r.direct>0?';cursor:pointer':''}" ${r.direct>0?`title="Open investment thesis for ${r.sym}" onclick="goToThesis('${r.sym}')"`:''}>
@@ -1392,7 +1546,9 @@ function renderLookThrough(){
   // Per-ETF selector
   const sel=document.getElementById('ltEtfSel');
   if(sel){
+    const prev=sel.value;
     sel.innerHTML=okEtfs.map(e=>`<option value="${e.ticker}">${e.ticker} — ${e.company||''}</option>`).join('');
+    if(prev && okEtfs.some(e=>e.ticker===prev)) sel.value=prev;   // a price refresh redraws this; keep the fund being read
     if(okEtfs.length) renderLtEtfDetail(sel.value||okEtfs[0].ticker);
     else document.getElementById('ltEtfTable').innerHTML='<tr><td style="color:var(--muted)">No ETF holdings data available yet.</td></tr>';
   }
@@ -1405,13 +1561,25 @@ function renderLtEtfDetail(ticker){
   if(!data||!data.holdings){ tEl.innerHTML='<tr><td style="color:var(--muted)">No constituent data for '+ticker+'.</td></tr>'; return; }
   const fundW=etf?(etf.marketValue||0)/(S.total||1):0;
   const covered=data.holdings.reduce((s,h)=>s+h.pct,0);
+  // A full list runs to 500 names; the table shows the largest 25 and the sums
+  // above use all of them.
+  const shown=data.holdings.slice(0,25);
+  const shownCov=shown.reduce((s,h)=>s+h.pct,0);
+  const src=data.src==='vanguard'
+    ? 'Vanguard, full list - '+data.holdings.length+(data.listed>data.holdings.length?' of '+data.listed:'')+' names, all counted above'
+    : 'StockAnalysis, its '+data.holdings.length+' largest holdings';
   tEl.innerHTML='<tr><th>#</th><th>Stock</th><th>Name</th><th style="text-align:right">% of '+ticker+'</th><th style="text-align:right">% of Fund via '+ticker+'</th></tr>'+
-    data.holdings.map((h,i)=>`<tr><td style="color:var(--muted)">${i+1}</td>
+    shown.map((h,i)=>`<tr><td style="color:var(--muted)">${i+1}</td>
       <td class="ticker-cell">${String(h.symbol).toUpperCase()}</td><td style="font-size:11px">${h.name||''}</td>
       <td style="text-align:right;font-weight:600">${(h.pct*100).toFixed(2)}%</td>
       <td style="text-align:right">${(h.pct*fundW*100).toFixed(3)}%</td></tr>`).join('')+
-    `<tr><td></td><td colspan="2" style="color:var(--muted);font-size:11px">Top ${data.holdings.length} shown cover ${(covered*100).toFixed(0)}% of ${ticker}</td>
-      <td colspan="2" style="text-align:right;color:var(--muted);font-size:11px">${ticker} is ${(fundW*100).toFixed(1)}% of ${S.fundName}</td></tr>`;
+    `<tr><td></td><td colspan="2" style="color:var(--muted);font-size:11px">${data.holdings.length>shown.length
+        ? 'Top '+shown.length+' shown cover '+(shownCov*100).toFixed(0)+'% of '+ticker+'; all '+data.holdings.length+' cover '+(covered*100).toFixed(0)+'%'
+        : 'The '+shown.length+' listed cover '+(covered*100).toFixed(0)+'% of '+ticker}</td>
+      <td colspan="2" style="text-align:right;color:var(--muted);font-size:11px">${ticker} is ${(fundW*100).toFixed(1)}% of ${S.fundName}</td></tr>
+    <tr><td></td><td colspan="4" style="color:var(--muted);font-size:11px">Holdings as of <strong>${_ltFmtDate(data.asOf)}</strong> · ${src}${data.stale?' · <span style="color:var(--warning)">could not be refreshed, last copy shown</span>':''}${data.excluded>0.005
+        ? ' · a further '+(data.excluded*100).toFixed(0)+'% is listed as T-bill collateral, cash or currency and is left out; swaps are counted against the stock they track'
+        : ''}</td></tr>`;
 }
 
 /* ETF holdings pop-up. Clicking an ETF anywhere in the dashboard answers
@@ -1434,7 +1602,7 @@ async function openEtfHoldings(ticker){
   document.getElementById('etfModalBody').innerHTML='<div style="padding:30px;text-align:center;color:var(--muted)">Loading '+tk+' holdings…</div>';
   try{
     await fetchEtfHoldings(tk);
-    try{ localStorage.setItem('cee_etf_hold_v5',JSON.stringify({ts:Date.now(),data:etfHoldings})); }catch(e){}
+    saveEtfCache();
   }catch(e){}
   if(_etfModalTicker===tk) _renderEtfModalBody();
 }
@@ -1482,7 +1650,8 @@ function _renderEtfModalBody(){
           + (_etfModalAll?'Show top 10 only':'Show all '+rows.length)+'</button></div>'
         : '')
     + '<div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">'
-    + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+'.'
+    + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+', as of '+_ltFmtDate(data.asOf)
+    + (data.src==='vanguard'?' (Vanguard, published month-end)':'')+'.'
     + (Object.keys(direct).some(k=>rows.some(r=>r.symbol===k))?' ◆ marks a company the fund also owns directly.':'')
     + '</div>';
 }
@@ -1536,7 +1705,7 @@ async function ensureEtfDataFor(holdingsArrays) {
   if (!need.size) return false;
   const list = [...need];
   for (let i = 0; i < list.length; i += 4) await Promise.all(list.slice(i, i + 4).map(t => fetchEtfHoldings(t).catch(() => null)));
-  try { localStorage.setItem('cee_etf_hold_v5', JSON.stringify({ ts: Date.now(), data: etfHoldings })); } catch (e) {}
+  saveEtfCache();
   return true;
 }
 
@@ -3577,14 +3746,17 @@ async function estimateBeta(ticker){
   try{
     const data=await fetchEtfHoldings(tk);
     if(data && data.holdings && data.holdings.length && !data.bond){
+      // A full Vanguard list is 500 names; the largest 40 carry the beta and
+      // keep this to a handful of requests.
+      const top=data.holdings.slice(0,40);
       let num=0, den=0;
-      for(let i=0;i<data.holdings.length;i+=5){
-        const batch=data.holdings.slice(i,i+5);
+      for(let i=0;i<top.length;i+=5){
+        const batch=top.slice(i,i+5);
         const st=await Promise.all(batch.map(c=>fetch3YStats(c.symbol).catch(()=>null)));
         batch.forEach((c,j)=>{ const b=st[j]?.beta; if(b!=null&&isFinite(b)){ num+=b*c.pct; den+=c.pct; } });
       }
       if(den>0.2) return {beta:num/den, isEtf:true,
-        note:'weighted from '+data.holdings.length+' holdings ('+(den*100).toFixed(0)+'% of fund) — too new for a 3Y beta'};
+        note:'weighted from '+top.length+' holdings ('+(den*100).toFixed(0)+'% of fund) — too new for a 3Y beta'};
     }
   }catch(e){}
   return null;
