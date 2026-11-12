@@ -408,7 +408,7 @@ and fetches it again. Two sources, and two dates that are not the same thing.
 
 | Funds | Source | What it gives | How current |
 |---|---|---|---|
-| Vanguard (VOO, VTI, VUG, VGT, VHT, VFH, VIS) | Vanguard's own disclosure, `investor.vanguard.com/vmf/api/<TICKER>/portfolio-holding/stock.json` | every constituent (first 500) | **month-end only**, published weeks later |
+| Vanguard (VOO, VTI, VUG, VGT, VHT, VFH, VIS) | Vanguard's own disclosure, `investor.vanguard.com/vmf/api/<TICKER>/portfolio-holding/stock.json`, re-priced nightly into `/ceeEtfHoldings` | every constituent (first 500) | list is **month-end only**; weights brought to the latest close each night |
 | Everyone else | the StockAnalysis holdings page | the 25 largest | updated daily |
 
 Both go through the Cloudflare proxy, since neither sends CORS headers.
@@ -420,6 +420,39 @@ gives the range of holdings dates and when they were last checked, and a note
 names any fund more than three weeks old and how much of the portfolio it is.
 On 12 November 2026 that was six Vanguard funds dated 30 September, 19% of the
 Endowment. There is nothing fresher to fetch; that is the issuer's schedule.
+
+### Why Vanguard lags, and what is done about it
+
+Vanguard discloses holdings once a month, as of month end, a few weeks late.
+Six weeks is a long time in a fast market: VOO's 30 September list still had
+Nvidia at 8.39% on 12 November, when the index held 6.39%.
+
+The disclosure does give the number of shares held of each stock, and an index
+fund barely changes those between rebalances - what moves the weights is price.
+So `tools/etf-holdings.py`, run nightly after the close, re-prices them:
+
+    weight today = month-end weight x (stock's price move) / (fund's price move)
+
+and publishes the result to `/ceeEtfHoldings`, which the dashboard reads in
+preference to Vanguard's own figures. The screen says so in words: "its Sep 30
+share counts priced at Nov 12 closes".
+
+It is an estimate, and it is tested every night against the truth. VOO and SPY
+hold the same index and State Street publishes SPY daily, so VOO re-priced is
+compared with what SPY actually holds. On 12 November 2026:
+
+| | total gap across the index | worst single stock |
+|---|---|---|
+| Vanguard's weights as published | 12.87 points | 2.00 (Nvidia) |
+| re-priced | 1.64 points | 0.25 (Nvidia) |
+
+If the total gap passes 5 points the script publishes nothing. If a fund cannot
+be re-priced for 97% of its weight it is left out. A published copy more than
+six days old is ignored. In each case the dashboard falls back to Vanguard's
+figures as published and warns how old they are.
+
+What re-pricing cannot see: a stock added to an index since month end is
+missing until Vanguard's next disclosure, and one removed lingers.
 
 Three things this replaced:
 

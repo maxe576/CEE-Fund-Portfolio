@@ -78,6 +78,16 @@ jobs:
         continue-on-error: true
         run: python tools/index-weights.py
 
+      # Vanguard publishes its ETF holdings once a month, as of month end, so by
+      # mid-month the look-through is reading its funds on weights six weeks
+      # old. This re-prices Vanguard's share counts to today's closes and tests
+      # the result against the S&P 500. It needs today's prices, so it belongs
+      # here, after the close. If it fails the dashboard falls back to
+      # Vanguard's figures as published and says how old they are.
+      - name: Re-price Vanguard ETF holdings
+        continue-on-error: true
+        run: python tools/etf-holdings.py
+
       - name: Summary
         if: always()
         run: |
@@ -89,6 +99,9 @@ jobs:
           curl -s --max-time 60 "https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeIndexSectors.json"             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const d=JSON.parse(s);
                 console.log('S&P 500 sector weights: as of '+d.asOf+', info tech '+d.weights['Information Technology']+'%, coverage '+d.coverage+'%');
               }catch(e){console.log('S&P 500 sector weights: could not be read')}})" >> $GITHUB_STEP_SUMMARY
+          curl -s --max-time 60 "https://cee-fund-dashboard-640ab-default-rtdb.firebaseio.com/ceeEtfHoldings.json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const d=JSON.parse(s);const f=Object.entries(d.funds);
+                console.log('Vanguard look-through: '+f.length+' funds, '+f[0][1].asOf+' share counts priced at '+f[0][1].priced+(d.check?', VOO within '+d.check.worst+' pts of the S&P 500':''));
+              }catch(e){console.log('Vanguard look-through: could not be read')}})" >> $GITHUB_STEP_SUMMARY
           if [ -f tools/perf.json ]; then
             node -e "const p=require('./tools/perf.json');
               console.log('Window: '+p.dates[0]+' to '+p.dates[p.dates.length-1]);

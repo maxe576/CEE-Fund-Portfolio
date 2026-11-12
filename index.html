@@ -335,7 +335,7 @@ tr:hover td{background:rgba(212,167,44,.06)}
       <select id="ltEtfSel" onchange="renderLtEtfDetail(this.value)" style="background:var(--card-bg-alt);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;font-size:12px"></select>
     </div>
     <div class="tbl-wrap"><table id="ltEtfTable"></table></div>
-    <div class="snapshot-note" style="margin-top:10px"><strong>Refetched every day</strong>, and the date shown is the date of the holdings themselves, not of the fetch. <strong>Vanguard funds</strong> come from Vanguard's own disclosure: the full constituent list, but published month-end only, so they run up to six weeks behind. <strong>All other issuers</strong> (SPDR, Invesco, VanEck, Fidelity, iShares, Roundhill, Defiance) show their <strong>25 largest holdings</strong>, updated daily; the coverage line under each fund says how much of it those 25 are, which is nearly all of a sector fund and about half of a broad one. Bond ETFs, T-bill collateral, cash and currency are left out of the stock overlap, and a swap is counted against the stock it tracks. Market values move with live prices. Screening data — verify against fund provider disclosures.</div>
+    <div class="snapshot-note" style="margin-top:10px"><strong>Refetched every day</strong>, and the date shown is the date of the holdings themselves, not of the fetch. <strong>Vanguard funds</strong> come from Vanguard's own disclosure: the full constituent list, but published month-end only, so each night its share counts are re-priced at that day's closes to bring the weights up to date, and the result is tested against the S&P 500 as State Street reports it. <strong>All other issuers</strong> (SPDR, Invesco, VanEck, Fidelity, iShares, Roundhill, Defiance) show their <strong>25 largest holdings</strong>, updated daily; the coverage line under each fund says how much of it those 25 are, which is nearly all of a sector fund and about half of a broad one. Bond ETFs, T-bill collateral, cash and currency are left out of the stock overlap, and a swap is counted against the stock it tracks. Market values move with live prices. Screening data — verify against fund provider disclosures.</div>
   </div>
 </div>
 <div id="tab-sectorcompare" class="tab-panel">
@@ -1319,6 +1319,7 @@ function reloadEtfLookThrough(){
   // leave the table emptier than it was.
   Object.entries(etfHoldings).forEach(([tk,rec])=>{ if(rec&&rec.holdings){ const { stale, ...clean } = rec; _etfStale[tk]=clean; } });
   etfHoldings={};
+  _etfPublished=null;
   loadEtfLookThrough();
 }
 
@@ -1371,6 +1372,27 @@ function _ltFmtDate(iso){
   return Object.keys(_LT_MON)[m-1]+' '+d+', '+y;
 }
 
+/* Vanguard publishes holdings once a month, as of month end, so by the middle of
+   the next month its funds are six weeks stale: on 12 November 2026 VOO's list
+   still had Nvidia at 8.39% when the index held 6.39%. The nightly job
+   (tools/etf-holdings.py) re-prices Vanguard's share counts to that day's closes
+   and tests the result against the S&P 500 as State Street reports it, and this
+   reads what it published. `asOf` stays the date of Vanguard's list; `priced`
+   is the close the weights were brought up to. A copy more than six days old
+   means the job has stopped, and is not passed off as current. */
+let _etfPublished=null;
+function _loadPublishedEtf(){
+  return _etfPublished || (_etfPublished=fetch(FB_DB_URL+'/ceeEtfHoldings.json').then(r=>r.ok?r.json():null).catch(()=>null));
+}
+async function _fetchRepricedHoldings(tk){
+  const pub=await _loadPublishedEtf();
+  const f=pub&&pub.funds&&pub.funds[tk];
+  if(!f||!Array.isArray(f.holdings)||f.holdings.length<10||!f.priced) return null;
+  if(Date.now()-Date.parse(f.priced+'T21:00:00Z') > 6*86400e3) return null;
+  const rows=f.holdings.map(h=>({symbol:String(h.s||'').toUpperCase(), name:h.n||'', pct:(+h.w)/100})).filter(h=>h.symbol&&h.pct>0);
+  return {rows, asOf:f.asOf||null, priced:f.priced, listed:+f.listed||rows.length, check:pub.check||null};
+}
+
 // Vanguard's own disclosure: every constituent (first 500), with the as-of date.
 async function _fetchVanguardHoldings(tk){
   try{
@@ -1378,7 +1400,7 @@ async function _fetchVanguardHoldings(tk){
     if(!r.ok) return null;
     const j=await r.json();
     const rows=((j.fund&&j.fund.entity)||[]).map(e=>({
-      symbol:String(e.ticker||'').trim().toUpperCase(),
+      symbol:String(e.ticker||'').trim().toUpperCase().replace(/[ \/]/g,'.'),   // Vanguard writes "BRK B"
       name:String(e.longName||e.shortName||'').trim(),
       pct:parseFloat(e.percentWeight)/100
     })).filter(h=>h.symbol && h.pct>0).sort((a,b)=>b.pct-a.pct);
@@ -1440,13 +1462,16 @@ async function fetchEtfHoldings(ticker){
   if(etfHoldings[tk]!==undefined) return etfHoldings[tk];
   const etfObj=[...RAW.endowment.etfs,...RAW.ceeFund.etfs].find(e=>e.ticker===tk);
   const isBond=etfObj&&etfObj.sector==='Fixed Income';
-  const isVanguard=etfObj ? /vanguard/i.test(etfObj.company||'') : /^V[A-Z]{2,3}$/.test(tk);
+  // By name where the name is known, and by Vanguard's ticker pattern where it is
+  // not: the published record can carry the ticker in the name's place. A ticker
+  // Vanguard does not recognise simply falls through to the other source.
+  const isVanguard=/vanguard/i.test((etfObj&&etfObj.company)||'') || /^V[A-Z]{2,3}$/.test(tk);
   let rec=null;
   if(isVanguard && !isBond){
-    const v=await _fetchVanguardHoldings(tk);
+    const v=(await _fetchRepricedHoldings(tk)) || (await _fetchVanguardHoldings(tk));
     if(v){
       const eff=_ltEffective(v.rows);
-      if(eff.holdings.length) rec={holdings:eff.holdings, excluded:eff.excluded, src:'vanguard', bond:!!eff.bond, asOf:v.asOf, listed:v.listed, fetched:Date.now()};
+      if(eff.holdings.length) rec={holdings:eff.holdings, excluded:eff.excluded, src:'vanguard', bond:!!eff.bond, asOf:v.asOf, priced:v.priced||null, check:v.check||null, listed:v.listed, fetched:Date.now()};
     }
   }
   if(!rec){
@@ -1490,7 +1515,8 @@ function renderLookThrough(){
   const eqEtfs=okEtfs.filter(e=>!etfHoldings[e.ticker].bond);
   const st=document.getElementById('ltStatus');
   const fundW=e=>(e.marketValue||0)/(S.total||1);
-  const dated=eqEtfs.map(e=>etfHoldings[e.ticker].asOf).filter(Boolean).sort();
+  const goodFor=d=>d.priced||d.asOf;     // re-priced funds are current to the close they were priced at
+  const dated=eqEtfs.map(e=>goodFor(etfHoldings[e.ticker])).filter(Boolean).sort();
   if(st){
     const nBond=okEtfs.length-eqEtfs.length;
     const checked=okEtfs.length?Math.min(...okEtfs.map(e=>etfHoldings[e.ticker].fetched||Date.now())):null;
@@ -1511,14 +1537,25 @@ function renderLookThrough(){
   const carried=okEtfs.filter(e=>etfHoldings[e.ticker].stale);
   if(carried.length) notes.push(note(`${names(carried)} could not be refreshed just now; showing the last copy that loaded.`, true));
   const cutoff=new Date(Date.now()-21*86400e3).toISOString().slice(0,10);
-  const old=eqEtfs.filter(e=>etfHoldings[e.ticker].asOf && etfHoldings[e.ticker].asOf<cutoff);
+  const old=eqEtfs.filter(e=>goodFor(etfHoldings[e.ticker]) && goodFor(etfHoldings[e.ticker])<cutoff);
+  const repriced=eqEtfs.filter(e=>etfHoldings[e.ticker].priced);
+  if(repriced.length){
+    const by={}; repriced.forEach(e=>{ const d=etfHoldings[e.ticker]; const k=d.asOf+'|'+d.priced; (by[k]=by[k]||[]).push(e); });
+    Object.keys(by).sort().forEach(k=>{
+      const [a,p]=k.split('|'), list=by[k], chk=etfHoldings[list[0].ticker].check;
+      notes.push(note(
+        `<strong>${names(list)}</strong> (${pctOf(list)} of the fund): Vanguard publishes holdings month-end only, so ${list.length>1?'these are':'this is'} its ${_ltFmtDate(a)} share counts priced at ${_ltFmtDate(p)} closes. `
+        + (chk&&chk.worst!=null ? `Tested against the S&P 500 as actually held on ${_ltFmtDate(chk.date)}: VOO re-priced this way is within ${(+chk.worst).toFixed(2)} points on every stock. ` : '')
+        + `A stock added to an index since ${_ltFmtDate(a)} will not appear until Vanguard's next disclosure.`));
+    });
+  }
   if(old.length){
-    const rest=eqEtfs.filter(e=>!old.includes(e)).map(e=>etfHoldings[e.ticker].asOf).filter(Boolean).sort();
+    const rest=eqEtfs.filter(e=>!old.includes(e)).map(e=>goodFor(etfHoldings[e.ticker])).filter(Boolean).sort();
     const restTxt=rest.length?` The other ${rest.length} stock fund${rest.length>1?'s are':' is'} dated ${_ltFmtDate(rest[0])}${rest[0]!==rest[rest.length-1]?' to '+_ltFmtDate(rest[rest.length-1]):''}.`:'';
-    const byDate={}; old.forEach(e=>{ const d=etfHoldings[e.ticker].asOf; (byDate[d]=byDate[d]||[]).push(e); });
+    const byDate={}; old.forEach(e=>{ const d=goodFor(etfHoldings[e.ticker]); (byDate[d]=byDate[d]||[]).push(e); });
     Object.keys(byDate).sort().forEach(d=>notes.push(note(
-      `<strong>${names(byDate[d])}</strong> ${byDate[d].length>1?'are':'is'} dated ${_ltFmtDate(d)} - the latest holdings ${byDate[d].length>1?'their':'its'} issuer has published (Vanguard reports month-end only). `
-      + `${byDate[d].length>1?'They make':'It makes'} up ${pctOf(byDate[d])} of the fund, so that part of the look-through runs on weights that have drifted with prices since.${restTxt}`)));
+      `<strong>${names(byDate[d])}</strong> ${byDate[d].length>1?'are':'is'} dated ${_ltFmtDate(d)} - the latest holdings ${byDate[d].length>1?'their':'its'} issuer has published, and the nightly re-pricing is not available for ${byDate[d].length>1?'them':'it'}. `
+      + `${byDate[d].length>1?'They make':'It makes'} up ${pctOf(byDate[d])} of the fund, so that part of the look-through runs on weights that have drifted with prices since.${restTxt}`, true)));
   }
   // Aggregate: combined exposure per stock = direct weight + Σ(ETF fund-weight × stock weight in ETF)
   const agg={};
@@ -1577,7 +1614,9 @@ function renderLtEtfDetail(ticker){
         ? 'Top '+shown.length+' shown cover '+(shownCov*100).toFixed(0)+'% of '+ticker+'; all '+data.holdings.length+' cover '+(covered*100).toFixed(0)+'%'
         : 'The '+shown.length+' listed cover '+(covered*100).toFixed(0)+'% of '+ticker}</td>
       <td colspan="2" style="text-align:right;color:var(--muted);font-size:11px">${ticker} is ${(fundW*100).toFixed(1)}% of ${S.fundName}</td></tr>
-    <tr><td></td><td colspan="4" style="color:var(--muted);font-size:11px">Holdings as of <strong>${_ltFmtDate(data.asOf)}</strong> · ${src}${data.stale?' · <span style="color:var(--warning)">could not be refreshed, last copy shown</span>':''}${data.excluded>0.005
+    <tr><td></td><td colspan="4" style="color:var(--muted);font-size:11px">${data.priced
+        ? 'Share counts as of '+_ltFmtDate(data.asOf)+', <strong>priced at '+_ltFmtDate(data.priced)+' closes</strong>'
+        : 'Holdings as of <strong>'+_ltFmtDate(data.asOf)+'</strong>'} · ${src}${data.stale?' · <span style="color:var(--warning)">could not be refreshed, last copy shown</span>':''}${data.excluded>0.005
         ? ' · a further '+(data.excluded*100).toFixed(0)+'% is listed as T-bill collateral, cash or currency and is left out; swaps are counted against the stock they track'
         : ''}</td></tr>`;
 }
@@ -1650,8 +1689,9 @@ function _renderEtfModalBody(){
           + (_etfModalAll?'Show top 10 only':'Show all '+rows.length)+'</button></div>'
         : '')
     + '<div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">'
-    + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+', as of '+_ltFmtDate(data.asOf)
-    + (data.src==='vanguard'?' (Vanguard, published month-end)':'')+'.'
+    + 'The '+rows.length+' constituents listed cover '+(covered*100).toFixed(0)+'% of '+tk+(data.priced
+        ? ': Vanguard\'s '+_ltFmtDate(data.asOf)+' share counts priced at '+_ltFmtDate(data.priced)+' closes'
+        : ', as of '+_ltFmtDate(data.asOf)+(data.src==='vanguard'?' (Vanguard, published month-end)':''))+'.'
     + (Object.keys(direct).some(k=>rows.some(r=>r.symbol===k))?' ◆ marks a company the fund also owns directly.':'')
     + '</div>';
 }
