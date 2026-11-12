@@ -428,7 +428,12 @@ Three things this replaced:
   not cached, and if a refetch fails the last good copy is shown and marked.
 - Vanguard funds were on the 25-largest list like everything else, which is
   half of VOO. A stock the fund owns outright that sits 80th in the index
-  showed no exposure through it at all.
+  showed little or no exposure through it. Measured on the Endowment on 12
+  November 2026, where stock ETFs are 45.2% of the fund: the look-through
+  accounted for 32.1 points of that before and 39.4 after. The largest names
+  do not move - Apple is in every fund's top 25, and reads 2.91% through ETFs
+  either way - but the middle of the book does: Caterpillar 0.06% to 0.12%,
+  Coca-Cola 0.08% to 0.13%, and Digital Realty and Gorman-Rupp from nothing.
 - A fund built on swaps lists the swap and the Treasury bills behind it as
   separate lines, so its weights sum past 100% and the swap lines carry no
   ticker. Roundhill's memory fund read 139%, with Micron at 1.9% when it is
