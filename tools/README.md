@@ -446,6 +446,10 @@ compared with what SPY actually holds. On 12 November 2026:
 | Vanguard's weights as published | 12.87 points | 2.00 (Nvidia) |
 | re-priced | 1.64 points | 0.25 (Nvidia) |
 
+On the Endowment, measured on one page at one set of prices, that moved
+Nvidia's exposure through ETFs from 2.78% to 2.49%, Eli Lilly's from 0.58% to
+0.68% and Apple's from 2.91% to 3.00%.
+
 If the total gap passes 5 points the script publishes nothing. If a fund cannot
 be re-priced for 97% of its weight it is left out. A published copy more than
 six days old is ignored. In each case the dashboard falls back to Vanguard's
